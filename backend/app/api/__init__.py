@@ -1,5 +1,5 @@
 """API module initialization."""
 
-from . import auth, devices
+from . import auth, devices, jobs, commands, config, compliance
 
-__all__ = ["auth", "devices"]
+__all__ = ["auth", "devices", "jobs", "commands", "config", "compliance"]

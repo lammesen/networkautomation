@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core import settings, setup_logging
-from app.api import auth, devices
+from app.api import auth, devices, jobs, commands, config, compliance
 
 # Setup logging
 setup_logging()
@@ -28,6 +28,10 @@ app.add_middleware(
 app.include_router(auth.router, prefix=settings.api_prefix)
 app.include_router(devices.router, prefix=settings.api_prefix)
 app.include_router(devices.cred_router, prefix=settings.api_prefix)
+app.include_router(jobs.router, prefix=settings.api_prefix)
+app.include_router(commands.router, prefix=settings.api_prefix)
+app.include_router(config.router, prefix=settings.api_prefix)
+app.include_router(compliance.router, prefix=settings.api_prefix)
 
 
 @app.get("/health")
