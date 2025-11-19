@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 
 interface User {
   id: number
@@ -17,20 +16,44 @@ interface AuthState {
   clearAuth: () => void
 }
 
-export const useAuthStore = create<AuthState>()(
-  persist(
-    (set) => ({
-      token: null,
-      refreshToken: null,
-      user: null,
-      isAuthenticated: false,
-      setAuth: (token, refreshToken, user) =>
-        set({ token, refreshToken, user, isAuthenticated: true }),
-      clearAuth: () =>
-        set({ token: null, refreshToken: null, user: null, isAuthenticated: false }),
-    }),
-    {
-      name: 'auth-storage',
-    }
-  )
-)
+// Simple implementation without persist middleware
+const loadFromStorage = (): Partial<AuthState> => {
+  try {
+    const stored = localStorage.getItem('auth-storage')
+    return stored ? JSON.parse(stored) : {}
+  } catch {
+    return {}
+  }
+}
+
+const saveToStorage = (state: AuthState) => {
+  try {
+    localStorage.setItem('auth-storage', JSON.stringify({
+      token: state.token,
+      refreshToken: state.refreshToken,
+      user: state.user,
+      isAuthenticated: state.isAuthenticated,
+    }))
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+const initialState = loadFromStorage()
+
+export const useAuthStore = create<AuthState>((set) => ({
+  token: initialState.token || null,
+  refreshToken: initialState.refreshToken || null,
+  user: initialState.user || null,
+  isAuthenticated: initialState.isAuthenticated || false,
+  setAuth: (token, refreshToken, user) => {
+    const newState = { token, refreshToken, user, isAuthenticated: true }
+    set(newState)
+    saveToStorage({ ...newState, setAuth: () => {}, clearAuth: () => {} })
+  },
+  clearAuth: () => {
+    const newState = { token: null, refreshToken: null, user: null, isAuthenticated: false }
+    set(newState)
+    saveToStorage({ ...newState, setAuth: () => {}, clearAuth: () => {} })
+  },
+}))
