@@ -6,6 +6,7 @@ from app.automation.napalm_device import napalm_device
 
 
 def run_policy(task: Task, policy: dict) -> Result:
+    """Run a compliance policy check against a device."""
     with napalm_device(task.host) as device:
         report = device.compliance_report(policy)
         status = "pass" if report.get("complies") else "fail"

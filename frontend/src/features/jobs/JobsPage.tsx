@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { JobSummary, createHttpClient } from '../../api/http';
+import { JobSummary, createHttpClient, listJobs } from '../../api/http';
 
 interface Props {
   token: string;
@@ -12,8 +12,8 @@ const JobsPage = ({ token }: Props) => {
 
   useEffect(() => {
     const load = async () => {
-      const response = await api.get<JobSummary[]>('/jobs');
-      setJobs(response.data);
+      const data = await listJobs(api);
+      setJobs(data);
     };
     load();
   }, [api]);
