@@ -16,7 +16,7 @@ def upgrade():
         sa.Column("name", sa.String(length=64), nullable=False, unique=True),
         sa.Column("username", sa.String(length=128), nullable=False),
         sa.Column("password", sa.String(length=256), nullable=False),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
     )
     op.create_table(
         "users",
@@ -24,7 +24,7 @@ def upgrade():
         sa.Column("username", sa.String(length=64), nullable=False, unique=True),
         sa.Column("hashed_password", sa.String(length=256), nullable=False),
         sa.Column("role", sa.String(length=32), nullable=False),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
     )
     op.create_table(
         "devices",
@@ -42,8 +42,8 @@ def upgrade():
         sa.Column("metadata_json", sa.Text()),
         sa.Column("credentials_id", sa.Integer, sa.ForeignKey("credentials.id")),
         sa.Column("enabled", sa.Boolean, nullable=False, server_default=sa.true()),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
-        sa.Column("updated_at", sa.DateTime()),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
     op.create_table(
         "jobs",
@@ -51,9 +51,9 @@ def upgrade():
         sa.Column("type", sa.String(length=64), nullable=False),
         sa.Column("status", sa.String(length=32), nullable=False),
         sa.Column("user_id", sa.Integer, sa.ForeignKey("users.id")),
-        sa.Column("requested_at", sa.DateTime(), nullable=False),
-        sa.Column("started_at", sa.DateTime()),
-        sa.Column("finished_at", sa.DateTime()),
+        sa.Column("requested_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column("started_at", sa.DateTime(timezone=True)),
+        sa.Column("finished_at", sa.DateTime(timezone=True)),
         sa.Column("target_summary_json", sa.Text()),
         sa.Column("result_summary_json", sa.Text()),
     )
@@ -61,7 +61,7 @@ def upgrade():
         "job_logs",
         sa.Column("id", sa.Integer, primary_key=True),
         sa.Column("job_id", sa.Integer, sa.ForeignKey("jobs.id")),
-        sa.Column("ts", sa.DateTime(), nullable=False),
+        sa.Column("ts", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.Column("level", sa.String(length=16), nullable=False),
         sa.Column("host", sa.String(length=128)),
         sa.Column("message", sa.Text()),
@@ -73,7 +73,7 @@ def upgrade():
         sa.Column("device_id", sa.Integer, sa.ForeignKey("devices.id")),
         sa.Column("job_id", sa.Integer, sa.ForeignKey("jobs.id")),
         sa.Column("source", sa.String(length=64)),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.Column("config_text", sa.Text(), nullable=False),
         sa.Column("hash", sa.String(length=128), nullable=False),
     )
@@ -84,7 +84,7 @@ def upgrade():
         sa.Column("scope_json", sa.Text(), nullable=False),
         sa.Column("definition_yaml", sa.Text(), nullable=False),
         sa.Column("created_by", sa.Integer, sa.ForeignKey("users.id")),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
     )
     op.create_table(
         "compliance_results",
@@ -92,7 +92,7 @@ def upgrade():
         sa.Column("policy_id", sa.Integer, sa.ForeignKey("compliance_policies.id")),
         sa.Column("device_id", sa.Integer, sa.ForeignKey("devices.id")),
         sa.Column("job_id", sa.Integer, sa.ForeignKey("jobs.id")),
-        sa.Column("ts", sa.DateTime(), nullable=False),
+        sa.Column("ts", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.Column("status", sa.String(length=32), nullable=False),
         sa.Column("details_json", sa.Text(), nullable=False),
     )

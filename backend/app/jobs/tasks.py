@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime
 from typing import Iterable, List
 
 from celery import shared_task
@@ -15,6 +14,7 @@ from app.automation.tasks_validate import run_policy
 from app.compliance.models import ComplianceResult
 from app.config_backup.models import ConfigSnapshot
 from app.core.config import settings
+from app.core.time import utcnow
 from app.db.session import SessionLocal
 from app.devices.models import Device
 from app.jobs.events import publish_job_event
@@ -84,7 +84,7 @@ def _device_lookup(db: Session, device_ids: Iterable[int]) -> dict[str, Device]:
 def run_commands_task(job_id: int, device_ids: List[int], commands: List[str], timeout: int | None = None) -> None:
     db = SessionLocal()
     job = _load_job(db, job_id)
-    started_at = datetime.utcnow()
+    started_at = utcnow()
     _update_job(db, job, status="running", started_at=started_at)
     status = "success"
     summary: dict[str, dict[str, object]] = {"devices": {}}
@@ -114,7 +114,7 @@ def run_commands_task(job_id: int, device_ids: List[int], commands: List[str], t
             db,
             job,
             status=status,
-            finished_at=datetime.utcnow(),
+            finished_at=utcnow(),
             result_summary_json=json.dumps(summary),
         )
         db.close()
@@ -124,7 +124,7 @@ def run_commands_task(job_id: int, device_ids: List[int], commands: List[str], t
 def backup_configs(job_id: int, device_ids: List[int], source: str) -> None:
     db = SessionLocal()
     job = _load_job(db, job_id)
-    _update_job(db, job, status="running", started_at=datetime.utcnow())
+    _update_job(db, job, status="running", started_at=utcnow())
     summary: dict[str, object] = {"snapshots": {}, "changed": 0, "unchanged": 0}
     status = "success"
     try:
@@ -173,7 +173,7 @@ def backup_configs(job_id: int, device_ids: List[int], source: str) -> None:
             db,
             job,
             status=status,
-            finished_at=datetime.utcnow(),
+            finished_at=utcnow(),
             result_summary_json=json.dumps(summary),
         )
         db.close()
@@ -183,7 +183,7 @@ def backup_configs(job_id: int, device_ids: List[int], source: str) -> None:
 def preview_deploy(job_id: int, device_ids: List[int], snippet: str, mode: str = "merge") -> None:
     db = SessionLocal()
     job = _load_job(db, job_id)
-    _update_job(db, job, status="running", started_at=datetime.utcnow())
+    _update_job(db, job, status="running", started_at=utcnow())
     status = "success"
     diffs: dict[str, object] = {}
     try:
@@ -206,7 +206,7 @@ def preview_deploy(job_id: int, device_ids: List[int], snippet: str, mode: str =
             db,
             job,
             status=status,
-            finished_at=datetime.utcnow(),
+            finished_at=utcnow(),
             result_summary_json=json.dumps({"snippet": snippet, "diffs": diffs, "mode": mode}),
         )
         db.close()
@@ -216,7 +216,7 @@ def preview_deploy(job_id: int, device_ids: List[int], snippet: str, mode: str =
 def commit_deploy(job_id: int, device_ids: List[int], snippet: str, mode: str = "merge") -> None:
     db = SessionLocal()
     job = _load_job(db, job_id)
-    _update_job(db, job, status="running", started_at=datetime.utcnow())
+    _update_job(db, job, status="running", started_at=utcnow())
     status = "success"
     results: dict[str, object] = {}
     try:
@@ -243,23 +243,25 @@ def commit_deploy(job_id: int, device_ids: List[int], snippet: str, mode: str = 
             db,
             job,
             status=status,
-            finished_at=datetime.utcnow(),
+            finished_at=utcnow(),
             result_summary_json=json.dumps(results),
         )
         db.close()
 
 
 @shared_task(name="app.jobs.tasks.compliance")
-def compliance_task(job_id: int, device_ids: List[int], policy: dict) -> None:
+def compliance_task(
+    job_id: int, device_ids: List[int], policy_id: int, policy_definition: dict
+) -> None:
     db = SessionLocal()
     job = _load_job(db, job_id)
-    _update_job(db, job, status="running", started_at=datetime.utcnow())
+    _update_job(db, job, status="running", started_at=utcnow())
     status = "success"
     results: dict[str, object] = {}
     try:
         targets = _ensure_targets(device_ids)
         nr = init_nornir_from_db(db, targets)
-        aggregated = nr.run(task=run_policy, policy=policy)
+        aggregated = nr.run(task=run_policy, policy=policy_definition)
         device_lookup = _device_lookup(db, targets)
         for host, result in aggregated.items():
             payload = result.result or {}
@@ -267,9 +269,9 @@ def compliance_task(job_id: int, device_ids: List[int], policy: dict) -> None:
             results[host] = payload
             _log(db, job, "INFO", "Compliance evaluated", host, payload)
             device = device_lookup.get(host)
-            if device:
+            if device and policy_id:
                 compliance_result = ComplianceResult(
-                    policy_id=policy.get("id"),
+                    policy_id=policy_id,
                     device_id=device.id,
                     job_id=job.id,
                     status=status_value,
@@ -289,8 +291,8 @@ def compliance_task(job_id: int, device_ids: List[int], policy: dict) -> None:
             db,
             job,
             status=status,
-            finished_at=datetime.utcnow(),
-            result_summary_json=json.dumps(results),
+            finished_at=utcnow(),
+            result_summary_json=json.dumps({"policy_id": policy_id, "devices": results}),
         )
         db.close()
 

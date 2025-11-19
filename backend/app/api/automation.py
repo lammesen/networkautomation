@@ -9,19 +9,15 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user, role_required
+from app.core.deps import role_required
 from app.db.session import get_db
 from app.devices.models import Device
 from app.jobs import tasks
-from app.jobs.models import User, Job
+from app.jobs.models import Job, User
 from app.jobs.service import create_job
 from app.compliance.models import CompliancePolicy
 
-router = APIRouter(
-    prefix="/automation",
-    tags=["automation"],
-    dependencies=[Depends(role_required("operator", "admin"))],
-)
+router = APIRouter(prefix="/automation", tags=["automation"])
 
 
 class TargetFilters(BaseModel):
@@ -61,7 +57,7 @@ class CommandRequest(BaseModel):
 def run_commands(
     request: CommandRequest,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(role_required("operator", "admin")),
 ):
     device_ids = _resolve_device_ids(db, request.targets)
     if not device_ids:
@@ -87,7 +83,7 @@ class BackupRequest(BaseModel):
 def backup_configs(
     request: BackupRequest,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(role_required("operator", "admin")),
 ):
     device_ids = _resolve_device_ids(db, request.targets)
     if not device_ids:
@@ -107,7 +103,7 @@ class DeployPreviewRequest(BaseModel):
 def deploy_preview(
     request: DeployPreviewRequest,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(role_required("operator", "admin")),
 ):
     device_ids = _resolve_device_ids(db, request.targets)
     if not device_ids:
@@ -137,15 +133,15 @@ class DeployCommitRequest(BaseModel):
 def deploy_commit(
     request: DeployCommitRequest,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(role_required("operator", "admin")),
 ):
     preview_job = db.get(Job, request.previous_job_id)
     if not preview_job or preview_job.type != "config_deploy_preview":
-        raise ValueError("Preview job not found")
+        raise HTTPException(status_code=400, detail="Preview job not found")
     if preview_job.status != "success":
-        raise ValueError("Preview job must succeed before commit")
+        raise HTTPException(status_code=400, detail="Preview job must succeed before commit")
     if not request.confirm:
-        raise ValueError("Confirmation required")
+        raise HTTPException(status_code=400, detail="Confirmation required")
     payload = json.loads(preview_job.target_summary_json or "{}")
     device_ids = payload.get("device_ids", [])
     snippet = payload.get("snippet", "")
@@ -163,8 +159,7 @@ def deploy_commit(
 
 
 class ComplianceRequest(BaseModel):
-    policy_id: Optional[int] = None
-    definition: Optional[dict] = None
+    policy_id: int
     targets: TargetFilters
 
 
@@ -172,20 +167,26 @@ class ComplianceRequest(BaseModel):
 def run_compliance(
     request: ComplianceRequest,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(role_required("operator", "admin")),
 ):
     device_ids = _resolve_device_ids(db, request.targets)
     if not device_ids:
         raise HTTPException(status_code=400, detail="No devices matched the requested filters")
-    policy_data: dict
-    if request.policy_id:
-        policy = db.get(CompliancePolicy, request.policy_id)
-        if not policy:
-            raise ValueError("Policy not found")
-        policy_data = yaml.safe_load(policy.definition_yaml) if policy.definition_yaml else {}
-        policy_data["id"] = policy.id
-    else:
-        policy_data = request.definition or {}
-    job = create_job(db, "compliance", user.id, {"device_ids": device_ids})
-    tasks.enqueue_job(tasks.compliance_task, job.id, device_ids, policy_data)
+    policy = db.get(CompliancePolicy, request.policy_id)
+    if not policy:
+        raise HTTPException(status_code=404, detail="Policy not found")
+    policy_definition = yaml.safe_load(policy.definition_yaml) if policy.definition_yaml else {}
+    job = create_job(
+        db,
+        "compliance",
+        user.id,
+        {"device_ids": device_ids, "policy_id": policy.id},
+    )
+    tasks.enqueue_job(
+        tasks.compliance_task,
+        job.id,
+        device_ids,
+        policy.id,
+        policy_definition,
+    )
     return {"job_id": job.id}

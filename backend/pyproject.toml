@@ -26,6 +26,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+tests = [
+    "pytest",
+    "pytest-asyncio",
+    "httpx",
+]
 test = [
     "pytest",
     "pytest-asyncio",

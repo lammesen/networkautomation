@@ -10,6 +10,7 @@ Requires-Dist: sqlalchemy
 Requires-Dist: psycopg2-binary
 Requires-Dist: alembic
 Requires-Dist: pydantic[email]
+Requires-Dist: pydantic-settings
 Requires-Dist: python-jose[cryptography]
 Requires-Dist: passlib[bcrypt]
 Requires-Dist: python-multipart

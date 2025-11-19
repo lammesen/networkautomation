@@ -19,7 +19,11 @@ const LoginPage = ({ onAuthenticated }: Props) => {
       const response = await axios.post('/api/auth/login', params, {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
       });
+      if (response.data.refresh_token) {
+        localStorage.setItem('refresh_token', response.data.refresh_token);
+      }
       onAuthenticated(response.data.access_token);
+      setError(null);
     } catch (err) {
       setError('Invalid credentials');
     }

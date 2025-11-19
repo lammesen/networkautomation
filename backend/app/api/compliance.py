@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import json
 from typing import Optional
 
 import yaml
@@ -11,8 +12,9 @@ from sqlalchemy.orm import Session
 from app.compliance.models import CompliancePolicy, ComplianceResult
 from app.core.deps import get_current_user, role_required
 from app.db.session import get_db
+from app.jobs.models import User
 
-router = APIRouter(prefix="/compliance", tags=["compliance"], dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/compliance", tags=["compliance"])
 
 
 class CompliancePolicyCreate(BaseModel):
@@ -28,7 +30,9 @@ class CompliancePolicyUpdate(BaseModel):
 
 
 @router.get("/policies")
-def list_policies(db: Session = Depends(get_db)):
+def list_policies(
+    db: Session = Depends(get_db), _user: User = Depends(get_current_user)
+):
     policies = db.query(CompliancePolicy).order_by(CompliancePolicy.name).all()
     return [
         {
@@ -37,17 +41,23 @@ def list_policies(db: Session = Depends(get_db)):
             "scope": json.loads(policy.scope_json or "{}"),
             "definition": yaml.safe_load(policy.definition_yaml) if policy.definition_yaml else {},
             "created_at": policy.created_at,
+            "created_by": policy.created_by,
         }
         for policy in policies
     ]
 
 
-@router.post("/policies", dependencies=[Depends(role_required("admin"))])
-def create_policy(payload: CompliancePolicyCreate, db: Session = Depends(get_db)):
+@router.post("/policies")
+def create_policy(
+    payload: CompliancePolicyCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(role_required("admin")),
+):
     policy = CompliancePolicy(
         name=payload.name,
         scope_json=json.dumps(payload.scope or {}),
         definition_yaml=yaml.safe_dump(payload.definition),
+        created_by=user.id,
     )
     db.add(policy)
     db.commit()
@@ -55,8 +65,13 @@ def create_policy(payload: CompliancePolicyCreate, db: Session = Depends(get_db)
     return policy
 
 
-@router.put("/policies/{policy_id}", dependencies=[Depends(role_required("admin"))])
-def update_policy(policy_id: int, payload: CompliancePolicyUpdate, db: Session = Depends(get_db)):
+@router.put("/policies/{policy_id}")
+def update_policy(
+    policy_id: int,
+    payload: CompliancePolicyUpdate,
+    db: Session = Depends(get_db),
+    _user: User = Depends(role_required("admin")),
+):
     policy = db.get(CompliancePolicy, policy_id)
     if not policy:
         raise HTTPException(status_code=404)
@@ -72,8 +87,12 @@ def update_policy(policy_id: int, payload: CompliancePolicyUpdate, db: Session =
     return policy
 
 
-@router.delete("/policies/{policy_id}", status_code=204, dependencies=[Depends(role_required("admin"))])
-def delete_policy(policy_id: int, db: Session = Depends(get_db)) -> None:
+@router.delete("/policies/{policy_id}", status_code=204)
+def delete_policy(
+    policy_id: int,
+    db: Session = Depends(get_db),
+    _user: User = Depends(role_required("admin")),
+) -> None:
     policy = db.get(CompliancePolicy, policy_id)
     if not policy:
         raise HTTPException(status_code=404)
@@ -87,6 +106,7 @@ def list_results(
     policy_id: Optional[int] = Query(default=None),
     device_id: Optional[int] = Query(default=None),
     status: Optional[str] = Query(default=None),
+    _user: User = Depends(get_current_user),
 ):
     query = db.query(ComplianceResult)
     if policy_id:
@@ -111,7 +131,9 @@ def list_results(
 
 
 @router.get("/devices/{device_id}")
-def device_compliance_summary(device_id: int, db: Session = Depends(get_db)):
+def device_compliance_summary(
+    device_id: int, db: Session = Depends(get_db), _user: User = Depends(get_current_user)
+):
     results = (
         db.query(ComplianceResult)
         .filter(ComplianceResult.device_id == device_id)

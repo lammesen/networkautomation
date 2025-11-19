@@ -47,7 +47,7 @@ def list_devices(
 
 @router.post("", response_model=DeviceRead, dependencies=[Depends(role_required("operator", "admin"))])
 def create_device(device: DeviceCreate, db: Session = Depends(get_db)) -> Device:
-    new_device = Device(**device.dict())
+    new_device = Device(**device.model_dump())
     db.add(new_device)
     db.commit()
     db.refresh(new_device)
@@ -71,7 +71,7 @@ def update_device(device_id: int, payload: DeviceUpdate, db: Session = Depends(g
     device = db.get(Device, device_id)
     if not device:
         raise HTTPException(status_code=404)
-    for field, value in payload.dict(exclude_unset=True).items():
+    for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(device, field, value)
     db.commit()
     db.refresh(device)

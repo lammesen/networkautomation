@@ -2,9 +2,10 @@
 
 ## Authentication
 
-* `POST /api/auth/login` — OAuth2 password grant. Returns `{access_token, token_type}`.
+* `POST /api/auth/login` — OAuth2 password grant. Returns `{access_token, refresh_token, token_type}`.
 * `GET /api/auth/me` — Returns authenticated user profile.
 * `POST /api/auth/bootstrap` — Creates the first admin account if none exist.
+* `POST /api/auth/refresh` — Accepts `{refresh_token}` and issues a new access token.
 
 ## Devices
 
@@ -30,7 +31,7 @@ The Celery tasks defined in `app/jobs/tasks.py` expect a `Job` database row and 
 * `backup_configs(job_id, device_ids, source)`
 * `preview_deploy(job_id, device_ids, snippet, mode)`
 * `commit_deploy(job_id, device_ids, snippet, mode)`
-* `compliance_task(job_id, device_ids, policy)`
+* `compliance_task(job_id, device_ids, policy_id, definition)`
 
 API wrappers enqueue these tasks using `POST /api/automation/...` endpoints:
 
@@ -38,7 +39,7 @@ API wrappers enqueue these tasks using `POST /api/automation/...` endpoints:
 * `POST /api/automation/backup` — payload `{targets, source}`.
 * `POST /api/automation/deploy/preview` — payload `{targets, snippet, mode}` stores per-device diffs and returns `job_id`.
 * `POST /api/automation/deploy/commit` — payload `{previous_job_id, confirm}` reuses preview targets/snippet.
-* `POST /api/automation/compliance` — payload `{policy_id?, definition?, targets}` executes `napalm_validate` style checks.
+* `POST /api/automation/compliance` — payload `{policy_id, targets}` executes `napalm_validate` style checks.
 
 Target selectors accept device ID lists and filter arrays (`sites`, `roles`, `vendors`, `tags`, `include_disabled`).
 

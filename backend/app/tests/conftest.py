@@ -8,13 +8,14 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.core.deps import get_current_user
+from app.core.time import utcnow
 from app.db.base import Base
 from app.db.session import get_db
-from app.jobs.models import User
-from app.main import app
-from app.core.deps import get_current_user
 from app.devices import models as _device_models  # noqa: F401
 from app.jobs import models as _job_models  # noqa: F401
+from app.jobs.models import User
+from app.main import app
 from app.config_backup import models as _config_models  # noqa: F401
 from app.compliance import models as _compliance_models  # noqa: F401
 
@@ -48,7 +49,7 @@ def client(db_session):
 
     app.dependency_overrides[get_db] = override_get_db
 
-    admin_user = User(username="tester", hashed_password="x", role="admin", created_at=datetime.utcnow())
+    admin_user = User(username="tester", hashed_password="x", role="admin", created_at=utcnow())
     db_session.add(admin_user)
     db_session.commit()
 
