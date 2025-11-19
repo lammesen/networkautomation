@@ -73,6 +73,26 @@ services:
       redis:
         condition: service_healthy
 
+  celery-beat:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.backend
+    container_name: netauto-celery-beat
+    command: celery -A celery_app.celery_app beat --loglevel=info
+    environment:
+      DATABASE_URL: postgresql://netauto:netauto@postgres:5432/netauto
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production-use-openssl-rand-hex-32}
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   frontend:
     build:
       context: .

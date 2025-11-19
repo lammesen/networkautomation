@@ -380,3 +380,38 @@ def compliance_check_job(job_id: int, policy_id: int) -> None:
         update_job_status(db, job_id, "failed", {"error": str(e)})
     finally:
         db.close()
+
+
+@shared_task(name="scheduled_config_backup")
+def scheduled_config_backup() -> None:
+    """Scheduled task to backup all enabled devices daily."""
+    from app.db import User
+    
+    db = SessionLocal()
+    
+    try:
+        # Get system user for scheduled jobs
+        system_user = db.query(User).filter(User.username == "admin").first()
+        if not system_user:
+            logger.error("No admin user found for scheduled backup")
+            return
+        
+        # Create job for scheduled backup
+        from app.jobs.manager import create_job
+        job = create_job(
+            db=db,
+            job_type="config_backup",
+            user=system_user,
+            target_summary={"filters": {}, "source": "scheduled"},
+            payload={"source_label": "scheduled"},
+        )
+        
+        logger.info(f"Created scheduled backup job {job.id}")
+        
+        # Run the backup job
+        config_backup_job(job.id, {}, "scheduled")
+        
+    except Exception as e:
+        logger.exception(f"Error in scheduled_config_backup: {e}")
+    finally:
+        db.close()

@@ -1,6 +1,7 @@
 """Celery application configuration."""
 
 from celery import Celery
+from celery.schedules import crontab
 from app.core.config import settings
 
 celery_app = Celery(
@@ -21,4 +22,10 @@ celery_app.conf.update(
     task_track_started=True,
     task_acks_late=True,
     worker_prefetch_multiplier=1,
+    beat_schedule={
+        "scheduled-config-backup": {
+            "task": "scheduled_config_backup",
+            "schedule": crontab(hour=2, minute=0),  # Run daily at 2 AM
+        },
+    },
 )

@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core import settings, setup_logging
-from app.api import auth, devices, jobs, commands, config, compliance
+from app.api import auth, devices, jobs, commands, config, compliance, websocket
 
 # Setup logging
 setup_logging()
@@ -32,6 +32,7 @@ app.include_router(jobs.router, prefix=settings.api_prefix)
 app.include_router(commands.router, prefix=settings.api_prefix)
 app.include_router(config.router, prefix=settings.api_prefix)
 app.include_router(compliance.router, prefix=settings.api_prefix)
+app.include_router(websocket.router, prefix=settings.api_prefix)
 
 
 @app.get("/health")
