@@ -10,7 +10,7 @@ from nornir.core.inventory import (
     Defaults,
     ConnectionOptions,
 )
-from app.db import SessionLocal, Device, Credential
+from app.db import SessionLocal, Device
 
 
 def get_nornir_inventory() -> Inventory:

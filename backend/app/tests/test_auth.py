@@ -1,7 +1,5 @@
 """Tests for authentication endpoints."""
 
-import pytest
-
 
 def test_health_endpoint(client):
     """Test health check endpoint."""

@@ -2,7 +2,6 @@
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from typing import Optional
 import difflib
 
 from app.core.auth import require_operator, get_current_user

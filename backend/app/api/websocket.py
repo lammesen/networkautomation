@@ -2,7 +2,6 @@
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
 from sqlalchemy.orm import Session
-import json
 import asyncio
 from typing import Optional
 

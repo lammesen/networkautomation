@@ -2,7 +2,6 @@
 
 from nornir import InitNornir
 from nornir.core import Nornir
-from typing import Optional
 
 from .inventory import get_nornir_inventory
 

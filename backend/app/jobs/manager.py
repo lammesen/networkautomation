@@ -1,7 +1,7 @@
 """Job management utilities."""
 
 from datetime import datetime
-from typing import Optional, Any
+from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.db import Job, JobLog, User

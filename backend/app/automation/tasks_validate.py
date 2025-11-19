@@ -7,7 +7,7 @@ import yaml
 def validate_task(task: Task, validation_source: str) -> Result:
     """Validate device state using NAPALM."""
     # Parse YAML validation source
-    validation_data = yaml.safe_load(validation_source)
+    yaml.safe_load(validation_source)
     
     # Use NAPALM validate method (requires nornir-napalm)
     # For now, return a placeholder

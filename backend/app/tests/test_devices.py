@@ -1,6 +1,5 @@
 """Tests for device endpoints."""
 
-import pytest
 from app.db.models import Device
 
 

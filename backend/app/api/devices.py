@@ -13,7 +13,6 @@ from app.schemas.device import (
     DeviceResponse,
     DeviceListResponse,
     CredentialCreate,
-    CredentialUpdate,
     CredentialResponse,
 )
 

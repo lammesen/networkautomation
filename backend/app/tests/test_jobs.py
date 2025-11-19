@@ -1,6 +1,5 @@
 """Tests for job endpoints."""
 
-import pytest
 from app.db.models import Job
 
 
