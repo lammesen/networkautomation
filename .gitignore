@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.env
+backend/netauto.db
+frontend/node_modules/
+dist/
+.cache/

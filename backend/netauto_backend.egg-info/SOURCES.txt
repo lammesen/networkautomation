@@ -1,0 +1,6 @@
+pyproject.toml
+netauto_backend.egg-info/PKG-INFO
+netauto_backend.egg-info/SOURCES.txt
+netauto_backend.egg-info/dependency_links.txt
+netauto_backend.egg-info/requires.txt
+netauto_backend.egg-info/top_level.txt

@@ -1,0 +1,27 @@
+Metadata-Version: 2.4
+Name: netauto-backend
+Version: 0.1.0
+Summary: Network automation platform backend
+Author: NetAuto
+Requires-Python: >=3.11
+Requires-Dist: fastapi
+Requires-Dist: uvicorn
+Requires-Dist: sqlalchemy
+Requires-Dist: psycopg2-binary
+Requires-Dist: alembic
+Requires-Dist: pydantic[email]
+Requires-Dist: python-jose[cryptography]
+Requires-Dist: passlib[bcrypt]
+Requires-Dist: python-multipart
+Requires-Dist: celery
+Requires-Dist: redis
+Requires-Dist: nornir
+Requires-Dist: napalm
+Requires-Dist: netmiko
+Requires-Dist: jinja2
+Requires-Dist: httpx
+Requires-Dist: pyyaml
+Provides-Extra: test
+Requires-Dist: pytest; extra == "test"
+Requires-Dist: pytest-asyncio; extra == "test"
+Requires-Dist: httpx; extra == "test"

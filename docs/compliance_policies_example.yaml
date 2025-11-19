@@ -1,0 +1,10 @@
+name: edge-bgp-basics
+scope:
+  role: EDGE
+validation:
+  get_bgp_neighbors:
+    global:
+      peers:
+        192.0.2.1:
+          is_up: true
+          description: ISP-1

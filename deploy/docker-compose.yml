@@ -1,0 +1,59 @@
+version: "3.9"
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.backend
+    environment:
+      DATABASE_URL: postgresql+psycopg2://netauto:netauto@db:5432/netauto
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      DRY_RUN_MODE: "false"
+      EXECUTE_JOBS_INLINE: "false"
+    depends_on:
+      - db
+      - redis
+    ports:
+      - "8000:8000"
+
+  worker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.backend
+    command: celery -A celery_app.celery worker --loglevel=info
+    environment:
+      DATABASE_URL: postgresql+psycopg2://netauto:netauto@db:5432/netauto
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      DRY_RUN_MODE: "false"
+    depends_on:
+      - db
+      - redis
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: netauto
+      POSTGRES_USER: netauto
+      POSTGRES_PASSWORD: netauto
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+volumes:
+  db_data: {}
