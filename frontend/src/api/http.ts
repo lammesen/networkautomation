@@ -43,3 +43,8 @@ export const createHttpClient = (token: string | null): AxiosInstance => {
   }
   return instance;
 };
+
+export const listJobs = async (client: AxiosInstance): Promise<JobSummary[]> => {
+    const { data } = await client.get<JobSummary[]>('/jobs');
+    return data;
+}
