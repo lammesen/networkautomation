@@ -12,6 +12,7 @@
    ```
 4. Bootstrap an admin user with `POST /api/auth/bootstrap` then sign in via the React UI.
 5. For a production-like stack run `docker compose -f deploy/docker-compose.yml up --build`.
+6. Prometheus metrics are exposed at `/metrics` on the API service for scraping.
 
 ## Device onboarding
 
@@ -37,6 +38,7 @@
 * API: `POST /api/automation/backup` with `{ "targets": {...}, "source": "scheduled" }`.
 * Snapshots can be listed via `GET /api/config/devices/{device_id}/snapshots` and diffed via `GET /api/config/devices/{device_id}/diff?from_snapshot=A&to_snapshot=B`.
 * Each backup job only stores new snapshots when the running-config hash changes to conserve storage.
+* Celery Beat triggers a scheduled backup using the cron string in `CELERY_BACKUP_SCHEDULE_CRON` (default `0 2 * * *`). Set `ENABLE_CELERY_BEAT=false` to disable periodic backups.
 
 ## Deploying snippets
 
@@ -49,3 +51,8 @@
 * Create/update policies via `POST /api/compliance/policies` with YAML content that matches `napalm_validate` format (see `docs/compliance_policies_example.yaml`).
 * Trigger a run from the UI (**Compliance → Run now**) or call `POST /api/automation/compliance` with `{ "policy_id": 1, "targets": {"roles": ["edge"]} }`.
 * Results are persisted in `compliance_results` and exposed through `GET /api/compliance/results` and the frontend compliance dashboard.
+
+## External integrations
+
+* **NetBox inventory**: set `NETBOX_URL` and `NETBOX_TOKEN` to load devices from NetBox automatically; the DB inventory remains a fallback.
+* **HashiCorp Vault**: set `VAULT_ADDR`, `VAULT_TOKEN`, and `VAULT_KV_MOUNT` to resolve credentials when a credential record includes `secret_path`.

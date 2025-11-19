@@ -17,6 +17,7 @@ class Credential(Base):
     name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     username: Mapped[str] = mapped_column(String(128), nullable=False)
     password: Mapped[str] = mapped_column(String(256), nullable=False)
+    secret_path: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )

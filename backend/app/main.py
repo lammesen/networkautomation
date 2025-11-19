@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import FastAPI
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.api import auth, devices, jobs, automation, configs, compliance, ws
 from app.core.config import settings
@@ -15,6 +16,9 @@ app.include_router(automation.router, prefix=settings.api_prefix)
 app.include_router(configs.router, prefix=settings.api_prefix)
 app.include_router(compliance.router, prefix=settings.api_prefix)
 app.include_router(ws.router)
+
+if settings.enable_metrics:
+    Instrumentator().instrument(app).expose(app, include_in_schema=False, endpoint=settings.metrics_path)
 
 
 @app.get("/health")

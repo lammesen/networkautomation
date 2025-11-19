@@ -7,6 +7,9 @@ from nornir import InitNornir
 from nornir.core.inventory import Inventory, Hosts, Groups, Defaults, Host
 from sqlalchemy.orm import Session
 
+from app.automation.netbox_inventory import build_inventory_from_netbox, NetBoxInventoryError
+from app.core.config import settings
+from app.core.credentials import resolve_credentials_for_device
 from app.devices.models import Device
 
 
@@ -25,8 +28,7 @@ def _device_to_host(device: Device) -> Host:
     username = None
     password = None
     if device.credentials:
-        username = device.credentials.username
-        password = device.credentials.password
+        username, password = resolve_credentials_for_device(None, device)  # type: ignore[arg-type]
     host = Host(
         name=device.hostname,
         hostname=device.mgmt_ip,
@@ -47,5 +49,12 @@ def inventory_from_db(db: Session, device_ids: Iterable[int] | None = None) -> I
 
 
 def init_nornir_from_db(db: Session, device_ids: Iterable[int] | None = None):
-    inventory = inventory_from_db(db, device_ids)
+    inventory: Inventory
+    if settings.netbox_url and settings.netbox_token:
+        try:
+            inventory = build_inventory_from_netbox()
+        except NetBoxInventoryError:
+            inventory = inventory_from_db(db, device_ids)
+    else:
+        inventory = inventory_from_db(db, device_ids)
     return InitNornir(inventory=inventory)

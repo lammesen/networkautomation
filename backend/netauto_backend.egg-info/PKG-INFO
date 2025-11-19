@@ -16,12 +16,19 @@ Requires-Dist: passlib[bcrypt]
 Requires-Dist: python-multipart
 Requires-Dist: celery
 Requires-Dist: redis
+Requires-Dist: prometheus-fastapi-instrumentator
+Requires-Dist: hvac
+Requires-Dist: pynetbox
 Requires-Dist: nornir
 Requires-Dist: napalm
 Requires-Dist: netmiko
 Requires-Dist: jinja2
 Requires-Dist: httpx
 Requires-Dist: pyyaml
+Provides-Extra: tests
+Requires-Dist: pytest; extra == "tests"
+Requires-Dist: pytest-asyncio; extra == "tests"
+Requires-Dist: httpx; extra == "tests"
 Provides-Extra: test
 Requires-Dist: pytest; extra == "test"
 Requires-Dist: pytest-asyncio; extra == "test"

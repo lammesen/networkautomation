@@ -10,6 +10,9 @@ passlib[bcrypt]
 python-multipart
 celery
 redis
+prometheus-fastapi-instrumentator
+hvac
+pynetbox
 nornir
 napalm
 netmiko
@@ -18,6 +21,11 @@ httpx
 pyyaml
 
 [test]
+pytest
+pytest-asyncio
+httpx
+
+[tests]
 pytest
 pytest-asyncio
 httpx

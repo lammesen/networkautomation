@@ -19,6 +19,7 @@ from app.db.session import SessionLocal
 from app.devices.models import Device
 from app.jobs.events import publish_job_event
 from app.jobs.models import Job, JobLog
+from app.jobs.service import create_job
 
 
 def _log(
@@ -176,6 +177,21 @@ def backup_configs(job_id: int, device_ids: List[int], source: str) -> None:
             finished_at=utcnow(),
             result_summary_json=json.dumps(summary),
         )
+        db.close()
+
+
+@shared_task(name="app.jobs.tasks.schedule_nightly_backup")
+def schedule_nightly_backup() -> None:
+    """Periodic Celery task that creates and enqueues a config backup job for all enabled devices."""
+
+    db = SessionLocal()
+    try:
+        targets = [device.id for device in db.query(Device).filter(Device.enabled.is_(True)).all()]
+        if not targets:
+            return
+        job = create_job(db, "config_backup", user_id=None, targets={"device_ids": targets, "source": "scheduled"})
+        backup_configs.delay(job.id, targets, "scheduled")
+    finally:
         db.close()
 
 
