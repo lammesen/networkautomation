@@ -10,6 +10,8 @@ from .models import (
     ConfigSnapshot,
     CompliancePolicy,
     ComplianceResult,
+    Customer,
+    CustomerIPRange,
 )
 from .session import get_db, engine, SessionLocal
 
@@ -23,6 +25,8 @@ __all__ = [
     "ConfigSnapshot",
     "CompliancePolicy",
     "ComplianceResult",
+    "Customer",
+    "CustomerIPRange",
     "get_db",
     "engine",
     "SessionLocal",

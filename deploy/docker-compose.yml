@@ -1,20 +1,20 @@
 version: '3.8'
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: netauto-postgres
+  db:
+    image: postgres:15-alpine
+    container_name: netauto-db
     environment:
       POSTGRES_USER: netauto
       POSTGRES_PASSWORD: netauto
       POSTGRES_DB: netauto
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U netauto"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
       retries: 5
 
@@ -23,91 +23,62 @@ services:
     container_name: netauto-redis
     ports:
       - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
 
   backend:
     build:
-      context: .
+      context: ..
       dockerfile: deploy/Dockerfile.backend
     container_name: netauto-backend
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql://netauto:netauto@postgres:5432/netauto
+      DATABASE_URL: postgresql://netauto:netauto@db:5432/netauto
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
-      SECRET_KEY: ${SECRET_KEY:-change-me-in-production-use-openssl-rand-hex-32}
-    volumes:
-      - ./backend:/app
+      SECRET_KEY: ${SECRET_KEY:-supersecretkey}
     depends_on:
-      postgres:
+      db:
         condition: service_healthy
       redis:
-        condition: service_healthy
+        condition: service_started
+    command: sh -c "alembic upgrade head && python init_db.py && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
-  celery-worker:
+  worker:
     build:
-      context: .
+      context: ..
       dockerfile: deploy/Dockerfile.backend
-    container_name: netauto-celery
-    command: celery -A celery_app.celery_app worker --loglevel=info
+    container_name: netauto-worker
     environment:
-      DATABASE_URL: postgresql://netauto:netauto@postgres:5432/netauto
+      DATABASE_URL: postgresql://netauto:netauto@db:5432/netauto
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
-      SECRET_KEY: ${SECRET_KEY:-change-me-in-production-use-openssl-rand-hex-32}
-    volumes:
-      - ./backend:/app
+      SECRET_KEY: ${SECRET_KEY:-supersecretkey}
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
-  celery-beat:
-    build:
-      context: .
-      dockerfile: deploy/Dockerfile.backend
-    container_name: netauto-celery-beat
-    command: celery -A celery_app.celery_app beat --loglevel=info
-    environment:
-      DATABASE_URL: postgresql://netauto:netauto@postgres:5432/netauto
-      REDIS_URL: redis://redis:6379/0
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/1
-      SECRET_KEY: ${SECRET_KEY:-change-me-in-production-use-openssl-rand-hex-32}
-    volumes:
-      - ./backend:/app
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      - backend
+      - redis
+    command: celery -A app.celery_app worker --loglevel=info
 
   frontend:
     build:
-      context: .
+      context: ..
       dockerfile: deploy/Dockerfile.frontend
     container_name: netauto-frontend
     ports:
       - "3000:3000"
     environment:
       VITE_API_URL: http://localhost:8000/api/v1
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
     depends_on:
       - backend
 
+  linux-device:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.linux-device
+    container_name: linux-device
+    ports:
+      - "2222:22"
+
 volumes:
   postgres_data:
-  redis_data:

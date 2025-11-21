@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     
     # CORS
-    cors_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
+    cors_origins: list[str] = ["*"]
 
 
 settings = Settings()

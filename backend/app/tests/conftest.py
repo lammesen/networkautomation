@@ -8,7 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.main import app
 from app.db import Base, get_db
-from app.db.models import User, Credential
+from app.db.models import User, Credential, Customer
 from app.core.auth import get_password_hash
 
 
@@ -52,7 +52,16 @@ def client(db_session):
 
 
 @pytest.fixture
-def admin_user(db_session):
+def test_customer(db_session):
+    customer = Customer(name="test_customer")
+    db_session.add(customer)
+    db_session.commit()
+    db_session.refresh(customer)
+    return customer
+
+
+@pytest.fixture
+def admin_user(db_session, test_customer):
     """Create an admin user for testing."""
     user = User(
         username="admin",
@@ -60,6 +69,7 @@ def admin_user(db_session):
         role="admin",
         is_active=True,
     )
+    user.customers.append(test_customer)
     db_session.add(user)
     db_session.commit()
     db_session.refresh(user)
@@ -67,7 +77,7 @@ def admin_user(db_session):
 
 
 @pytest.fixture
-def operator_user(db_session):
+def operator_user(db_session, test_customer):
     """Create an operator user for testing."""
     user = User(
         username="operator",
@@ -75,6 +85,7 @@ def operator_user(db_session):
         role="operator",
         is_active=True,
     )
+    user.customers.append(test_customer)
     db_session.add(user)
     db_session.commit()
     db_session.refresh(user)
@@ -82,7 +93,7 @@ def operator_user(db_session):
 
 
 @pytest.fixture
-def viewer_user(db_session):
+def viewer_user(db_session, test_customer):
     """Create a viewer user for testing."""
     user = User(
         username="viewer",
@@ -90,6 +101,7 @@ def viewer_user(db_session):
         role="viewer",
         is_active=True,
     )
+    user.customers.append(test_customer)
     db_session.add(user)
     db_session.commit()
     db_session.refresh(user)
@@ -97,12 +109,13 @@ def viewer_user(db_session):
 
 
 @pytest.fixture
-def test_credential(db_session):
+def test_credential(db_session, test_customer):
     """Create a test credential."""
     credential = Credential(
         name="test_cred",
         username="testuser",
         password="testpass",
+        customer_id=test_customer.id,
     )
     db_session.add(credential)
     db_session.commit()
@@ -111,11 +124,14 @@ def test_credential(db_session):
 
 
 @pytest.fixture
-def auth_headers(client, admin_user):
+def auth_headers(client, admin_user, test_customer):
     """Get authentication headers for admin user."""
     response = client.post(
         "/api/v1/auth/login",
         json={"username": "admin", "password": "admin123"},
     )
     token = response.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
+    return {
+        "Authorization": f"Bearer {token}",
+        "X-Customer-ID": str(test_customer.id),
+    }

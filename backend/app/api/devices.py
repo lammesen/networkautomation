@@ -1,101 +1,121 @@
 """Device API endpoints."""
 
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from __future__ import annotations
 
-from app.core.auth import get_current_user, require_operator
-from app.db import get_db, Device, User, Credential
+import codecs
+import csv
+from typing import Optional
+
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Query,
+    UploadFile,
+    status,
+)
+
+from app.api import errors
+from app.dependencies import (
+    get_credential_service,
+    get_device_service,
+    get_operator_context,
+    get_tenant_context,
+)
+from app.domain.context import TenantRequestContext
+from app.domain.devices import DeviceFilters
+from app.domain.exceptions import DomainError
 from app.schemas.device import (
-    DeviceCreate,
-    DeviceUpdate,
-    DeviceResponse,
-    DeviceListResponse,
     CredentialCreate,
     CredentialResponse,
+    DeviceCreate,
+    DeviceListResponse,
+    DeviceResponse,
+    DeviceUpdate,
 )
+from app.services.device_service import CredentialService, DeviceService
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 cred_router = APIRouter(prefix="/credentials", tags=["credentials"])
 
 
+def _handle_domain_error(exc: DomainError):
+    raise errors.to_http(exc)
+
+
+# -----------------------------------------------------------------------------
 # Credential endpoints
+
+
 @cred_router.post("", response_model=CredentialResponse, status_code=status.HTTP_201_CREATED)
 def create_credential(
-    credential: CredentialCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_operator),
+    payload: CredentialCreate,
+    service: CredentialService = Depends(get_credential_service),
+    context: TenantRequestContext = Depends(get_operator_context),
 ) -> CredentialResponse:
     """Create a new credential."""
-    existing = db.query(Credential).filter(Credential.name == credential.name).first()
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Credential with this name already exists",
-        )
-    
-    db_credential = Credential(**credential.model_dump())
-    db.add(db_credential)
-    db.commit()
-    db.refresh(db_credential)
-    return CredentialResponse.model_validate(db_credential)
+    try:
+        credential = service.create_credential(payload, context)
+        return CredentialResponse.model_validate(credential)
+    except DomainError as exc:  # pragma: no cover - simple mapping
+        _handle_domain_error(exc)
 
 
 @cred_router.get("", response_model=list[CredentialResponse])
 def list_credentials(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    service: CredentialService = Depends(get_credential_service),
+    context: TenantRequestContext = Depends(get_tenant_context),
 ) -> list[CredentialResponse]:
-    """List all credentials."""
-    credentials = db.query(Credential).all()
-    return [CredentialResponse.model_validate(c) for c in credentials]
+    """List all credentials for the active customer."""
+    credentials = service.list_credentials(context)
+    return [CredentialResponse.model_validate(cred) for cred in credentials]
 
 
 @cred_router.get("/{credential_id}", response_model=CredentialResponse)
 def get_credential(
     credential_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    service: CredentialService = Depends(get_credential_service),
+    context: TenantRequestContext = Depends(get_tenant_context),
 ) -> CredentialResponse:
     """Get credential by ID."""
-    credential = db.query(Credential).filter(Credential.id == credential_id).first()
-    if not credential:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Credential not found",
-        )
-    return CredentialResponse.model_validate(credential)
+    try:
+        credential = service.get_credential(credential_id, context)
+        return CredentialResponse.model_validate(credential)
+    except DomainError as exc:
+        _handle_domain_error(exc)
 
 
+# -----------------------------------------------------------------------------
 # Device endpoints
+
+
+@router.post("/import", status_code=status.HTTP_200_OK)
+def import_devices(
+    file: UploadFile = File(...),
+    service: DeviceService = Depends(get_device_service),
+    context: TenantRequestContext = Depends(get_operator_context),
+) -> dict:
+    """Import devices from CSV file."""
+    if not file.filename.endswith(".csv"):
+        _handle_domain_error(DomainError("File must be a CSV"))
+
+    reader = csv.DictReader(codecs.iterdecode(file.file, "utf-8"))
+    summary = service.import_devices(reader, context)
+    return summary
+
+
 @router.post("", response_model=DeviceResponse, status_code=status.HTTP_201_CREATED)
 def create_device(
-    device: DeviceCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_operator),
+    payload: DeviceCreate,
+    service: DeviceService = Depends(get_device_service),
+    context: TenantRequestContext = Depends(get_operator_context),
 ) -> DeviceResponse:
     """Create a new device."""
-    existing = db.query(Device).filter(Device.hostname == device.hostname).first()
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Device with this hostname already exists",
-        )
-    
-    # Verify credential exists
-    credential = db.query(Credential).filter(Credential.id == device.credentials_ref).first()
-    if not credential:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Credential not found",
-        )
-    
-    db_device = Device(**device.model_dump())
-    db.add(db_device)
-    db.commit()
-    db.refresh(db_device)
-    return DeviceResponse.model_validate(db_device)
+    try:
+        device = service.create_device(payload, context)
+        return DeviceResponse.model_validate(device)
+    except DomainError as exc:
+        _handle_domain_error(exc)
 
 
 @router.get("", response_model=DeviceListResponse)
@@ -107,113 +127,63 @@ def list_devices(
     enabled: Optional[bool] = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    service: DeviceService = Depends(get_device_service),
+    context: TenantRequestContext = Depends(get_tenant_context),
 ) -> DeviceListResponse:
     """List devices with optional filters."""
-    query = db.query(Device)
-    
-    if site:
-        query = query.filter(Device.site == site)
-    if role:
-        query = query.filter(Device.role == role)
-    if vendor:
-        query = query.filter(Device.vendor == vendor)
-    if enabled is not None:
-        query = query.filter(Device.enabled == enabled)
-    if search:
-        query = query.filter(
-            or_(
-                Device.hostname.ilike(f"%{search}%"),
-                Device.mgmt_ip.ilike(f"%{search}%"),
-            )
-        )
-    
-    total = query.count()
-    devices = query.offset(skip).limit(limit).all()
-    
+    filters = DeviceFilters(
+        site=site,
+        role=role,
+        vendor=vendor,
+        search=search,
+        enabled=enabled,
+        skip=skip,
+        limit=limit,
+    )
+    total, records = service.list_devices(filters, context)
     return DeviceListResponse(
         total=total,
-        devices=[DeviceResponse.model_validate(d) for d in devices],
+        devices=[DeviceResponse.model_validate(device) for device in records],
     )
 
 
 @router.get("/{device_id}", response_model=DeviceResponse)
 def get_device(
     device_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    service: DeviceService = Depends(get_device_service),
+    context: TenantRequestContext = Depends(get_tenant_context),
 ) -> DeviceResponse:
     """Get device by ID."""
-    device = db.query(Device).filter(Device.id == device_id).first()
-    if not device:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Device not found",
-        )
-    return DeviceResponse.model_validate(device)
+    try:
+        device = service.get_device(device_id, context)
+        return DeviceResponse.model_validate(device)
+    except DomainError as exc:
+        _handle_domain_error(exc)
 
 
 @router.put("/{device_id}", response_model=DeviceResponse)
 def update_device(
     device_id: int,
-    device_update: DeviceUpdate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_operator),
+    payload: DeviceUpdate,
+    service: DeviceService = Depends(get_device_service),
+    context: TenantRequestContext = Depends(get_operator_context),
 ) -> DeviceResponse:
     """Update device."""
-    device = db.query(Device).filter(Device.id == device_id).first()
-    if not device:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Device not found",
-        )
-    
-    update_data = device_update.model_dump(exclude_unset=True)
-    
-    # Check if updating hostname and it conflicts
-    if "hostname" in update_data:
-        existing = (
-            db.query(Device)
-            .filter(Device.hostname == update_data["hostname"], Device.id != device_id)
-            .first()
-        )
-        if existing:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Device with this hostname already exists",
-            )
-    
-    # Verify credential if updating
-    if "credentials_ref" in update_data:
-        credential = db.query(Credential).filter(Credential.id == update_data["credentials_ref"]).first()
-        if not credential:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Credential not found",
-            )
-    
-    for key, value in update_data.items():
-        setattr(device, key, value)
-    
-    db.commit()
-    db.refresh(device)
-    return DeviceResponse.model_validate(device)
+    try:
+        device = service.update_device(device_id, payload, context)
+        return DeviceResponse.model_validate(device)
+    except DomainError as exc:
+        _handle_domain_error(exc)
 
 
 @router.delete("/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_device(
     device_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_operator),
+    service: DeviceService = Depends(get_device_service),
+    context: TenantRequestContext = Depends(get_operator_context),
 ) -> None:
-    """Delete device (soft delete by disabling)."""
-    device = db.query(Device).filter(Device.id == device_id).first()
-    if not device:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Device not found",
-        )
-    
-    device.enabled = False
-    db.commit()
+    """Disable device (soft delete)."""
+    try:
+        service.disable_device(device_id, context)
+    except DomainError as exc:
+        _handle_domain_error(exc)

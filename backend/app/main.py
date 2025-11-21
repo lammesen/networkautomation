@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core import settings, setup_logging
-from app.api import auth, devices, jobs, commands, config, compliance, websocket
+from app.api import auth, devices, jobs, commands, config, compliance, websocket, users, customers
 
 # Setup logging
 setup_logging()
@@ -26,6 +26,8 @@ app.add_middleware(
 
 # Include routers
 app.include_router(auth.router, prefix=settings.api_prefix)
+app.include_router(users.router, prefix=settings.api_prefix)
+app.include_router(customers.router, prefix=settings.api_prefix)
 app.include_router(devices.router, prefix=settings.api_prefix)
 app.include_router(devices.cred_router, prefix=settings.api_prefix)
 app.include_router(jobs.router, prefix=settings.api_prefix)

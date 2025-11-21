@@ -103,9 +103,9 @@ networkautomation/
 │   │   ├── db/                # Database models
 │   │   ├── jobs/              # Job system and Celery tasks
 │   │   ├── schemas/           # Pydantic schemas
+│   │   ├── celery_app.py      # Celery configuration
 │   │   └── main.py            # FastAPI application
 │   ├── alembic/               # Database migrations
-│   ├── celery_app.py          # Celery configuration
 │   └── pyproject.toml         # Python dependencies
 ├── frontend/                   # React frontend
 │   ├── src/

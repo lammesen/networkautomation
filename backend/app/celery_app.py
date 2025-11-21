@@ -2,6 +2,7 @@
 
 from celery import Celery
 from celery.schedules import crontab
+
 from app.core.config import settings
 
 celery_app = Celery(
@@ -25,7 +26,13 @@ celery_app.conf.update(
     beat_schedule={
         "scheduled-config-backup": {
             "task": "scheduled_config_backup",
-            "schedule": crontab(hour=2, minute=0),  # Run daily at 2 AM
+            "schedule": crontab(hour=2, minute=0),
+        },
+        "check-reachability": {
+            "task": "check_reachability_job",
+            "schedule": 60.0,
         },
     },
 )
+
+

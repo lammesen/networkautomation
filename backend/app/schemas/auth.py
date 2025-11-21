@@ -1,6 +1,7 @@
 """Authentication schemas."""
 
 from pydantic import BaseModel, Field
+from app.schemas.customer import CustomerResponse
 
 
 class Token(BaseModel):
@@ -31,6 +32,7 @@ class UserResponse(BaseModel):
     username: str
     role: str
     is_active: bool
+    customers: list[CustomerResponse] = []
 
     model_config = {"from_attributes": True}
 
@@ -41,3 +43,11 @@ class UserCreate(BaseModel):
     username: str = Field(..., min_length=3, max_length=100)
     password: str = Field(..., min_length=6)
     role: str = Field(default="viewer", pattern="^(viewer|operator|admin)$")
+
+
+class UserUpdate(BaseModel):
+    """User update request."""
+
+    role: str | None = Field(None, pattern="^(viewer|operator|admin)$")
+    is_active: bool | None = None
+

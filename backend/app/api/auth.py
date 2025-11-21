@@ -45,7 +45,10 @@ def get_me(current_user: User = Depends(get_current_user)) -> UserResponse:
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def register(user_create: UserCreate, db: Session = Depends(get_db)) -> UserResponse:
-    """Register new user (for initial setup - should be protected in production)."""
+    """Register new user.
+    
+    New users are created as inactive and require admin approval.
+    """
     existing_user = db.query(User).filter(User.username == user_create.username).first()
     if existing_user:
         raise HTTPException(
@@ -57,7 +60,8 @@ def register(user_create: UserCreate, db: Session = Depends(get_db)) -> UserResp
     new_user = User(
         username=user_create.username,
         hashed_password=hashed_password,
-        role=user_create.role,
+        role="viewer",  # Force viewer role
+        is_active=False,  # Require approval
     )
     db.add(new_user)
     db.commit()

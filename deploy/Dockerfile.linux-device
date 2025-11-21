@@ -1,0 +1,23 @@
+FROM alpine:latest
+
+# Install SSH
+RUN apk add --no-cache openssh bash
+
+# Generate host keys
+RUN ssh-keygen -A
+
+# Create a user 'testuser' with password 'testpassword'
+# -D prevents password assignment, so we set it manually
+RUN adduser -D -s /bin/bash testuser && \
+    echo "testuser:testpassword" | chpasswd
+
+# Allow password authentication
+RUN sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+RUN sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
+
+# Allow root login (optional, but good for debugging if needed, though we use testuser)
+RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+
+EXPOSE 22
+
+CMD ["/usr/sbin/sshd", "-D", "-e", "-d"]

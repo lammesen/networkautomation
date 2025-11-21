@@ -1,119 +1,217 @@
 import { useQuery } from '@tanstack/react-query'
 import { apiClient } from '../api/client'
 import { useState } from 'react'
+import { Card, CardContent } from '@/components/ui/card'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 
 export default function JobsPage() {
-  const [statusFilter, setStatusFilter] = useState('')
-  const [typeFilter, setTypeFilter] = useState('')
-  
+  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [typeFilter, setTypeFilter] = useState<string>('all')
+  const [selectedJob, setSelectedJob] = useState<any>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+
   const { data, isLoading, error } = useQuery({
     queryKey: ['jobs', statusFilter, typeFilter],
-    queryFn: () => apiClient.getJobs({ status: statusFilter, type: typeFilter }),
+    queryFn: () => apiClient.getJobs({
+      status: statusFilter !== 'all' ? statusFilter : undefined,
+      type: typeFilter !== 'all' ? typeFilter : undefined
+    }),
+    refetchInterval: 1000, // Poll every 5 seconds
   })
 
   if (isLoading) return <div>Loading jobs...</div>
-  if (error) return <div style={{ color: 'red' }}>Error loading jobs</div>
+  if (error) return <div className="text-red-500">Error loading jobs</div>
 
-  const getStatusColor = (status: string) => {
+  // Custom badge colors using Tailwind classes since shadcn Badge variants are limited
+  const getStatusBadge = (status: string) => {
+    let classes = ""
     switch (status) {
       case 'success':
-        return { bg: '#d1fae5', color: '#065f46' }
+        classes = "bg-green-100 text-green-800 hover:bg-green-100 border-green-200"
+        break
       case 'running':
-        return { bg: '#dbeafe', color: '#1e40af' }
+        classes = "bg-blue-100 text-blue-800 hover:bg-blue-100 border-blue-200"
+        break
       case 'failed':
-        return { bg: '#fee2e2', color: '#991b1b' }
+        classes = "bg-red-100 text-red-800 hover:bg-red-100 border-red-200"
+        break
       case 'partial':
-        return { bg: '#fef3c7', color: '#92400e' }
+        classes = "bg-yellow-100 text-yellow-800 hover:bg-yellow-100 border-yellow-200"
+        break
       default:
-        return { bg: '#f3f4f6', color: '#374151' }
+        classes = "bg-gray-100 text-gray-800 hover:bg-gray-100 border-gray-200"
+    }
+
+    return (
+      <Badge variant="outline" className={classes}>
+        {status}
+      </Badge>
+    )
+  }
+
+  const handleViewJob = (job: any) => {
+    setSelectedJob(job)
+    setIsModalOpen(true)
+  }
+
+  const parseResults = (json: string) => {
+    try {
+      return JSON.parse(json)
+    } catch {
+      return null
     }
   }
 
   return (
-    <div>
-      <h1 style={{ marginBottom: '1rem' }}>Jobs</h1>
-      
+    <div className="space-y-6">
+      <h1 className="text-3xl font-bold tracking-tight">Jobs</h1>
+
       {/* Filters */}
-      <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '1rem' }}>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          style={{ padding: '0.5rem', border: '1px solid #ddd', borderRadius: '4px' }}
-        >
-          <option value="">All Statuses</option>
-          <option value="queued">Queued</option>
-          <option value="running">Running</option>
-          <option value="success">Success</option>
-          <option value="partial">Partial</option>
-          <option value="failed">Failed</option>
-        </select>
-        
-        <select
-          value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value)}
-          style={{ padding: '0.5rem', border: '1px solid #ddd', borderRadius: '4px' }}
-        >
-          <option value="">All Types</option>
-          <option value="run_commands">Run Commands</option>
-          <option value="config_backup">Config Backup</option>
-          <option value="config_deploy_preview">Config Deploy Preview</option>
-          <option value="config_deploy_commit">Config Deploy Commit</option>
-          <option value="compliance_check">Compliance Check</option>
-        </select>
-      </div>
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex gap-4">
+            <div className="w-[200px]">
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Statuses" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="queued">Queued</SelectItem>
+                  <SelectItem value="running">Running</SelectItem>
+                  <SelectItem value="success">Success</SelectItem>
+                  <SelectItem value="partial">Partial</SelectItem>
+                  <SelectItem value="failed">Failed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="w-[200px]">
+              <Select value={typeFilter} onValueChange={setTypeFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Types" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="run_commands">Run Commands</SelectItem>
+                  <SelectItem value="config_backup">Config Backup</SelectItem>
+                  <SelectItem value="config_deploy_preview">Config Deploy Preview</SelectItem>
+                  <SelectItem value="config_deploy_commit">Config Deploy Commit</SelectItem>
+                  <SelectItem value="compliance_check">Compliance Check</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Jobs Table */}
-      <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
-              <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600' }}>ID</th>
-              <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600' }}>Type</th>
-              <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600' }}>Status</th>
-              <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600' }}>Started</th>
-              <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600' }}>Finished</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data && data.length > 0 ? (
-              data.map((job: any) => {
-                const statusStyle = getStatusColor(job.status)
-                return (
-                  <tr key={job.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                    <td style={{ padding: '0.75rem' }}>#{job.id}</td>
-                    <td style={{ padding: '0.75rem' }}>
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>ID</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Started</TableHead>
+                <TableHead>Finished</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data && data.length > 0 ? (
+                data.map((job: any) => (
+                  <TableRow key={job.id}>
+                    <TableCell className="font-medium">#{job.id}</TableCell>
+                    <TableCell>
                       {job.type.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
-                    </td>
-                    <td style={{ padding: '0.75rem' }}>
-                      <span style={{
-                        padding: '0.25rem 0.5rem',
-                        borderRadius: '4px',
-                        fontSize: '0.875rem',
-                        backgroundColor: statusStyle.bg,
-                        color: statusStyle.color,
-                      }}>
-                        {job.status}
-                      </span>
-                    </td>
-                    <td style={{ padding: '0.75rem' }}>
+                    </TableCell>
+                    <TableCell>
+                      {getStatusBadge(job.status)}
+                    </TableCell>
+                    <TableCell>
                       {job.started_at ? new Date(job.started_at).toLocaleString() : '-'}
-                    </td>
-                    <td style={{ padding: '0.75rem' }}>
+                    </TableCell>
+                    <TableCell>
                       {job.finished_at ? new Date(job.finished_at).toLocaleString() : '-'}
-                    </td>
-                  </tr>
-                )
-              })
+                    </TableCell>
+                    <TableCell>
+                      <Button variant="outline" size="sm" onClick={() => handleViewJob(job)}>
+                        View Output
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center h-24 text-muted-foreground">
+                    No jobs found
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Job Details Modal */}
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent className="max-w-[95vw] max-h-[95vh]">
+          <DialogHeader>
+            <DialogTitle>Job #{selectedJob?.id} Details</DialogTitle>
+            <DialogDescription>
+              Results per device
+            </DialogDescription>
+          </DialogHeader>
+
+          <ScrollArea className="h-[80vh] w-full rounded-md border p-4">
+            {selectedJob && selectedJob.result_summary_json ? (
+              <div className="space-y-6">
+                {Object.entries(parseResults(selectedJob.result_summary_json) || {}).map(([hostname, res]: [string, any]) => (
+                  <div key={hostname} className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-lg">{hostname}</h3>
+                      {getStatusBadge(res.status)}
+                    </div>
+
+                    {res.error && (
+                      <Alert variant="destructive" className="py-2">
+                        <AlertDescription>{res.error}</AlertDescription>
+                      </Alert>
+                    )}
+
+                    {res.result && typeof res.result === 'object' ? (
+                      // Command outputs are usually { 'cmd': 'output' }
+                      Object.entries(res.result).map(([cmd, output]: [string, any]) => (
+                        <div key={cmd} className="bg-slate-950 text-slate-50 p-4 rounded-md font-mono text-sm whitespace-pre-wrap">
+                          <div className="text-slate-400 mb-2">$ {cmd}</div>
+                          <pre>{typeof output === 'string' ? output : JSON.stringify(output, null, 2)}</pre>
+                        </div>
+                      ))
+                    ) : res.result ? (
+                      // Fallback for simple result
+                      <div className="bg-slate-950 text-slate-50 p-4 rounded-md font-mono text-sm whitespace-pre-wrap">
+                        <pre>{JSON.stringify(res.result, null, 2)}</pre>
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
             ) : (
-              <tr>
-                <td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>
-                  No jobs found
-                </td>
-              </tr>
+              <div className="text-center text-muted-foreground">
+                No results available yet. Job might be queued or running.
+              </div>
             )}
-          </tbody>
-        </table>
-      </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -158,6 +158,12 @@ Implemented via dependencies:
 - Real-time log delivery to connected clients
 - Historical logs available via REST API
 
+#### 2025 Refactor Enhancements
+
+- `app/services/job_service.py` centralizes job creation, status transitions, and log persistence for both HTTP requests and Celery workers.
+- `app/automation/context.py` wraps device filtering, Nornir initialization, and structured logging so each worker task shares the same orchestration primitives.
+- FastAPI dependencies in `app/dependencies.py` expose typed services (`get_job_service`, `get_device_service`, etc.) ensuring tenancy checks happen before work is queued.
+
 ### Automation Layer
 
 #### Nornir Integration

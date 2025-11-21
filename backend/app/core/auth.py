@@ -4,12 +4,12 @@ from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.db import get_db, User
+from app.db import get_db, User, Customer
 from app.schemas.auth import TokenData
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -85,6 +85,45 @@ async def get_current_user(
             detail="Inactive user",
         )
     return user
+
+
+async def get_current_active_customer(
+    x_customer_id: Optional[int] = Header(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Customer:
+    """Get active customer from header and verify access."""
+    if not x_customer_id:
+        # If user has exactly one customer, use it
+        if len(current_user.customers) == 1:
+            return current_user.customers[0]
+        
+        # If admin and no header, ideally we want a customer context, but maybe for some calls it's global?
+        # For now, enforce header or single customer.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X-Customer-ID header required",
+        )
+
+    # Check if customer exists
+    customer = db.query(Customer).filter(Customer.id == x_customer_id).first()
+    if not customer:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Customer not found",
+        )
+
+    # Check permission
+    if current_user.role == "admin":
+        return customer
+    
+    if customer not in current_user.customers:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access to this customer denied",
+        )
+        
+    return customer
 
 
 def require_role(allowed_roles: list[str]):

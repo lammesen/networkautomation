@@ -1,18 +1,23 @@
 """Configuration management API endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.orm import Session
 import difflib
 
-from app.core.auth import require_operator, get_current_user
-from app.db import get_db, User, Device, ConfigSnapshot, Job
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.orm import Session
+
+from app.api import errors
+from app.core.auth import require_operator
+from app.db import ConfigSnapshot, Device, get_db
+from app.dependencies import get_job_service, get_operator_context, get_tenant_context
+from app.domain.context import TenantRequestContext
+from app.domain.exceptions import DomainError
 from app.schemas.job import (
     ConfigBackupRequest,
-    ConfigDeployPreviewRequest,
     ConfigDeployCommitRequest,
+    ConfigDeployPreviewRequest,
 )
-from app.jobs.manager import create_job
-from celery_app import celery_app
+from app.services.job_service import JobService
+from app.celery_app import celery_app
 
 router = APIRouter(prefix="/config", tags=["config"])
 
@@ -20,20 +25,21 @@ router = APIRouter(prefix="/config", tags=["config"])
 @router.post("/backup", status_code=status.HTTP_202_ACCEPTED)
 def backup_config(
     request: ConfigBackupRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_operator),
+    service: JobService = Depends(get_job_service),
+    context: TenantRequestContext = Depends(get_operator_context),
 ) -> dict:
     """Backup device configurations."""
-    # Create job
-    job = create_job(
-        db=db,
-        job_type="config_backup",
-        user=current_user,
-        target_summary={"filters": request.targets},
-        payload={"source_label": request.source_label},
-    )
-    
-    # Enqueue Celery task
+    try:
+        job = service.create_job(
+            job_type="config_backup",
+            user=context.user,
+            customer_id=context.customer_id,
+            target_summary={"filters": request.targets},
+            payload={"source_label": request.source_label},
+        )
+    except DomainError as exc:
+        raise errors.to_http(exc)
+
     celery_app.send_task(
         "config_backup_job",
         args=[job.id, request.targets, request.source_label],
@@ -46,13 +52,20 @@ def backup_config(
 def get_snapshot(
     snapshot_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    context: TenantRequestContext = Depends(get_tenant_context),
 ) -> dict:
     """Get configuration snapshot."""
     snapshot = db.query(ConfigSnapshot).filter(ConfigSnapshot.id == snapshot_id).first()
     if not snapshot:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
+            detail="Snapshot not found",
+        )
+    
+    # Verify tenancy via device
+    if snapshot.device.customer_id != context.customer_id:
+         raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, # Mask as not found
             detail="Snapshot not found",
         )
     
@@ -69,21 +82,24 @@ def get_snapshot(
 @router.post("/deploy/preview", status_code=status.HTTP_202_ACCEPTED)
 def deploy_config_preview(
     request: ConfigDeployPreviewRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_operator),
+    service: JobService = Depends(get_job_service),
+    context: TenantRequestContext = Depends(get_operator_context),
 ) -> dict:
     """Preview configuration deployment."""
     # Create job
-    job = create_job(
-        db=db,
-        job_type="config_deploy_preview",
-        user=current_user,
-        target_summary={"filters": request.targets},
-        payload={
-            "mode": request.mode,
-            "snippet": request.snippet,
-        },
-    )
+    try:
+        job = service.create_job(
+            job_type="config_deploy_preview",
+            user=context.user,
+            customer_id=context.customer_id,
+            target_summary={"filters": request.targets},
+            payload={
+                "mode": request.mode,
+                "snippet": request.snippet,
+            },
+        )
+    except DomainError as exc:
+        raise errors.to_http(exc)
     
     # Enqueue Celery task
     celery_app.send_task(
@@ -98,16 +114,15 @@ def deploy_config_preview(
 def deploy_config_commit(
     request: ConfigDeployCommitRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_operator),
+    service: JobService = Depends(get_job_service),
+    context: TenantRequestContext = Depends(get_operator_context),
 ) -> dict:
     """Commit configuration deployment."""
     # Get previous preview job
-    preview_job = db.query(Job).filter(Job.id == request.previous_job_id).first()
-    if not preview_job:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Preview job not found",
-        )
+    try:
+        preview_job = service.get_job(request.previous_job_id, context)
+    except DomainError as exc:
+        raise errors.to_http(exc)
     
     if preview_job.type != "config_deploy_preview":
         raise HTTPException(
@@ -126,13 +141,16 @@ def deploy_config_commit(
     targets = preview_job.target_summary_json["filters"]
     
     # Create commit job
-    job = create_job(
-        db=db,
-        job_type="config_deploy_commit",
-        user=current_user,
-        target_summary={"filters": targets, "preview_job_id": request.previous_job_id},
-        payload=payload,
-    )
+    try:
+        job = service.create_job(
+            job_type="config_deploy_commit",
+            user=context.user,
+            customer_id=context.customer_id,
+            target_summary={"filters": targets, "preview_job_id": request.previous_job_id},
+            payload=payload,
+        )
+    except DomainError as exc:
+        raise errors.to_http(exc)
     
     # Enqueue Celery task
     celery_app.send_task(
@@ -149,10 +167,17 @@ def list_device_snapshots(
     device_id: int,
     limit: int = Query(100, ge=1, le=1000),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    context: TenantRequestContext = Depends(get_tenant_context),
 ) -> list[dict]:
     """List configuration snapshots for a device."""
-    device = db.query(Device).filter(Device.id == device_id).first()
+    device = (
+        db.query(Device)
+        .filter(
+            Device.id == device_id,
+            Device.customer_id == context.customer_id,
+        )
+        .first()
+    )
     if not device:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -185,10 +210,17 @@ def get_config_diff(
     from_snapshot: int = Query(..., alias="from"),
     to_snapshot: int = Query(..., alias="to"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    context: TenantRequestContext = Depends(get_tenant_context),
 ) -> dict:
     """Get diff between two configuration snapshots."""
-    device = db.query(Device).filter(Device.id == device_id).first()
+    device = (
+        db.query(Device)
+        .filter(
+            Device.id == device_id,
+            Device.customer_id == context.customer_id,
+        )
+        .first()
+    )
     if not device:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

@@ -1,12 +1,12 @@
-FROM node:20-alpine
+FROM oven/bun:1
 
 WORKDIR /app
 
 # Copy package files
-COPY frontend/package*.json ./
+COPY frontend/package.json frontend/bun.lock ./
 
-# Install dependencies
-RUN npm install
+# Install dependencies with Bun
+RUN bun install
 
 # Copy application code
 COPY frontend/ ./
@@ -14,5 +14,5 @@ COPY frontend/ ./
 # Expose port
 EXPOSE 3000
 
-# Default command
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+# Default command using Bun
+CMD ["bun", "run", "dev", "--host", "0.0.0.0"]

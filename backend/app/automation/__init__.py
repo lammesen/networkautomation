@@ -1,13 +1,14 @@
 """Automation module initialization."""
 
-from .inventory import get_nornir_inventory, filter_devices_from_db
-from .nornir_init import init_nornir, filter_nornir_hosts
+from .context import AutomationContext
+from .inventory import filter_devices_from_db, get_nornir_inventory
+from .nornir_init import filter_nornir_hosts, init_nornir
 from .tasks_cli import run_commands_task
 from .tasks_config import (
+    commit_config_task,
     get_config_task,
     load_merge_config_task,
     load_replace_config_task,
-    commit_config_task,
 )
 from .tasks_validate import validate_task
 
@@ -22,4 +23,5 @@ __all__ = [
     "load_replace_config_task",
     "commit_config_task",
     "validate_task",
+    "AutomationContext",
 ]

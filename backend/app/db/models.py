@@ -11,6 +11,9 @@ from sqlalchemy import (
     JSON,
     ForeignKey,
     Index,
+    Table,
+    UniqueConstraint,
+    Column,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -19,6 +22,58 @@ class Base(DeclarativeBase):
     """Base class for all models."""
 
     pass
+
+
+# Association table for User <-> Customer
+user_customers = Table(
+    "user_customers",
+    Base.metadata,
+    Column("user_id", Integer, ForeignKey("users.id"), primary_key=True),
+    Column("customer_id", Integer, ForeignKey("customers.id"), primary_key=True),
+)
+
+
+class Customer(Base):
+    """Customer (Tenant) model."""
+
+    __tablename__ = "customers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # Relationships
+    users: Mapped[list["User"]] = relationship(
+        "User", secondary=user_customers, back_populates="customers"
+    )
+    devices: Mapped[list["Device"]] = relationship("Device", back_populates="customer")
+    credentials: Mapped[list["Credential"]] = relationship("Credential", back_populates="customer")
+    jobs: Mapped[list["Job"]] = relationship("Job", back_populates="customer")
+    compliance_policies: Mapped[list["CompliancePolicy"]] = relationship(
+        "CompliancePolicy", back_populates="customer"
+    )
+    ip_ranges: Mapped[list["CustomerIPRange"]] = relationship(
+        "CustomerIPRange", back_populates="customer"
+    )
+
+
+class CustomerIPRange(Base):
+    """Customer IP Range model for auto-assignment."""
+
+    __tablename__ = "customer_ip_ranges"
+    __table_args__ = (
+        Index("ix_customer_ip_ranges_customer_id", "customer_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("customers.id"), nullable=False)
+    cidr: Mapped[str] = mapped_column(String(45), nullable=False)  # e.g., "10.0.0.0/24"
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # Relationships
+    customer: Mapped["Customer"] = relationship("Customer", back_populates="ip_ranges")
 
 
 class User(Base):
@@ -40,15 +95,22 @@ class User(Base):
 
     # Relationships
     jobs: Mapped[list["Job"]] = relationship("Job", back_populates="user")
+    customers: Mapped[list["Customer"]] = relationship(
+        "Customer", secondary=user_customers, back_populates="users"
+    )
 
 
 class Credential(Base):
     """Credential model for device authentication."""
 
     __tablename__ = "credentials"
+    __table_args__ = (
+        UniqueConstraint("customer_id", "name", name="uix_credential_customer_name"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("customers.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
     username: Mapped[str] = mapped_column(String(100), nullable=False)
     password: Mapped[str] = mapped_column(String(255), nullable=False)  # Should be encrypted
     enable_password: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
@@ -56,6 +118,7 @@ class Credential(Base):
 
     # Relationships
     devices: Mapped[list["Device"]] = relationship("Device", back_populates="credential")
+    customer: Mapped["Customer"] = relationship("Customer", back_populates="credentials")
 
 
 class Device(Base):
@@ -66,10 +129,12 @@ class Device(Base):
         Index("ix_devices_role", "role"),
         Index("ix_devices_site", "site"),
         Index("ix_devices_vendor", "vendor"),
+        UniqueConstraint("customer_id", "hostname", name="uix_device_customer_hostname"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    hostname: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("customers.id"), nullable=False)
+    hostname: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     mgmt_ip: Mapped[str] = mapped_column(String(45), nullable=False)  # Support IPv6
     vendor: Mapped[str] = mapped_column(String(50), nullable=False)
     platform: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -80,6 +145,8 @@ class Device(Base):
         Integer, ForeignKey("credentials.id"), nullable=False
     )
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    reachability_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    last_reachability_check: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
@@ -93,6 +160,7 @@ class Device(Base):
     compliance_results: Mapped[list["ComplianceResult"]] = relationship(
         "ComplianceResult", back_populates="device"
     )
+    customer: Mapped["Customer"] = relationship("Customer", back_populates="devices")
 
 
 class Job(Base):
@@ -103,9 +171,11 @@ class Job(Base):
         Index("ix_jobs_status", "status"),
         Index("ix_jobs_type", "type"),
         Index("ix_jobs_user_id", "user_id"),
+        Index("ix_jobs_customer_id", "customer_id"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("customers.id"), nullable=False)
     type: Mapped[str] = mapped_column(
         String(50), nullable=False
     )  # run_commands, config_backup, config_deploy, compliance
@@ -125,11 +195,13 @@ class Job(Base):
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="jobs")
     logs: Mapped[list["JobLog"]] = relationship("JobLog", back_populates="job")
+    customer: Mapped["Customer"] = relationship("Customer", back_populates="jobs")
 
 
 class JobLog(Base):
     """Job log model."""
-
+    
+    # ... unchanged ...
     __tablename__ = "job_logs"
     __table_args__ = (Index("ix_job_logs_job_id", "job_id"),)
 
@@ -149,7 +221,8 @@ class JobLog(Base):
 
 class ConfigSnapshot(Base):
     """Configuration snapshot model."""
-
+    
+    # ... unchanged ...
     __tablename__ = "config_snapshots"
     __table_args__ = (
         Index("ix_config_snapshots_device_id", "device_id"),
@@ -174,9 +247,13 @@ class CompliancePolicy(Base):
     """Compliance policy model."""
 
     __tablename__ = "compliance_policies"
+    __table_args__ = (
+        UniqueConstraint("customer_id", "name", name="uix_policy_customer_name"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("customers.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     scope_json: Mapped[dict] = mapped_column(
         JSON, nullable=False
@@ -192,11 +269,12 @@ class CompliancePolicy(Base):
     results: Mapped[list["ComplianceResult"]] = relationship(
         "ComplianceResult", back_populates="policy"
     )
+    customer: Mapped["Customer"] = relationship("Customer", back_populates="compliance_policies")
 
 
 class ComplianceResult(Base):
     """Compliance result model."""
-
+    # ... unchanged ...
     __tablename__ = "compliance_results"
     __table_args__ = (
         Index("ix_compliance_results_policy_id", "policy_id"),

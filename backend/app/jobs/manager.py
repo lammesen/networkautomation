@@ -1,36 +1,44 @@
 """Job management utilities."""
 
-from datetime import datetime
 from typing import Optional
+
 from sqlalchemy.orm import Session
 
-from app.db import Job, JobLog, User
 from app.core.logging import get_logger
+from app.db import Job, JobLog, User
+from app.domain.exceptions import DomainError
+from app.services.job_service import JobService
 
 logger = get_logger(__name__)
+
+
+def _service(db: Session) -> JobService:
+    return JobService(db)
 
 
 def create_job(
     db: Session,
     job_type: str,
     user: User,
+    customer_id: int,
     target_summary: Optional[dict] = None,
     payload: Optional[dict] = None,
 ) -> Job:
     """Create a new job in the database."""
-    job = Job(
-        type=job_type,
-        status="queued",
-        user_id=user.id,
-        target_summary_json=target_summary,
-        payload_json=payload,
-        requested_at=datetime.utcnow(),
+    job = _service(db).create_job(
+        job_type=job_type,
+        user=user,
+        customer_id=customer_id,
+        target_summary=target_summary,
+        payload=payload,
     )
-    db.add(job)
-    db.commit()
-    db.refresh(job)
-    
-    logger.info(f"Created job {job.id} of type {job_type} for user {user.username}")
+    logger.info(
+        "Created job %s of type %s for user %s (customer %s)",
+        job.id,
+        job_type,
+        user.username,
+        customer_id,
+    )
     return job
 
 
@@ -41,24 +49,11 @@ def update_job_status(
     result_summary: Optional[dict] = None,
 ) -> None:
     """Update job status."""
-    job = db.query(Job).filter(Job.id == job_id).first()
-    if not job:
-        logger.error(f"Job {job_id} not found")
-        return
-    
-    job.status = status
-    
-    if status == "running" and not job.started_at:
-        job.started_at = datetime.utcnow()
-    
-    if status in ["success", "partial", "failed"]:
-        job.finished_at = datetime.utcnow()
-    
-    if result_summary:
-        job.result_summary_json = result_summary
-    
-    db.commit()
-    logger.info(f"Updated job {job_id} status to {status}")
+    try:
+        _service(db).set_status(job_id, status, result_summary)
+        logger.info("Updated job %s status to %s", job_id, status)
+    except DomainError as exc:
+        logger.error("Failed to update job %s: %s", job_id, exc)
 
 
 def create_job_log(
@@ -70,24 +65,18 @@ def create_job_log(
     extra: Optional[dict] = None,
 ) -> None:
     """Create a job log entry."""
-    log = JobLog(
-        job_id=job_id,
-        ts=datetime.utcnow(),
-        level=level,
-        host=host,
-        message=message,
-        extra_json=extra,
-    )
-    db.add(log)
-    db.commit()
+    try:
+        _service(db).append_log(
+            job_id,
+            level=level,
+            message=message,
+            host=host,
+            extra=extra,
+        )
+    except DomainError as exc:  # pragma: no cover - logging safeguard
+        logger.error("Failed to append log for job %s: %s", job_id, exc)
 
 
 def get_job_logs(db: Session, job_id: int, limit: int = 1000) -> list[JobLog]:
     """Get job logs."""
-    return (
-        db.query(JobLog)
-        .filter(JobLog.job_id == job_id)
-        .order_by(JobLog.ts.asc())
-        .limit(limit)
-        .all()
-    )
+    return JobService(db).logs.list_for_job(job_id, limit=limit)

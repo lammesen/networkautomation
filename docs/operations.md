@@ -514,7 +514,7 @@ docker-compose restart backend
 **Celery**:
 ```bash
 docker-compose stop celery-worker
-docker-compose run --rm celery-worker celery -A celery_app.celery_app worker --loglevel=debug
+docker-compose run --rm celery-worker celery -A app.celery_app worker --loglevel=debug
 ```
 
 #### View all logs
@@ -556,7 +556,7 @@ SELECT job_id, level, host, message FROM job_logs ORDER BY ts DESC LIMIT 20;
 Edit `docker-compose.yml`:
 ```yaml
 celery-worker:
-  command: celery -A celery_app.celery_app worker --loglevel=info --concurrency=4
+  command: celery -A app.celery_app worker --loglevel=info --concurrency=4
 ```
 
 #### Database connection pooling
@@ -652,7 +652,7 @@ flower:
   build:
     context: .
     dockerfile: deploy/Dockerfile.backend
-  command: celery -A celery_app.celery_app flower --port=5555
+  command: celery -A app.celery_app flower --port=5555
   ports:
     - "5555:5555"
   environment:

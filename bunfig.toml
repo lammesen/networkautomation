@@ -1,0 +1,12 @@
+[install]
+# Enforce a lockfile for consistency
+lockfile = { save = true }
+
+# Set registry (optional, defaults to npm)
+registry = "https://registry.npmjs.org"
+
+[test]
+# Native test runner configuration
+# Replaces Jest/Vitest config
+root = "frontend/src"
+# preload = ["./frontend/src/setupTests.ts"]

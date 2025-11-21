@@ -53,7 +53,7 @@ def test_create_device(client, auth_headers, test_credential):
     assert data["vendor"] == "cisco"
 
 
-def test_list_devices(client, auth_headers, test_credential, db_session):
+def test_list_devices(client, auth_headers, test_credential, db_session, test_customer):
     """Test listing devices."""
     # Create a test device
     device = Device(
@@ -62,6 +62,7 @@ def test_list_devices(client, auth_headers, test_credential, db_session):
         vendor="cisco",
         platform="ios",
         credentials_ref=test_credential.id,
+        customer_id=test_customer.id,
         enabled=True,
     )
     db_session.add(device)
@@ -74,7 +75,7 @@ def test_list_devices(client, auth_headers, test_credential, db_session):
     assert len(data["devices"]) >= 1
 
 
-def test_get_device(client, auth_headers, test_credential, db_session):
+def test_get_device(client, auth_headers, test_credential, db_session, test_customer):
     """Test getting a specific device."""
     device = Device(
         hostname="router1",
@@ -82,6 +83,7 @@ def test_get_device(client, auth_headers, test_credential, db_session):
         vendor="cisco",
         platform="ios",
         credentials_ref=test_credential.id,
+        customer_id=test_customer.id,
         enabled=True,
     )
     db_session.add(device)
@@ -94,7 +96,7 @@ def test_get_device(client, auth_headers, test_credential, db_session):
     assert data["hostname"] == "router1"
 
 
-def test_update_device(client, auth_headers, test_credential, db_session):
+def test_update_device(client, auth_headers, test_credential, db_session, test_customer):
     """Test updating a device."""
     device = Device(
         hostname="router1",
@@ -102,6 +104,7 @@ def test_update_device(client, auth_headers, test_credential, db_session):
         vendor="cisco",
         platform="ios",
         credentials_ref=test_credential.id,
+        customer_id=test_customer.id,
         enabled=True,
     )
     db_session.add(device)
@@ -118,7 +121,7 @@ def test_update_device(client, auth_headers, test_credential, db_session):
     assert data["role"] == "core"
 
 
-def test_delete_device(client, auth_headers, test_credential, db_session):
+def test_delete_device(client, auth_headers, test_credential, db_session, test_customer):
     """Test deleting a device (soft delete)."""
     device = Device(
         hostname="router1",
@@ -126,6 +129,7 @@ def test_delete_device(client, auth_headers, test_credential, db_session):
         vendor="cisco",
         platform="ios",
         credentials_ref=test_credential.id,
+        customer_id=test_customer.id,
         enabled=True,
     )
     db_session.add(device)
@@ -140,7 +144,7 @@ def test_delete_device(client, auth_headers, test_credential, db_session):
     assert device.enabled is False
 
 
-def test_filter_devices_by_site(client, auth_headers, test_credential, db_session):
+def test_filter_devices_by_site(client, auth_headers, test_credential, db_session, test_customer):
     """Test filtering devices by site."""
     device1 = Device(
         hostname="router1",
@@ -149,6 +153,7 @@ def test_filter_devices_by_site(client, auth_headers, test_credential, db_sessio
         platform="ios",
         site="dc1",
         credentials_ref=test_credential.id,
+        customer_id=test_customer.id,
         enabled=True,
     )
     device2 = Device(
@@ -158,6 +163,7 @@ def test_filter_devices_by_site(client, auth_headers, test_credential, db_sessio
         platform="ios",
         site="dc2",
         credentials_ref=test_credential.id,
+        customer_id=test_customer.id,
         enabled=True,
     )
     db_session.add(device1)
