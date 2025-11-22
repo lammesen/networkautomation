@@ -69,8 +69,8 @@ Goals for refactor:
 
 ## 5. Deployment Context
 
-- Docker Compose (`deploy/docker-compose.yml`) orchestrates Postgres, Redis, backend (Uvicorn), Celery worker, and frontend (Vite dev or static build via nginx).
-- Kubernetes manifests under `k8s/` mirror the same topology with dedicated deployments/services and PVCs.
+- Docker Desktop Kubernetes (manifests under `k8s/`) orchestrates Postgres, Redis, backend (Uvicorn), Celery worker, linux-device, network microservice, and the frontend; `make dev-up/dev-down` wrap `kubectl apply/delete`.
+- Container build assets remain under `deploy/` (Dockerfiles for backend, frontend, linux-device).
 - `docs/architecture.md` outlines roadmap items (NetBox integration, scheduled jobs, etc.) that must remain possible after the refactor.
 
 This baseline should be treated as the contract to preserve during the backend/service reorganization and frontend feature-module rewrite.

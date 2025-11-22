@@ -61,6 +61,32 @@ def init_db() -> None:
         else:
             print("default-creds already exists")
 
+        # Linux device credentials (matches linux-device container)
+        linux_cred = (
+            db.query(Credential)
+            .filter(
+                Credential.name == "linux-device-creds",
+                Credential.customer_id == default_org.id,
+            )
+            .first()
+        )
+        if not linux_cred:
+            linux_cred = Credential(
+                customer_id=default_org.id,
+                name="linux-device-creds",
+                username="testuser",
+                password="testpassword",
+            )
+            db.add(linux_cred)
+            db.commit()
+            db.refresh(linux_cred)
+            print("Created linux-device-creds")
+        else:
+            linux_cred.username = "testuser"
+            linux_cred.password = "testpassword"
+            db.commit()
+            print("linux-device-creds already exists (updated credentials)")
+
         # 2. Create Example Devices
         devices_data = [
             {"hostname": "core-router-01", "mgmt_ip": "192.0.2.10", "platform": "ios", "role": "core", "site": "lab"},
@@ -87,7 +113,36 @@ def init_db() -> None:
                 print(f"Created device {d_data['hostname']}")
             else:
                 print(f"Device {d_data['hostname']} already exists")
-        
+
+        linux_device = (
+            db.query(Device)
+            .filter(Device.hostname == "linux-lab-01", Device.customer_id == default_org.id)
+            .first()
+        )
+        if not linux_device:
+            linux_device = Device(
+                customer_id=default_org.id,
+                hostname="linux-lab-01",
+                mgmt_ip="linux-device",
+                vendor="linux",
+                platform="linux",
+                role="lab",
+                site="docker",
+                credentials_ref=linux_cred.id,
+                enabled=True,
+            )
+            db.add(linux_device)
+            print("Created linux-lab-01 device")
+        else:
+            linux_device.mgmt_ip = "linux-device"
+            linux_device.vendor = "linux"
+            linux_device.platform = "linux"
+            linux_device.credentials_ref = linux_cred.id
+            linux_device.enabled = True
+            linux_device.role = linux_device.role or "lab"
+            linux_device.site = linux_device.site or "docker"
+            print("linux-lab-01 already exists (updated settings)")
+
         db.commit()
 
     finally:

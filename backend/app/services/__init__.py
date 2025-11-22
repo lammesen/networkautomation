@@ -3,6 +3,7 @@
 from .customer_service import CustomerService
 from .device_service import CredentialService, DeviceService
 from .job_service import JobService
+from .ssh import SSHSessionConfig, SSHSessionManager, get_ssh_session_manager
 from .user_service import UserService
 
 __all__ = [
@@ -11,6 +12,9 @@ __all__ = [
     "CustomerService",
     "UserService",
     "JobService",
+    "SSHSessionConfig",
+    "SSHSessionManager",
+    "get_ssh_session_manager",
 ]
 
 

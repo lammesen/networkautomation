@@ -14,54 +14,35 @@ This guide covers common operational tasks for the Network Automation applicatio
 
 ### Starting the Application
 
-1. **Start all services**:
+1. **Bootstrap dependencies and deploy to Kubernetes**:
 ```bash
-cd deploy
-docker-compose up -d
+make bootstrap
+make dev-up
 ```
 
 2. **Check service health**:
 ```bash
-docker-compose ps
-docker-compose logs -f backend  # View backend logs
-docker-compose logs -f celery-worker  # View worker logs
+make k8s-status
+kubectl logs -f deployment/backend -n default      # Backend logs
+kubectl logs -f deployment/worker -n default       # Celery worker logs
 ```
 
-3. **Initialize database**:
+3. **Run migrations & verify database**:
 ```bash
-# Run migrations
-docker-compose exec backend alembic upgrade head
-
-# Verify tables created
-docker-compose exec postgres psql -U netauto -d netauto -c "\dt"
+make migrate
+kubectl exec deployment/postgres -n default -- psql -U netauto -d netauto -c "\dt"
 ```
 
-4. **Create admin user**:
+4. **Create/refresh the default admin user and seed data**:
 ```bash
-docker-compose exec backend python << EOF
-from app.db import SessionLocal, User
-from app.core.auth import get_password_hash
-
-db = SessionLocal()
-admin = User(
-    username='admin',
-    hashed_password=get_password_hash('SecurePassword123!'),
-    role='admin',
-    is_active=True
-)
-db.add(admin)
-db.commit()
-db.close()
-print("Admin user created successfully")
-EOF
+make seed-admin
 ```
 
 ### Stopping the Application
 
 ```bash
-cd deploy
-docker-compose down  # Stop and remove containers
-docker-compose down -v  # Also remove volumes (WARNING: deletes data!)
+make dev-down
+kubectl delete pvc sqlite-pvc postgres-pvc --ignore-not-found=true -n default  # optional wipe
 ```
 
 ## Managing Devices
@@ -85,7 +66,7 @@ curl -X POST http://localhost:8000/api/v1/credentials \
 
 **Via Python Script**:
 ```bash
-docker-compose exec backend python << EOF
+kubectl exec deploy/backend -n default -- python <<'PY'
 from app.db import SessionLocal, Credential
 
 db = SessionLocal()
@@ -99,7 +80,7 @@ db.add(cred)
 db.commit()
 print(f"Credential created with ID: {cred.id}")
 db.close()
-EOF
+PY
 ```
 
 ### Adding Devices
@@ -123,8 +104,8 @@ curl -X POST http://localhost:8000/api/v1/devices \
 ```
 
 **Bulk Import via Python Script**:
-```python
-# bulk_import.py
+```bash
+kubectl exec deploy/backend -n default -- python <<'PY'
 from app.db import SessionLocal, Device, Credential
 
 devices_data = [
@@ -150,11 +131,7 @@ for data in devices_data:
 db.commit()
 print(f"Imported {len(devices_data)} devices")
 db.close()
-```
-
-Run the script:
-```bash
-docker-compose exec backend python bulk_import.py
+PY
 ```
 
 ### Viewing Devices
@@ -434,43 +411,43 @@ curl "http://localhost:8000/api/v1/compliance/results?status=fail" \
 
 Check PostgreSQL is running:
 ```bash
-docker-compose ps postgres
-docker-compose logs postgres
+make k8s-status
+kubectl logs deployment/postgres -n default
 ```
 
 Verify connection:
 ```bash
-docker-compose exec postgres psql -U netauto -d netauto -c "SELECT 1;"
+kubectl exec deployment/postgres -n default -- psql -U netauto -d netauto -c "SELECT 1;"
 ```
 
 #### "Celery worker not processing jobs"
 
 Check worker status:
 ```bash
-docker-compose ps celery-worker
-docker-compose logs celery-worker
+kubectl get pods -l app=worker -n default
+kubectl logs deployment/worker -n default
 ```
 
 Check Redis:
 ```bash
-docker-compose exec redis redis-cli ping
+kubectl exec deployment/redis -n default -- redis-cli ping
 ```
 
 Restart worker:
 ```bash
-docker-compose restart celery-worker
+kubectl rollout restart deployment/worker -n default
 ```
 
 #### "Device connection timeout"
 
 1. Verify device is reachable:
 ```bash
-docker-compose exec backend ping <device_ip>
+kubectl exec deploy/backend -n default -- ping -c 3 <device_ip>
 ```
 
 2. Check credentials are correct:
 ```bash
-docker-compose exec backend python << EOF
+kubectl exec deploy/backend -n default -- python <<'PY'
 from app.db import SessionLocal, Device, Credential
 
 db = SessionLocal()
@@ -479,7 +456,7 @@ cred = device.credential
 print(f"Username: {cred.username}")
 # Test connection manually
 db.close()
-EOF
+PY
 ```
 
 3. Check firewall rules allow SSH from container
@@ -508,55 +485,57 @@ log_level: str = "DEBUG"
 
 Restart:
 ```bash
-docker-compose restart backend
+kubectl rollout restart deployment/backend -n default
 ```
 
 **Celery**:
 ```bash
-docker-compose stop celery-worker
-docker-compose run --rm celery-worker celery -A app.celery_app worker --loglevel=debug
+# Edit the deployment and change the command/args to include --loglevel=debug
+kubectl edit deployment/worker -n default
+
+# Follow logs once it restarts
+kubectl logs -f deployment/worker -n default
 ```
 
 #### View all logs
 
 ```bash
-# All services
-docker-compose logs -f
+# Backend API
+kubectl logs -f deployment/backend -n default
 
-# Specific service
-docker-compose logs -f backend
+# Worker
+kubectl logs -f deployment/worker -n default
 
-# Last 100 lines
-docker-compose logs --tail=100 backend
+# Last 100 lines without streaming
+kubectl logs deployment/backend -n default --tail=100
 ```
 
 #### Database inspection
 
 ```bash
-# Connect to PostgreSQL
-docker-compose exec postgres psql -U netauto -d netauto
-
-# List tables
+kubectl exec -it deployment/postgres -n default -- psql -U netauto -d netauto <<'SQL'
 \dt
-
-# Check devices
-SELECT id, hostname, mgmt_ip, enabled FROM devices;
-
-# Check jobs
+SELECT id, hostname, mgmt_ip, enabled FROM devices LIMIT 5;
 SELECT id, type, status, requested_at FROM jobs ORDER BY requested_at DESC LIMIT 10;
-
-# Check recent logs
 SELECT job_id, level, host, message FROM job_logs ORDER BY ts DESC LIMIT 20;
+SQL
 ```
 
 ### Performance Tuning
 
 #### Increase Celery workers
 
-Edit `docker-compose.yml`:
+Edit `k8s/worker.yaml`:
 ```yaml
-celery-worker:
-  command: celery -A app.celery_app worker --loglevel=info --concurrency=4
+containers:
+- name: worker
+  command:
+  - celery
+  - -A
+  - app.celery_app
+  - worker
+  - --loglevel=info
+  - --concurrency=4
 ```
 
 #### Database connection pooling
@@ -568,10 +547,16 @@ database_url: str = "postgresql://netauto:netauto@postgres:5432/netauto?pool_siz
 
 #### Redis memory limit
 
-Edit `docker-compose.yml`:
+Edit `k8s/redis.yaml`:
 ```yaml
-redis:
-  command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+containers:
+- name: redis
+  command:
+  - redis-server
+  - --maxmemory
+  - 256mb
+  - --maxmemory-policy
+  - allkeys-lru
 ```
 
 ### Backup and Recovery
@@ -579,19 +564,19 @@ redis:
 #### Backup database
 
 ```bash
-docker-compose exec postgres pg_dump -U netauto netauto > backup.sql
+kubectl exec deployment/postgres -n default -- pg_dump -U netauto netauto > backup.sql
 ```
 
 #### Restore database
 
 ```bash
-docker-compose exec -T postgres psql -U netauto netauto < backup.sql
+kubectl exec -i deployment/postgres -n default -- psql -U netauto netauto < backup.sql
 ```
 
 #### Export configuration snapshots
 
 ```bash
-docker-compose exec backend python << EOF
+kubectl exec deploy/backend -n default -- python <<'PY'
 from app.db import SessionLocal, ConfigSnapshot
 import json
 
@@ -610,9 +595,10 @@ with open("/tmp/snapshots.json", "w") as f:
 
 print(f"Exported {len(snapshots)} snapshots")
 db.close()
-EOF
+PY
 
-docker-compose cp backend:/tmp/snapshots.json ./snapshots.json
+BACKEND_POD=$(kubectl get pods -l app=backend -n default -o jsonpath='{.items[0].metadata.name}')
+kubectl cp default/$BACKEND_POD:/tmp/snapshots.json ./snapshots.json
 ```
 
 ### Monitoring
@@ -624,41 +610,70 @@ docker-compose cp backend:/tmp/snapshots.json ./snapshots.json
 curl http://localhost:8000/health
 
 # Database connections
-docker-compose exec postgres psql -U netauto -d netauto -c "SELECT count(*) FROM pg_stat_activity;"
+kubectl exec deployment/postgres -n default -- psql -U netauto -d netauto -c "SELECT count(*) FROM pg_stat_activity;"
 
 # Redis info
-docker-compose exec redis redis-cli info
+kubectl exec deployment/redis -n default -- redis-cli info
 ```
 
 #### Monitor jobs
 
 ```bash
 # Active jobs
-docker-compose exec backend python << EOF
+kubectl exec deploy/backend -n default -- python <<'PY'
 from app.db import SessionLocal, Job
 
 db = SessionLocal()
 active = db.query(Job).filter(Job.status.in_(["queued", "running"])).count()
 print(f"Active jobs: {active}")
 db.close()
-EOF
+PY
 ```
 
 #### Celery monitoring with Flower
 
-Add to `docker-compose.yml`:
+Create `k8s/flower.yaml`:
 ```yaml
-flower:
-  build:
-    context: .
-    dockerfile: deploy/Dockerfile.backend
-  command: celery -A app.celery_app flower --port=5555
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flower
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flower
+  template:
+    metadata:
+      labels:
+        app: flower
+    spec:
+      containers:
+      - name: flower
+        image: netauto-backend:latest
+        command: ["celery", "-A", "app.celery_app", "flower", "--port=5555"]
+        env:
+        - name: CELERY_BROKER_URL
+          value: redis://redis:6379/0
+        ports:
+        - containerPort: 5555
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flower
+spec:
+  selector:
+    app: flower
   ports:
-    - "5555:5555"
-  environment:
-    CELERY_BROKER_URL: redis://redis:6379/0
-  depends_on:
-    - redis
+  - port: 5555
+    targetPort: 5555
+```
+
+Apply it:
+```bash
+kubectl apply -f k8s/flower.yaml
+kubectl port-forward svc/flower 5555:5555 -n default
 ```
 
 Access at http://localhost:5555

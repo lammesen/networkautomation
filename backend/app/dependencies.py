@@ -16,7 +16,9 @@ from app.services import (
     CustomerService,
     DeviceService,
     JobService,
+    SSHSessionManager,
     UserService,
+    get_ssh_session_manager,
 )
 
 
@@ -61,5 +63,10 @@ def get_user_service(session: Session = Depends(get_session)) -> UserService:
 
 def get_job_service(session: Session = Depends(get_session)) -> JobService:
     return JobService(session)
+
+
+def get_ssh_manager() -> SSHSessionManager:
+    """Provide the shared SSH session manager."""
+    return get_ssh_session_manager()
 
 

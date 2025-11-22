@@ -14,9 +14,10 @@ interface DeviceTableProps {
   devices: Device[]
   onEdit: (device: Device) => void
   onDelete: (device: Device) => void
+  onOpenTerminal: (device: Device) => void
 }
 
-export function DeviceTable({ devices, onEdit, onDelete }: DeviceTableProps) {
+export function DeviceTable({ devices, onEdit, onDelete, onOpenTerminal }: DeviceTableProps) {
   return (
     <Table>
       <TableHeader>
@@ -67,6 +68,15 @@ export function DeviceTable({ devices, onEdit, onDelete }: DeviceTableProps) {
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" onClick={() => onEdit(device)}>
                     Edit
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => onOpenTerminal(device)}
+                    disabled={!device.enabled}
+                    title={device.enabled ? 'Open interactive terminal' : 'Enable the device before opening a terminal'}
+                  >
+                    Terminal
                   </Button>
                   <Button variant="destructive" size="sm" onClick={() => onDelete(device)}>
                     Delete

@@ -4,7 +4,10 @@ This guide will help you get the Network Automation application up and running q
 
 ## Prerequisites
 
-- Docker and Docker Compose (v2.0+)
+- Docker Desktop with Kubernetes enabled (or another local Kubernetes cluster)
+- `kubectl` 1.28+
+- GNU Make
+- Bun (for the React frontend)
 - Git
 - 4GB+ RAM recommended
 - Network devices accessible via SSH (optional for testing)
@@ -18,30 +21,50 @@ git clone https://github.com/lammesen/networkautomation.git
 cd networkautomation
 ```
 
-### 2. Start Services
+### 2. Install Project Dependencies
 
 ```bash
-cd deploy
-docker-compose up -d
+make bootstrap
 ```
 
-Wait for services to start (~30 seconds):
-```bash
-docker-compose ps
-```
+This creates the Python virtualenv, installs backend dev requirements, and installs frontend packages via Bun.
 
-### 3. Initialize Database
+### 3. Build Images & Deploy to Kubernetes
 
 ```bash
-docker-compose exec backend alembic upgrade head
-docker-compose exec backend python init_db.py
+make dev-up
 ```
 
-This creates:
-- All database tables
-- Default admin user (username: `admin`, password: `admin123`)
+The target builds all local container images (Docker Desktop shares its image cache with the Kubernetes cluster) and applies every manifest in `k8s/` to the `default` namespace. Check progress with:
 
-### 4. Verify Services
+```bash
+make k8s-status
+kubectl wait --for=condition=available deployment/backend --timeout=120s
+kubectl wait --for=condition=available deployment/frontend --timeout=120s
+```
+
+### 4. Port-forward Services (two terminals)
+
+In terminal #1:
+```bash
+make k8s-port-forward-backend
+```
+
+In terminal #2:
+```bash
+make k8s-port-forward-frontend
+```
+
+### 5. Initialize Database & Seed Admin
+
+```bash
+make migrate
+make seed-admin
+```
+
+`seed-admin` runs `python init_db.py` inside the backend pod to create the default admin user (`admin` / `admin123`) and seed the sample linux device.
+
+### 6. Verify Services
 
 ```bash
 # Check API health
@@ -54,7 +77,7 @@ open http://localhost:8000/docs  # or visit in browser
 open http://localhost:3000  # or visit in browser
 ```
 
-### 5. Login
+### 7. Login
 
 1. Visit http://localhost:3000
 2. Login with:
@@ -117,6 +140,14 @@ curl http://localhost:8000/api/v1/jobs/1 \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
+### Try the Live SSH Terminal
+
+- The seed data includes a `linux-lab-01` device that points to the bundled
+  `linux-device` container (credentials `testuser` / `testpassword`). Click its
+  **Terminal** action to open an interactive shell.
+- For architecture details and troubleshooting steps see
+  [`docs/ssh-streaming.md`](./ssh-streaming.md).
+
 ### Backup Configurations
 
 ```bash
@@ -173,31 +204,37 @@ To add more platforms, edit `backend/app/automation/inventory.py`.
 
 ### Environment Variables
 
-Create `deploy/.env`:
-```bash
-SECRET_KEY=your-secret-key-here
-DATABASE_URL=postgresql://netauto:netauto@postgres:5432/netauto
-REDIS_URL=redis://redis:6379/0
-CELERY_BROKER_URL=redis://redis:6379/0
-CELERY_RESULT_BACKEND=redis://redis:6379/1
-CORS_ORIGINS=["http://localhost:3000"]
+The Kubernetes manifests define runtime configuration directly inside `k8s/backend.yaml`. Edit the `env` block to customize items such as the FastAPI secret key, database connection, or CORS policy:
+
+```yaml
+      containers:
+      - name: backend
+        env:
+        - name: SECRET_KEY
+          value: "change-me"
+        - name: DB_PATH
+          value: "/app/data/netauto.sqlite"
+        # Optional: switch to Postgres instead of SQLite
+        # - name: DATABASE_URL
+        #   value: "postgresql://netauto:netauto@postgres:5432/netauto"
+        - name: CORS_ORIGINS
+          value: '["http://localhost:3000"]'
 ```
 
-Generate a secure secret key:
+Apply changes with `make k8s-apply` (or `kubectl apply -f k8s/backend.yaml`). For one-off tweaks you can also run:
+
 ```bash
-openssl rand -hex 32
+kubectl set env deployment/backend SECRET_KEY=$(openssl rand -hex 32) -n default
 ```
 
 ### Database Credentials
 
-For production, change the PostgreSQL password in `docker-compose.yml`:
-```yaml
-postgres:
-  environment:
-    POSTGRES_PASSWORD: secure_password_here
-```
+`k8s/postgres.yaml` contains the PostgreSQL deployment and environment variables. Update the `POSTGRES_PASSWORD` (and matching `DATABASE_URL` in `k8s/backend.yaml` if you switch away from SQLite), then redeploy:
 
-And update `DATABASE_URL` accordingly.
+```bash
+kubectl apply -f k8s/postgres.yaml
+kubectl rollout restart deployment/postgres
+```
 
 ## Testing Without Real Devices
 
@@ -226,24 +263,24 @@ For testing without physical network devices, you can:
 ### "Cannot connect to database"
 
 ```bash
-# Check PostgreSQL is running
-docker-compose ps postgres
+# Ensure the pod is running
+make k8s-status
 
-# Check logs
-docker-compose logs postgres
+# Inspect logs
+kubectl logs deployment/postgres -n default
 
-# Restart if needed
-docker-compose restart postgres
+# Restart the deployment if needed
+kubectl rollout restart deployment/postgres -n default
 ```
 
 ### "Celery worker not processing jobs"
 
 ```bash
-# Check worker status
-docker-compose logs celery-worker
+# Check worker logs
+kubectl logs deployment/worker -n default
 
-# Restart worker
-docker-compose restart celery-worker
+# Restart worker deployment
+kubectl rollout restart deployment/worker -n default
 ```
 
 ### "Frontend won't connect to API"
@@ -255,34 +292,35 @@ cors_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
 
 ### Port Already in Use
 
-If port 8000, 3000, 5432, or 6379 is already in use, edit `docker-compose.yml` to use different ports:
-```yaml
-backend:
-  ports:
-    - "8001:8000"  # External:Internal
+When port-forwarding, change the local bind port:
+
+```bash
+# Backend API on localhost:9000 instead of 8000
+kubectl port-forward svc/backend 9000:8000 -n default
+
+# Frontend on localhost:3333 instead of 3000
+kubectl port-forward svc/frontend 3333:3000 -n default
 ```
 
 ## Stopping the Application
 
 ```bash
-cd deploy
-docker-compose down
+make dev-down
 ```
 
-To also remove data:
+To also remove persistent volumes (SQLite + Postgres data):
 ```bash
-docker-compose down -v
+kubectl delete pvc sqlite-pvc postgres-pvc --ignore-not-found=true -n default
 ```
 
 ## Updating the Application
 
 ```bash
 git pull
-cd deploy
-docker-compose down
-docker-compose build --no-cache
-docker-compose up -d
-docker-compose exec backend alembic upgrade head
+make dev-down
+make docker-build
+make k8s-redeploy
+make migrate
 ```
 
 ## Development Mode

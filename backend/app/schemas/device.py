@@ -41,21 +41,11 @@ class DeviceBase(BaseModel):
     """Base device schema."""
 
     hostname: str = Field(..., min_length=1, max_length=255)
-    # Regex for IPv4 and IPv6 validation
     mgmt_ip: str = Field(
         ...,
-        min_length=7,
-        max_length=45,
-        pattern=(
-            r'^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$|^'
-            r'(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|'
-            r'([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|'
-            r'([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|'
-            r'([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|'
-            r'::([0-9a-fA-F]{1,4}:){1,5}[0-9a-fA-F]{1,4}|::([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,2}|'
-            r'::([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,3}|::([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,4}|'
-            r'::[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,5})|::((:[0-9a-fA-F]{1,4}){1,6}))$'
-        )
+        min_length=1,
+        max_length=255,
+        description="Management address (hostname or IP)",
     )
     vendor: str = Field(..., min_length=1, max_length=50)
     platform: str = Field(..., min_length=1, max_length=50)
@@ -77,18 +67,9 @@ class DeviceUpdate(BaseModel):
     hostname: Optional[str] = Field(None, min_length=1, max_length=255)
     mgmt_ip: Optional[str] = Field(
         None,
-        min_length=7,
-        max_length=45,
-        pattern=(
-            r'^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$|^'
-            r'(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|'
-            r'([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|'
-            r'([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|'
-            r'([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|'
-            r'::([0-9a-fA-F]{1,4}:){1,5}[0-9a-fA-F]{1,4}|::([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,2}|'
-            r'::([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,3}|::([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,4}|'
-            r'::[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,5})|::((:[0-9a-fA-F]{1,4}){1,6}))$'
-        )
+        min_length=1,
+        max_length=255,
+        description="Management address (hostname or IP)",
     )
     vendor: Optional[str] = Field(None, min_length=1, max_length=50)
     platform: Optional[str] = Field(None, min_length=1, max_length=50)

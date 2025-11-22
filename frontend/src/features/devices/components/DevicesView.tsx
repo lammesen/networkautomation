@@ -10,6 +10,7 @@ import { DeviceTable } from './DeviceTable'
 import { DeviceFormDialog } from './DeviceFormDialog'
 import { DeviceImportDialog, DeviceImportSummary } from './DeviceImportDialog'
 import { DeviceDeleteDialog } from './DeviceDeleteDialog'
+import { DeviceTerminalDialog } from './DeviceTerminalDialog'
 
 const initialForm: DeviceFormData = {
   hostname: '',
@@ -34,6 +35,7 @@ export function DevicesView() {
     delete: false,
   })
   const [deviceToDelete, setDeviceToDelete] = useState<Device | null>(null)
+  const [terminalDevice, setTerminalDevice] = useState<Device | null>(null)
 
   const queryClient = useQueryClient()
 
@@ -180,7 +182,12 @@ export function DevicesView() {
 
       <Card>
         <CardContent className="p-0">
-          <DeviceTable devices={devices} onEdit={openEditDialog} onDelete={openDeleteDialog} />
+          <DeviceTable
+            devices={devices}
+            onEdit={openEditDialog}
+            onDelete={openDeleteDialog}
+            onOpenTerminal={(device) => setTerminalDevice(device)}
+          />
         </CardContent>
       </Card>
 
@@ -242,6 +249,12 @@ export function DevicesView() {
             deleteDeviceMutation.mutate(deviceToDelete.id)
           }
         }}
+      />
+
+      <DeviceTerminalDialog
+        open={Boolean(terminalDevice)}
+        device={terminalDevice}
+        onClose={() => setTerminalDevice(null)}
       />
     </div>
   )

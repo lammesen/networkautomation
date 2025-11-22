@@ -33,7 +33,10 @@ A production-grade web application for network automation using NAPALM, Netmiko,
 ## Quick Start
 
 ### Prerequisites
-- Docker and Docker Compose
+- Docker Desktop with Kubernetes enabled (or another local Kubernetes cluster)
+- `kubectl` 1.28+
+- GNU Make
+- Bun
 - Git
 
 ### Installation
@@ -44,43 +47,29 @@ git clone https://github.com/lammesen/networkautomation.git
 cd networkautomation
 ```
 
-2. Create environment file:
+2. Install project dependencies:
 ```bash
-cat > deploy/.env << EOF
-SECRET_KEY=$(openssl rand -hex 32)
-DATABASE_URL=postgresql://netauto:netauto@postgres:5432/netauto
-REDIS_URL=redis://redis:6379/0
-EOF
+make bootstrap
 ```
 
-3. Start the services:
+3. Build images and deploy to Kubernetes (Docker Desktop shares its image cache with the cluster):
 ```bash
-cd deploy
-docker-compose up -d
+make dev-up
+make k8s-status
+kubectl wait --for=condition=available deployment/backend --timeout=120s
+kubectl wait --for=condition=available deployment/frontend --timeout=120s
 ```
 
-4. Initialize the database:
+4. Port-forward services (run each command in its own terminal):
 ```bash
-docker-compose exec backend alembic upgrade head
+make k8s-port-forward-backend   # exposes FastAPI on http://localhost:8000
+make k8s-port-forward-frontend  # exposes React on http://localhost:3000
 ```
 
-5. Create an admin user:
+5. Run migrations and seed the default admin/device data inside the backend pod:
 ```bash
-docker-compose exec backend python -c "
-from app.db import SessionLocal, User
-from app.core.auth import get_password_hash
-
-db = SessionLocal()
-admin = User(
-    username='admin',
-    hashed_password=get_password_hash('admin123'),
-    role='admin',
-    is_active=True
-)
-db.add(admin)
-db.commit()
-print('Admin user created: username=admin, password=admin123')
-"
+make migrate
+make seed-admin
 ```
 
 6. Access the application:
@@ -115,10 +104,20 @@ networkautomation/
 │   │   ├── features/          # Feature modules
 │   │   └── App.tsx            # Main app component
 │   └── package.json           # Node dependencies
-├── deploy/                     # Deployment configuration
-│   ├── docker-compose.yml
+├── deploy/                     # Container build assets
 │   ├── Dockerfile.backend
-│   └── Dockerfile.frontend
+│   ├── Dockerfile.frontend
+│   └── Dockerfile.linux-device
+├── k8s/                        # Kubernetes manifests
+│   ├── backend.yaml
+│   ├── frontend.yaml
+│   ├── linux-device.yaml
+│   ├── network-microservice.yaml
+│   ├── postgres.yaml
+│   ├── pvc.yaml
+│   ├── redis.yaml
+│   ├── services.yaml
+│   └── worker.yaml
 └── docs/                       # Documentation
 ```
 
