@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: linux-device
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: linux-device
+  template:
+    metadata:
+      labels:
+        app: linux-device
+    spec:
+      containers:
+      - name: linux-device
+        image: netauto-linux-device:latest
+        imagePullPolicy: Never # Local build
+        ports:
+        - containerPort: 22
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: linux-device
+spec:
+  selector:
+    app: linux-device
+  ports:
+  - protocol: TCP
+    port: 22
+    targetPort: 22

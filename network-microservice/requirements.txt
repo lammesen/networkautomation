@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+nornir
+nornir-napalm
+nornir-netmiko
+nornir-utils
+pydantic
+pyyaml
