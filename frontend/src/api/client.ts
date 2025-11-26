@@ -1,6 +1,6 @@
 import { useAuthStore } from '../store/authStore'
+import { ApiError } from '@/lib/api/errors'
 import type {
-  ApiError as ApiErrorType,
   CompliancePolicy,
   CompliancePolicyCreate,
   ComplianceResult,
@@ -8,6 +8,7 @@ import type {
   ConfigSnapshot,
   Credential,
   CredentialCreate,
+  CredentialUpdate,
   Customer,
   CustomerCreate,
   Device,
@@ -28,20 +29,8 @@ import type {
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
 
-/**
- * Custom error class for API errors with response data
- */
-export class ApiError extends Error {
-  public readonly status: number
-  public readonly data: Record<string, unknown>
-
-  constructor(message: string, status: number, data: Record<string, unknown> = {}) {
-    super(message)
-    this.name = 'ApiError'
-    this.status = status
-    this.data = data
-  }
-}
+// Re-export ApiError for backward compatibility
+export { ApiError } from '@/lib/api/errors'
 
 class ApiClient {
   async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -210,11 +199,26 @@ class ApiClient {
     return this.request<Credential[]>('/credentials')
   }
 
+  getCredential(id: number): Promise<Credential> {
+    return this.request<Credential>(`/credentials/${id}`)
+  }
+
   createCredential(data: CredentialCreate): Promise<Credential> {
     return this.request<Credential>('/credentials', {
       method: 'POST',
       body: JSON.stringify(data),
     })
+  }
+
+  updateCredential(id: number, data: CredentialUpdate): Promise<Credential> {
+    return this.request<Credential>(`/credentials/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
+  deleteCredential(id: number): Promise<void> {
+    return this.request<void>(`/credentials/${id}`, { method: 'DELETE' })
   }
 
   // Jobs

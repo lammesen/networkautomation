@@ -8,7 +8,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Device } from '../types'
+import { type Device } from '../types'
 
 interface DeviceDeleteDialogProps {
   open: boolean

@@ -61,9 +61,9 @@ websocket contract.
    `testpassword`). If you deleted it, recreate a device whose `mgmt_ip` is
    `linux-device` and whose credentials match that container.
 
-5. Open `http://localhost:3000`, log in as `admin`/`admin123`, navigate to Devices, and
-   click **Terminal**. You should see the `connected` banner followed by streamed
-   results for commands such as `hostname` or `uname -a`.
+5. Open `http://localhost:3000`, log in as `admin` using the value of `ADMIN_DEFAULT_PASSWORD`
+   (default `Admin123!`), navigate to Devices, and click **Terminal**. You should see the
+   `connected` banner followed by streamed results for commands such as `hostname` or `uname -a`.
 
 6. When finished, tear everything down:
 

@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -8,11 +8,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { ChevronDown, Plus, Upload } from 'lucide-react'
+import { ChevronDown, Plus, Upload, Server, Wifi, WifiOff, Building2, Loader2 } from 'lucide-react'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Progress } from '@/components/ui/progress'
 import { toast } from 'sonner'
+import { PageHeader } from '@/components/layout/page-header'
 import { apiClient } from '@/api/client'
-import type { DeviceImportSummary } from '@/types'
-import { Device, DeviceFormData, DeviceSearchField } from '../types'
+import type { Device, DeviceFormData, DeviceImportSummary, DeviceSearchField } from '../types'
 import { DeviceFilters } from './DeviceFilters'
 import { DeviceTable } from './DeviceTable'
 import { DeviceFormDialog } from './DeviceFormDialog'
@@ -55,7 +57,7 @@ export function DevicesView() {
 
   const queryClient = useQueryClient()
 
-  const { data, isLoading, error: queryError } = useQuery({
+  const { data, isLoading, isFetching, error: queryError } = useQuery({
     queryKey: ['devices', filters.showDisabled],
     queryFn: () =>
       apiClient.getDevices({
@@ -69,6 +71,60 @@ export function DevicesView() {
     queryFn: () => apiClient.getCredentials(),
   })
 
+  // Create a map of credential ID to name for display
+  const credentialMap = useMemo(() => {
+    const map: Record<number, string> = {}
+    if (credentials) {
+      for (const cred of credentials) {
+        map[cred.id] = cred.name
+      }
+    }
+    return map
+  }, [credentials])
+
+  // Animated progress for refresh indicator
+  const [refreshProgress, setRefreshProgress] = useState(0)
+  useEffect(() => {
+    if (isFetching) {
+      setRefreshProgress(0)
+      const interval = setInterval(() => {
+        setRefreshProgress((prev) => {
+          if (prev >= 90) return prev // Cap at 90% until complete
+          return prev + Math.random() * 15
+        })
+      }, 150)
+      return () => clearInterval(interval)
+    } else {
+      // Complete the progress bar when done
+      setRefreshProgress(100)
+      const timeout = setTimeout(() => setRefreshProgress(0), 300)
+      return () => clearTimeout(timeout)
+    }
+  }, [isFetching])
+
+  // Compute stats
+  const stats = useMemo(() => {
+    const devices = data?.devices ?? []
+    const enabledDevices = devices.filter((d) => d.enabled)
+    const reachable = enabledDevices.filter((d) => d.reachability_status === 'reachable').length
+    const unreachable = enabledDevices.filter((d) => d.reachability_status === 'unreachable').length
+    const unknown = enabledDevices.filter(
+      (d) => !d.reachability_status || d.reachability_status === 'unknown'
+    ).length
+    const vendors = new Set(devices.map((d) => d.vendor)).size
+    const sites = new Set(devices.map((d) => d.site).filter(Boolean)).size
+
+    return {
+      total: devices.length,
+      enabled: enabledDevices.length,
+      reachable,
+      unreachable,
+      unknown,
+      vendors,
+      sites,
+    }
+  }, [data])
+
   const createDeviceMutation = useMutation({
     mutationFn: (payload: DeviceFormData) => apiClient.createDevice(payload),
     onSuccess: () => {
@@ -77,8 +133,8 @@ export function DevicesView() {
       setFormData(initialForm)
       toast.success('Device created successfully')
     },
-    onError: (err: any) => {
-      const message = err.response?.data?.detail || 'Failed to create device'
+    onError: (err: Error & { message?: string }) => {
+      const message = err.message || 'Failed to create device'
       setError(message)
       toast.error(message)
     },
@@ -92,8 +148,8 @@ export function DevicesView() {
       setFormData(initialForm)
       toast.success('Device updated successfully')
     },
-    onError: (err: any) => {
-      const message = err.response?.data?.detail || 'Failed to update device'
+    onError: (err: Error & { message?: string }) => {
+      const message = err.message || 'Failed to update device'
       setError(message)
       toast.error(message)
     },
@@ -106,8 +162,8 @@ export function DevicesView() {
       setDialogState((state) => ({ ...state, delete: false }))
       toast.success('Device deleted successfully')
     },
-    onError: (err: any) => {
-      const message = err.response?.data?.detail || 'Failed to delete device'
+    onError: (err: Error & { message?: string }) => {
+      const message = err.message || 'Failed to delete device'
       toast.error(message)
     },
   })
@@ -121,8 +177,8 @@ export function DevicesView() {
       queryClient.invalidateQueries({ queryKey: ['devices'] })
       toast.success('Device recovered')
     },
-    onError: (err: any) => {
-      const message = err.response?.data?.detail || 'Failed to recover device'
+    onError: (err: Error & { message?: string }) => {
+      const message = err.message || 'Failed to recover device'
       toast.error(message)
     },
   })
@@ -181,11 +237,29 @@ export function DevicesView() {
   }
 
   if (isLoading) {
-    return <div>Loading devices...</div>
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Devices"
+          description="Manage and monitor your network device inventory"
+        />
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {[...Array(4)].map((_, i) => (
+            <Skeleton key={i} className="h-24 w-full" />
+          ))}
+        </div>
+        <Skeleton className="h-20 w-full" />
+        <Skeleton className="h-96 w-full" />
+      </div>
+    )
   }
 
   if (queryError) {
-    return <div className="text-red-500">Error loading devices</div>
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-destructive">Error loading devices</div>
+      </div>
+    )
   }
 
   const devices = data?.devices ?? []
@@ -243,38 +317,122 @@ export function DevicesView() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold tracking-tight">Devices</h1>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button className="gap-2">
-              <Plus className="h-4 w-4" />
-              New device
-              <ChevronDown className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem onSelect={openAddDialog}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add device
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() =>
-                setDialogState((state) => ({
-                  ...state,
-                  import: true,
-                }))
-              }
-            >
-              <Upload className="mr-2 h-4 w-4" />
-              Import from CSV
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+      {/* Header */}
+      <PageHeader
+        title="Devices"
+        description="Manage and monitor your network device inventory"
+        actions={
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button className="gap-2">
+                <Plus className="h-4 w-4" />
+                Add Device
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem onSelect={openAddDialog}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add single device
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() =>
+                  setDialogState((state) => ({
+                    ...state,
+                    import: true,
+                  }))
+                }
+              >
+                <Upload className="mr-2 h-4 w-4" />
+                Import from CSV
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        }
+      />
+
+      {/* Stats Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Devices</CardTitle>
+            <Server className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.total}</div>
+            <p className="text-xs text-muted-foreground">
+              {stats.enabled} enabled, {stats.total - stats.enabled} disabled
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Reachable</CardTitle>
+            <Wifi className="h-4 w-4 text-green-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">{stats.reachable}</div>
+            <p className="text-xs text-muted-foreground">
+              {stats.enabled > 0
+                ? `${Math.round((stats.reachable / stats.enabled) * 100)}% of enabled devices`
+                : 'No enabled devices'}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Unreachable</CardTitle>
+            <WifiOff className="h-4 w-4 text-red-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">{stats.unreachable}</div>
+            <p className="text-xs text-muted-foreground">
+              {stats.unknown > 0 ? `${stats.unknown} unknown status` : 'All devices checked'}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Infrastructure</CardTitle>
+            <Building2 className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.vendors}</div>
+            <p className="text-xs text-muted-foreground">
+              {stats.vendors === 1 ? 'vendor' : 'vendors'} across {stats.sites}{' '}
+              {stats.sites === 1 ? 'site' : 'sites'}
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
+      {/* Filters */}
       <Card>
-        <CardContent className="pt-6">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base">Filter Devices</CardTitle>
+              <CardDescription>Search and filter your device inventory</CardDescription>
+            </div>
+            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+              {isFetching || refreshProgress > 0 ? (
+                <>
+                  <Loader2 className="h-4 w-4 text-primary animate-spin" />
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs font-medium">Refreshing...</span>
+                    <Progress
+                      value={refreshProgress}
+                      className="h-1.5 w-28 transition-all duration-150"
+                    />
+                  </div>
+                </>
+              ) : (
+                <span className="text-xs">Auto-refresh: 5s</span>
+              )}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0">
           <DeviceFilters
             search={filters.search}
             searchFields={filters.searchFields}
@@ -295,10 +453,22 @@ export function DevicesView() {
         </CardContent>
       </Card>
 
+      {/* Device Table */}
       <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Device Inventory</CardTitle>
+              <CardDescription>
+                Showing {filteredDevices.length} of {totalDevices} devices
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
         <CardContent className="p-0">
           <DeviceTable
             devices={filteredDevices}
+            credentialMap={credentialMap}
             onEdit={openEditDialog}
             onDelete={openDeleteDialog}
             onOpenTerminal={(device) => setTerminalDevice(device)}
@@ -309,14 +479,10 @@ export function DevicesView() {
         </CardContent>
       </Card>
 
-      <div className="text-sm text-muted-foreground">
-        Showing {filteredDevices.length} of {totalDevices} devices
-      </div>
-
       <DeviceFormDialog
         open={dialogState.add}
         title="Add New Device"
-        description="Create a new network device."
+        description="Add a new network device to your inventory."
         submitLabel="Create Device"
         formData={formData}
         credentials={credentials}
@@ -333,8 +499,8 @@ export function DevicesView() {
       <DeviceFormDialog
         open={dialogState.edit}
         title="Edit Device"
-        description="Update device details."
-        submitLabel="Update Device"
+        description="Update device configuration and settings."
+        submitLabel="Save Changes"
         formData={formData}
         credentials={credentials}
         isLoading={updateDeviceMutation.isPending}

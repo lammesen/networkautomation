@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.core import settings
 from app.core.logging import get_logger
 from app.db import Base, Credential, Customer, Device, SessionLocal, User
 
@@ -19,9 +20,7 @@ def seed_default_data(db_session) -> None:
         logger.warning("Skipping table creation during seed (metadata error)", exc_info=True)
 
     # Default organization
-    default_org = (
-        db_session.query(Customer).filter(Customer.name == "Default Organization").first()
-    )
+    default_org = db_session.query(Customer).filter(Customer.name == "Default Organization").first()
     if not default_org:
         default_org = Customer(
             name="Default Organization",
@@ -36,9 +35,10 @@ def seed_default_data(db_session) -> None:
     admin = db_session.query(User).filter(User.username == "admin").first()
     if not admin:
         from app.core.auth import get_password_hash  # avoid circular import at module load
+
         admin = User(
             username="admin",
-            hashed_password=get_password_hash("admin123"),
+            hashed_password=get_password_hash(settings.admin_default_password),
             role="admin",
             is_active=True,
         )

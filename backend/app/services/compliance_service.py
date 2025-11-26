@@ -70,6 +70,47 @@ class ComplianceService:
         self.session.refresh(policy)
         return policy
 
+    def update_policy(
+        self,
+        policy_id: int,
+        context: TenantRequestContext,
+        name: Optional[str] = None,
+        definition_yaml: Optional[str] = None,
+        scope_json: Optional[dict] = None,
+        description: Optional[str] = None,
+    ) -> CompliancePolicy:
+        """Update an existing compliance policy."""
+        policy = self.get_policy(policy_id, context)
+
+        if name is not None and name != policy.name:
+            existing = self.policies.get_by_name_for_customer(name, context.customer_id)
+            if existing:
+                raise ConflictError("Policy with this name already exists for this customer")
+            policy.name = name
+
+        if definition_yaml is not None:
+            policy.definition_yaml = definition_yaml
+
+        if scope_json is not None:
+            policy.scope_json = scope_json
+
+        if description is not None:
+            policy.description = description
+
+        self.session.commit()
+        self.session.refresh(policy)
+        return policy
+
+    def delete_policy(
+        self,
+        policy_id: int,
+        context: TenantRequestContext,
+    ) -> None:
+        """Delete a compliance policy."""
+        policy = self.get_policy(policy_id, context)
+        self.session.delete(policy)
+        self.session.commit()
+
     # -------------------------------------------------------------------------
     # Result Operations
 

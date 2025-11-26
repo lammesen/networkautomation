@@ -11,7 +11,7 @@ def _login(client, username: str, password: str) -> str:
 
 
 def test_non_admin_cannot_list_users(client, operator_user):
-    token = _login(client, "operator", "operator123")
+    token = _login(client, "operator", "Operator123!")
     headers = {"Authorization": f"Bearer {token}"}
 
     response = client.get("/api/v1/users", headers=headers)

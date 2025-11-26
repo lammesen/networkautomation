@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { apiClient } from '../api/client'
+import { apiClient, ApiError } from '../api/client'
 import { useAuthStore } from '../store/authStore'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -37,8 +37,9 @@ export default function LoginPage() {
         setAuth(data.access_token, data.refresh_token, user)
         navigate('/devices')
       }
-    } catch (err: any) {
-      setError(err.response?.data?.detail || (isRegistering ? 'Registration failed' : 'Login failed'))
+    } catch (err: unknown) {
+      const message = err instanceof ApiError ? err.message : (isRegistering ? 'Registration failed' : 'Login failed')
+      setError(message)
     } finally {
       setLoading(false)
     }

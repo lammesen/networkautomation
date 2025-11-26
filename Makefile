@@ -23,13 +23,11 @@ K8S_MANIFESTS := \
 	k8s/services.yaml \
 	k8s/backend.yaml \
 	k8s/frontend.yaml \
-	k8s/network-microservice.yaml \
 	k8s/worker.yaml \
 	k8s/linux-device.yaml
 K8S_DELETE_MANIFESTS := \
 	k8s/linux-device.yaml \
 	k8s/worker.yaml \
-	k8s/network-microservice.yaml \
 	k8s/frontend.yaml \
 	k8s/backend.yaml \
 	k8s/services.yaml \
@@ -59,6 +57,10 @@ help:
 	@echo "  dev-worker           Start Celery worker (requires .env)"
 	@echo "  dev-beat             Start Celery beat (requires .env)"
 	@echo "  dev-frontend         Start frontend dev server"
+	@echo "  dev-migrate          Run Alembic migrations locally"
+	@echo "  dev-seed             Seed admin user locally"
+	@echo "  dev-services         Start all services in tmux (no migrations)"
+	@echo "  dev-all              Migrate, seed, and start all services in tmux"
 	@echo "  test                 Run backend tests + frontend build"
 	@echo
 	@echo "Runtime:"
@@ -165,7 +167,7 @@ dev-services: venv
 		tmux select-pane -t netauto:0.0; \
 		tmux split-window -v -t netauto:0 "cd backend && rm -f celerybeat-schedule* && ../$(CELERY) -A app.celery_app:celery_app beat -l info"; \
 		tmux select-pane -t netauto:0.1; \
-		tmux split-window -v -t netauto:0 "cd frontend && $(BUN) run dev -- --host --port 5173"; \
+		tmux split-window -v -t netauto:0 "cd frontend && $(BUN) run dev -- --port 5173"; \
 		tmux select-layout -t netauto even-vertical; \
 		tmux set-option -t netauto mouse on; \
 		tmux attach -t netauto; \
@@ -173,13 +175,25 @@ dev-services: venv
 		( cd backend && ../$(UVICORN) app.main:app --reload --host 0.0.0.0 --port 8000 & echo $$! > /tmp/netauto-api.pid ); \
 		( cd backend && ../$(CELERY) -A app.celery_app:celery_app worker -l info & echo $$! > /tmp/netauto-worker.pid ); \
 		( cd backend && rm -f celerybeat-schedule* && ../$(CELERY) -A app.celery_app:celery_app beat -l info & echo $$! > /tmp/netauto-beat.pid ); \
-		( cd frontend && $(BUN) run dev -- --host --port 5173 & echo $$! > /tmp/netauto-frontend.pid ); \
+		( cd frontend && $(BUN) run dev -- --port 5173 & echo $$! > /tmp/netauto-frontend.pid ); \
 		echo "Started api/worker/beat/frontend without tmux. PIDs stored in /tmp/netauto-*.pid"; \
 	fi
 
 .PHONY: dev-frontend
 dev-frontend:
-	cd frontend && $(BUN) run dev -- --host --port 5173
+	cd frontend && $(BUN) run dev -- --port 5173
+
+.PHONY: dev-migrate
+dev-migrate: venv
+	cd backend && ../$(PYTHON_BIN) -m alembic upgrade head
+
+.PHONY: dev-seed
+dev-seed: venv
+	cd backend && ../$(PYTHON_BIN) init_db.py
+
+.PHONY: dev-all
+dev-all: venv dev-migrate dev-seed dev-services
+	@# Runs migrations, seeds admin, then starts all services in tmux
 
 # -------------------------------------------------------------------
 # Combined convenience
@@ -202,8 +216,6 @@ docker-build:
 	$(DOCKER) build -t netauto-backend:latest -f deploy/Dockerfile.backend .
 	@echo "Building Frontend image..."
 	$(DOCKER) build -t netauto-frontend:latest -f deploy/Dockerfile.frontend .
-	@echo "Building Network microservice..."
-	$(DOCKER) build -t netauto-microservice:latest network-microservice/
 	@echo "Building Linux device..."
 	$(DOCKER) build -t netauto-linux-device:latest -f deploy/Dockerfile.linux-device .
 

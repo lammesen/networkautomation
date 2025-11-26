@@ -13,12 +13,13 @@ from sqlalchemy.pool import StaticPool
 TEST_ENCRYPTION_KEY = "6zcciVWk9pw0xGyzngHL5zpIYNF7ryit-8IOGo8RwuU="
 os.environ.setdefault("ENCRYPTION_KEY", TEST_ENCRYPTION_KEY)
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
+os.environ["TESTING"] = "true"  # Disable rate limiting in tests
+DEFAULT_ADMIN_PASSWORD = os.environ.setdefault("ADMIN_DEFAULT_PASSWORD", "Admin123!")
 
-from app.main import app
-from app.db import Base, get_db
-from app.db.models import User, Credential, Customer
-from app.core.auth import get_password_hash
-
+from app.core.auth import get_password_hash  # noqa: E402
+from app.db import Base, get_db  # noqa: E402
+from app.db.models import Credential, Customer, User  # noqa: E402
+from app.main import app  # noqa: E402 - must set env vars before importing
 
 # Use in-memory SQLite for tests
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
@@ -73,7 +74,7 @@ def admin_user(db_session, test_customer):
     """Create an admin user for testing."""
     user = User(
         username="admin",
-        hashed_password=get_password_hash("admin123"),
+        hashed_password=get_password_hash(DEFAULT_ADMIN_PASSWORD),
         role="admin",
         is_active=True,
     )
@@ -89,7 +90,7 @@ def operator_user(db_session, test_customer):
     """Create an operator user for testing."""
     user = User(
         username="operator",
-        hashed_password=get_password_hash("operator123"),
+        hashed_password=get_password_hash("Operator123!"),
         role="operator",
         is_active=True,
     )
@@ -105,7 +106,7 @@ def viewer_user(db_session, test_customer):
     """Create a viewer user for testing."""
     user = User(
         username="viewer",
-        hashed_password=get_password_hash("viewer123"),
+        hashed_password=get_password_hash("Viewer123!"),
         role="viewer",
         is_active=True,
     )
@@ -136,7 +137,7 @@ def auth_headers(client, admin_user, test_customer):
     """Get authentication headers for admin user."""
     response = client.post(
         "/api/v1/auth/login",
-        json={"username": "admin", "password": "admin123"},
+        json={"username": "admin", "password": DEFAULT_ADMIN_PASSWORD},
     )
     token = response.json()["access_token"]
     return {
@@ -150,7 +151,7 @@ def operator_headers(client, operator_user, test_customer):
     """Get authentication headers for operator user."""
     response = client.post(
         "/api/v1/auth/login",
-        json={"username": "operator", "password": "operator123"},
+        json={"username": "operator", "password": "Operator123!"},
     )
     token = response.json()["access_token"]
     return {
@@ -164,7 +165,7 @@ def viewer_headers(client, viewer_user, test_customer):
     """Get authentication headers for viewer user."""
     response = client.post(
         "/api/v1/auth/login",
-        json={"username": "viewer", "password": "viewer123"},
+        json={"username": "viewer", "password": "Viewer123!"},
     )
     token = response.json()["access_token"]
     return {

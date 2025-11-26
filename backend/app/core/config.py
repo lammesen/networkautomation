@@ -21,12 +21,14 @@ class Settings(BaseSettings):
     api_version: str = "0.1.0"
     api_prefix: str = "/api/v1"
     environment: str = os.getenv("ENVIRONMENT", "development")
+    testing: bool = os.getenv("TESTING", "false").lower() == "true"
 
     # Security
     secret_key: str = "change-me-in-production-use-openssl-rand-hex-32"
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
+    admin_default_password: str = os.getenv("ADMIN_DEFAULT_PASSWORD", "Admin123!")
 
     # Encryption
     encryption_key: str | None = None

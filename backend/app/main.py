@@ -3,6 +3,9 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from app.api import (
     auth,
@@ -12,6 +15,7 @@ from app.api import (
     customers,
     devices,
     jobs,
+    network,
     users,
     websocket,
 )
@@ -30,6 +34,15 @@ app = FastAPI(
     version=settings.api_version,
 )
 
+# Rate limiter - disabled during testing
+limiter = Limiter(
+    key_func=get_remote_address,
+    storage_uri=settings.redis_url,
+    enabled=not settings.testing,
+)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # CORS
 app.add_middleware(
     CORSMiddleware,
@@ -45,11 +58,12 @@ app.include_router(users.router, prefix=settings.api_prefix)
 app.include_router(customers.router, prefix=settings.api_prefix)
 app.include_router(devices.router, prefix=settings.api_prefix)
 app.include_router(devices.cred_router, prefix=settings.api_prefix)
-app.include_router(jobs.router, prefix=settings.api_prefix)
 app.include_router(jobs.admin_router, prefix=settings.api_prefix)
+app.include_router(jobs.router, prefix=settings.api_prefix)
 app.include_router(commands.router, prefix=settings.api_prefix)
 app.include_router(config.router, prefix=settings.api_prefix)
 app.include_router(compliance.router, prefix=settings.api_prefix)
+app.include_router(network.router, prefix=settings.api_prefix)
 app.include_router(websocket.router, prefix=settings.api_prefix)
 
 

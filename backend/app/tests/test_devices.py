@@ -30,6 +30,125 @@ def test_list_credentials(client, auth_headers, test_credential):
     assert len(data) >= 1
 
 
+def test_get_credential(client, auth_headers, test_credential):
+    """Test getting a specific credential."""
+    response = client.get(f"/api/v1/credentials/{test_credential.id}", headers=auth_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] == test_credential.id
+    assert data["name"] == test_credential.name
+
+
+def test_get_credential_not_found(client, auth_headers):
+    """Test getting non-existent credential."""
+    response = client.get("/api/v1/credentials/99999", headers=auth_headers)
+    assert response.status_code == 404
+
+
+def test_update_credential(client, operator_headers, test_credential):
+    """Test updating a credential."""
+    response = client.put(
+        f"/api/v1/credentials/{test_credential.id}",
+        headers=operator_headers,
+        json={"username": "updated_user"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["username"] == "updated_user"
+
+
+def test_update_credential_name(client, operator_headers, test_credential):
+    """Test updating credential name."""
+    response = client.put(
+        f"/api/v1/credentials/{test_credential.id}",
+        headers=operator_headers,
+        json={"name": "updated_cred_name"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["name"] == "updated_cred_name"
+
+
+def test_update_credential_duplicate_name(
+    client, operator_headers, test_credential, db_session, test_customer
+):
+    """Test updating credential to duplicate name fails."""
+    from app.db.models import Credential
+
+    # Create another credential
+    other_cred = Credential(
+        name="other_cred",
+        username="other",
+        password="pass",
+        customer_id=test_customer.id,
+    )
+    db_session.add(other_cred)
+    db_session.commit()
+
+    response = client.put(
+        f"/api/v1/credentials/{test_credential.id}",
+        headers=operator_headers,
+        json={"name": "other_cred"},
+    )
+    assert response.status_code == 400
+
+
+def test_update_credential_not_found(client, operator_headers):
+    """Test updating non-existent credential."""
+    response = client.put(
+        "/api/v1/credentials/99999",
+        headers=operator_headers,
+        json={"username": "new_user"},
+    )
+    assert response.status_code == 404
+
+
+def test_update_credential_viewer_forbidden(client, viewer_headers, test_credential):
+    """Test viewer cannot update credential."""
+    response = client.put(
+        f"/api/v1/credentials/{test_credential.id}",
+        headers=viewer_headers,
+        json={"username": "should_fail"},
+    )
+    assert response.status_code == 403
+
+
+def test_delete_credential(client, operator_headers, db_session, test_customer):
+    """Test deleting a credential."""
+    from app.db.models import Credential
+
+    # Create a credential to delete
+    cred = Credential(
+        name="cred_to_delete",
+        username="user",
+        password="pass",
+        customer_id=test_customer.id,
+    )
+    db_session.add(cred)
+    db_session.commit()
+    db_session.refresh(cred)
+    cred_id = cred.id
+
+    response = client.delete(f"/api/v1/credentials/{cred_id}", headers=operator_headers)
+    assert response.status_code == 204
+
+    # Verify it's gone
+    get_response = client.get(f"/api/v1/credentials/{cred_id}", headers=operator_headers)
+    assert get_response.status_code == 404
+
+
+def test_delete_credential_not_found(client, operator_headers):
+    """Test deleting non-existent credential."""
+    response = client.delete("/api/v1/credentials/99999", headers=operator_headers)
+    assert response.status_code == 404
+
+
+def test_delete_credential_viewer_forbidden(client, viewer_headers, test_credential):
+    """Test viewer cannot delete credential."""
+    response = client.delete(f"/api/v1/credentials/{test_credential.id}", headers=viewer_headers)
+    assert response.status_code == 403
+
+
 def test_create_device(client, auth_headers, test_credential):
     """Test creating a device."""
     response = client.post(
@@ -67,7 +186,7 @@ def test_list_devices(client, auth_headers, test_credential, db_session, test_cu
     )
     db_session.add(device)
     db_session.commit()
-    
+
     response = client.get("/api/v1/devices", headers=auth_headers)
     assert response.status_code == 200
     data = response.json()
@@ -89,7 +208,7 @@ def test_get_device(client, auth_headers, test_credential, db_session, test_cust
     db_session.add(device)
     db_session.commit()
     db_session.refresh(device)
-    
+
     response = client.get(f"/api/v1/devices/{device.id}", headers=auth_headers)
     assert response.status_code == 200
     data = response.json()
@@ -110,7 +229,7 @@ def test_update_device(client, auth_headers, test_credential, db_session, test_c
     db_session.add(device)
     db_session.commit()
     db_session.refresh(device)
-    
+
     response = client.put(
         f"/api/v1/devices/{device.id}",
         headers=auth_headers,
@@ -135,10 +254,10 @@ def test_delete_device(client, auth_headers, test_credential, db_session, test_c
     db_session.add(device)
     db_session.commit()
     db_session.refresh(device)
-    
+
     response = client.delete(f"/api/v1/devices/{device.id}", headers=auth_headers)
     assert response.status_code == 204
-    
+
     # Verify soft delete
     db_session.refresh(device)
     assert device.enabled is False
@@ -169,7 +288,7 @@ def test_filter_devices_by_site(client, auth_headers, test_credential, db_sessio
     db_session.add(device1)
     db_session.add(device2)
     db_session.commit()
-    
+
     response = client.get("/api/v1/devices?site=dc1", headers=auth_headers)
     assert response.status_code == 200
     data = response.json()

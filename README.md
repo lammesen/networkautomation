@@ -112,7 +112,6 @@ networkautomation/
 │   ├── backend.yaml
 │   ├── frontend.yaml
 │   ├── linux-device.yaml
-│   ├── network-microservice.yaml
 │   ├── postgres.yaml
 │   ├── pvc.yaml
 │   ├── redis.yaml

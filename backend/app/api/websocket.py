@@ -81,20 +81,19 @@ manager = ConnectionManager()
 async def job_logs_websocket(
     websocket: WebSocket,
     job_id: int,
-    token: Optional[str] = None,
+    token: str = Query(..., description="JWT access token"),
     db: Session = Depends(get_db),
 ) -> None:
     """WebSocket endpoint for live job logs.
 
     Query parameter 'token' should contain the JWT access token.
     """
-    # Validate token
-    if token:
-        try:
-            decode_token(token)
-        except Exception:
-            await websocket.close(code=1008, reason="Invalid token")
-            return
+    # Require and validate token
+    try:
+        decode_token(token)
+    except Exception:
+        await websocket.close(code=1008, reason="Invalid token")
+        return
 
     # Verify job exists
     job = db.query(Job).filter(Job.id == job_id).first()

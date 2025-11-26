@@ -56,3 +56,37 @@ class CredentialService:
         self.session.commit()
         self.session.refresh(credential)
         return credential
+
+    def update_credential(
+        self,
+        credential_id: int,
+        payload,
+        context: TenantRequestContext,
+    ) -> Credential:
+        credential = self.get_credential(credential_id, context)
+
+        update_data = payload.model_dump(exclude_unset=True)
+
+        if "name" in update_data and update_data["name"] != credential.name:
+            existing = self.credentials.get_by_name_for_customer(
+                update_data["name"],
+                context.customer_id,
+            )
+            if existing:
+                raise ConflictError("Credential with this name already exists for the customer")
+
+        for field, value in update_data.items():
+            setattr(credential, field, value)
+
+        self.session.commit()
+        self.session.refresh(credential)
+        return credential
+
+    def delete_credential(
+        self,
+        credential_id: int,
+        context: TenantRequestContext,
+    ) -> None:
+        credential = self.get_credential(credential_id, context)
+        self.session.delete(credential)
+        self.session.commit()

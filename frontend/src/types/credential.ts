@@ -12,3 +12,10 @@ export interface CredentialCreate {
   password: string
   enable_password?: string
 }
+
+export interface CredentialUpdate {
+  name?: string
+  username?: string
+  password?: string
+  enable_password?: string
+}

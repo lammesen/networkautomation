@@ -1,11 +1,14 @@
 import json
+import os
 
 from fastapi.testclient import TestClient
 
-from app.dependencies import get_db, get_ssh_manager
 from app.db.models import Device
+from app.dependencies import get_db, get_ssh_manager
 from app.main import app
 from app.services.ssh.manager import SSHCommandResult
+
+DEFAULT_ADMIN_PASSWORD = os.getenv("ADMIN_DEFAULT_PASSWORD", "Admin123!")
 
 
 class FakeSession:
@@ -33,9 +36,7 @@ class FakeManager:
         return FakeSession()
 
 
-def test_device_ssh_websocket_flow(
-    db_session, admin_user, test_customer, test_credential
-):
+def test_device_ssh_websocket_flow(db_session, admin_user, test_customer, test_credential):
     device = Device(
         hostname="dev1",
         mgmt_ip="127.0.0.1",
@@ -60,13 +61,10 @@ def test_device_ssh_websocket_flow(
         with TestClient(app) as client:
             login = client.post(
                 "/api/v1/auth/login",
-                json={"username": "admin", "password": "admin123"},
+                json={"username": "admin", "password": DEFAULT_ADMIN_PASSWORD},
             )
             token = login.json()["access_token"]
-            url = (
-                f"/api/v1/ws/devices/{device.id}/ssh"
-                f"?token={token}&customer_id={test_customer.id}"
-            )
+            url = f"/api/v1/ws/devices/{device.id}/ssh?token={token}&customer_id={test_customer.id}"
             with client.websocket_connect(url) as websocket:
                 connected = websocket.receive_json()
                 assert connected["type"] == "connected"
@@ -78,4 +76,3 @@ def test_device_ssh_websocket_flow(
                 assert output["stdout"] == "output:show"
     finally:
         app.dependency_overrides.clear()
-

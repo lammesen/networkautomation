@@ -20,6 +20,7 @@ from app.schemas.compliance import (
     PolicyCreate,
     PolicyListResponse,
     PolicyResponse,
+    PolicyUpdate,
     RunComplianceRequest,
 )
 from app.services.compliance_service import ComplianceService
@@ -69,6 +70,37 @@ def create_policy(
         description=payload.description,
     )
     return PolicyResponse.model_validate(policy)
+
+
+@router.put("/policies/{policy_id}", response_model=PolicyResponse)
+def update_policy(
+    policy_id: int,
+    payload: PolicyUpdate,
+    service: ComplianceService = Depends(get_compliance_service),
+    current_user: User = Depends(require_admin),
+    context: TenantRequestContext = Depends(get_operator_context),
+) -> PolicyResponse:
+    """Update compliance policy (admin only)."""
+    policy = service.update_policy(
+        policy_id=policy_id,
+        context=context,
+        name=payload.name,
+        definition_yaml=payload.definition_yaml,
+        scope_json=payload.scope_json,
+        description=payload.description,
+    )
+    return PolicyResponse.model_validate(policy)
+
+
+@router.delete("/policies/{policy_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_policy(
+    policy_id: int,
+    service: ComplianceService = Depends(get_compliance_service),
+    current_user: User = Depends(require_admin),
+    context: TenantRequestContext = Depends(get_operator_context),
+) -> None:
+    """Delete compliance policy (admin only)."""
+    service.delete_policy(policy_id, context)
 
 
 @router.post("/run", status_code=status.HTTP_202_ACCEPTED)

@@ -1,17 +1,5 @@
-/**
- * Custom error class for API errors with response data
- */
-export class ApiError extends Error {
-  public readonly status: number
-  public readonly data: Record<string, unknown>
-
-  constructor(message: string, status: number, data: Record<string, unknown> = {}) {
-    super(message)
-    this.name = 'ApiError'
-    this.status = status
-    this.data = data
-  }
-}
+// Re-export ApiError from lib/api/errors for backward compatibility
+export { ApiError, isApiError } from '@/lib/api/errors'
 
 /**
  * Generic paginated response type

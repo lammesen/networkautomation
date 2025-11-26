@@ -1,4 +1,4 @@
-import { DeviceFormData } from '../types'
+import { type DeviceFormData } from '../types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { FormEvent } from 'react'
+import { type FormEvent } from 'react'
 
 const SUPPORTED_VENDORS = ['cisco', 'juniper', 'arista', 'hp', 'huawei', 'linux']
 const SUPPORTED_PLATFORMS = ['ios', 'iosxe', 'nxos', 'junos', 'eos', 'comware', 'vrp', 'linux']

@@ -62,7 +62,7 @@ make migrate
 make seed-admin
 ```
 
-`seed-admin` runs `python init_db.py` inside the backend pod to create the default admin user (`admin` / `admin123`) and seed the sample linux device.
+`seed-admin` runs `python init_db.py` inside the backend pod to create the default admin user. The password comes from the `ADMIN_DEFAULT_PASSWORD` environment variable (default `Admin123!`) and the command also seeds the sample linux device.
 
 ### 6. Verify Services
 
@@ -82,7 +82,7 @@ open http://localhost:3000  # or visit in browser
 1. Visit http://localhost:3000
 2. Login with:
    - Username: `admin`
-   - Password: `admin123`
+   - Password: value of `ADMIN_DEFAULT_PASSWORD` (default `Admin123!`)
 
 3. **IMPORTANT**: Change the admin password immediately after first login!
 
@@ -167,7 +167,7 @@ curl -X POST http://localhost:8000/api/v1/config/backup \
 ```bash
 TOKEN=$(curl -X POST http://localhost:8000/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin123"}' \
+  -d "{\"username\":\"admin\",\"password\":\"${ADMIN_DEFAULT_PASSWORD:-Admin123!}\"}" \
   | jq -r '.access_token')
 
 echo $TOKEN

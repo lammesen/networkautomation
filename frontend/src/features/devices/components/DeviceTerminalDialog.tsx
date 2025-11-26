@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { toast } from 'sonner'
-import { Device } from '../types'
+import { type Device } from '../types'
 import { useAuthStore } from '@/store/authStore'
 
 type MessageRole = 'system' | 'user' | 'device' | 'error'

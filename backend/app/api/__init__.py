@@ -8,6 +8,7 @@ from . import (
     customers,
     devices,
     jobs,
+    network,
     users,
     websocket,
 )
@@ -20,6 +21,7 @@ __all__ = [
     "config",
     "compliance",
     "customers",
+    "network",
     "users",
     "websocket",
 ]

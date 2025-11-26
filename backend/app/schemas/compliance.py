@@ -15,6 +15,15 @@ class PolicyCreate(BaseModel):
     description: Optional[str] = Field(default=None, max_length=1000)
 
 
+class PolicyUpdate(BaseModel):
+    """Schema for updating a compliance policy."""
+
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    definition_yaml: Optional[str] = Field(None, min_length=1)
+    scope_json: Optional[dict] = None
+    description: Optional[str] = Field(default=None, max_length=1000)
+
+
 class PolicyResponse(BaseModel):
     """Schema for compliance policy response."""
 

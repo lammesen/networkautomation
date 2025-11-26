@@ -1,5 +1,9 @@
 """Tests for authentication endpoints."""
 
+import os
+
+DEFAULT_ADMIN_PASSWORD = os.getenv("ADMIN_DEFAULT_PASSWORD", "Admin123!")
+
 
 def test_health_endpoint(client):
     """Test health check endpoint."""
@@ -21,7 +25,7 @@ def test_login_success(client, admin_user):
     """Test successful login."""
     response = client.post(
         "/api/v1/auth/login",
-        json={"username": "admin", "password": "admin123"},
+        json={"username": "admin", "password": DEFAULT_ADMIN_PASSWORD},
     )
     assert response.status_code == 200
     data = response.json()
@@ -71,3 +75,72 @@ def test_get_current_user_invalid_token(client):
         headers={"Authorization": "Bearer invalid_token"},
     )
     assert response.status_code == 401
+
+
+def test_refresh_token_success(client, admin_user):
+    """Test successful token refresh."""
+    # First login to get tokens
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": DEFAULT_ADMIN_PASSWORD},
+    )
+    refresh_token = login_response.json()["refresh_token"]
+
+    # Use refresh token to get new tokens
+    response = client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": refresh_token},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "access_token" in data
+    assert "refresh_token" in data
+    assert data["token_type"] == "bearer"
+
+
+def test_refresh_token_invalid(client):
+    """Test refresh with invalid token."""
+    response = client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": "invalid_token"},
+    )
+    assert response.status_code == 401
+
+
+def test_refresh_token_with_access_token(client, admin_user):
+    """Test refresh with access token instead of refresh token fails."""
+    # First login to get tokens
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": DEFAULT_ADMIN_PASSWORD},
+    )
+    access_token = login_response.json()["access_token"]
+
+    # Try to use access token as refresh token
+    response = client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": access_token},
+    )
+    assert response.status_code == 401
+    assert "invalid token type" in response.json()["detail"].lower()
+
+
+def test_refresh_token_inactive_user(client, db_session, admin_user):
+    """Test refresh token fails for inactive user."""
+    # First login to get tokens
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": DEFAULT_ADMIN_PASSWORD},
+    )
+    refresh_token = login_response.json()["refresh_token"]
+
+    # Deactivate user
+    admin_user.is_active = False
+    db_session.commit()
+
+    # Try to refresh
+    response = client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": refresh_token},
+    )
+    assert response.status_code == 403

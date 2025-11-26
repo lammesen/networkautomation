@@ -20,6 +20,7 @@ from app.domain.exceptions import DomainError
 from app.schemas.device import (
     CredentialCreate,
     CredentialResponse,
+    CredentialUpdate,
     DeviceCreate,
     DeviceListResponse,
     DeviceResponse,
@@ -66,6 +67,28 @@ def get_credential(
     """Get credential by ID."""
     credential = service.get_credential(credential_id, context)
     return CredentialResponse.model_validate(credential)
+
+
+@cred_router.put("/{credential_id}", response_model=CredentialResponse)
+def update_credential(
+    credential_id: int,
+    payload: CredentialUpdate,
+    service: CredentialService = Depends(get_credential_service),
+    context: TenantRequestContext = Depends(get_operator_context),
+) -> CredentialResponse:
+    """Update credential."""
+    credential = service.update_credential(credential_id, payload, context)
+    return CredentialResponse.model_validate(credential)
+
+
+@cred_router.delete("/{credential_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_credential(
+    credential_id: int,
+    service: CredentialService = Depends(get_credential_service),
+    context: TenantRequestContext = Depends(get_operator_context),
+) -> None:
+    """Delete credential."""
+    service.delete_credential(credential_id, context)
 
 
 # -----------------------------------------------------------------------------

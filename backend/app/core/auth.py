@@ -65,6 +65,33 @@ def decode_token(token: str) -> TokenData:
         )
 
 
+def verify_refresh_token(token: str) -> str:
+    """Verify refresh token and return username.
+
+    Raises HTTPException if token is invalid or not a refresh token.
+    """
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        token_type = payload.get("type")
+        if token_type != "refresh":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token type",
+            )
+        username: str = payload.get("sub")
+        if username is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Could not validate credentials",
+            )
+        return username
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )
+
+
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db),
@@ -72,7 +99,7 @@ async def get_current_user(
     """Get current user from token."""
     token = credentials.credentials
     token_data = decode_token(token)
-    
+
     user = db.query(User).filter(User.username == token_data.username).first()
     if user is None:
         raise HTTPException(
@@ -97,7 +124,7 @@ async def get_current_active_customer(
         # If user has exactly one customer, use it
         if len(current_user.customers) == 1:
             return current_user.customers[0]
-        
+
         # If admin and no header, ideally we want a customer context, but maybe for some calls it's global?
         # For now, enforce header or single customer.
         raise HTTPException(
@@ -116,19 +143,19 @@ async def get_current_active_customer(
     # Check permission
     if current_user.role == "admin":
         return customer
-    
+
     if customer not in current_user.customers:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access to this customer denied",
         )
-        
+
     return customer
 
 
 def require_role(allowed_roles: list[str]):
     """Decorator to require specific roles."""
-    
+
     def role_checker(current_user: User = Depends(get_current_user)) -> User:
         if current_user.role not in allowed_roles:
             raise HTTPException(
@@ -136,7 +163,7 @@ def require_role(allowed_roles: list[str]):
                 detail=f"Required role: {', '.join(allowed_roles)}",
             )
         return current_user
-    
+
     return role_checker
 
 
