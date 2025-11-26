@@ -2,15 +2,25 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { ChevronDown, Plus, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiClient } from '@/api/client'
-import { Device, DeviceFormData } from '../types'
+import type { DeviceImportSummary } from '@/types'
+import { Device, DeviceFormData, DeviceSearchField } from '../types'
 import { DeviceFilters } from './DeviceFilters'
 import { DeviceTable } from './DeviceTable'
 import { DeviceFormDialog } from './DeviceFormDialog'
-import { DeviceImportDialog, DeviceImportSummary } from './DeviceImportDialog'
+import { DeviceImportDialog } from './DeviceImportDialog'
 import { DeviceDeleteDialog } from './DeviceDeleteDialog'
 import { DeviceTerminalDialog } from './DeviceTerminalDialog'
+import { ConfigHistoryDialog } from './ConfigHistoryDialog'
+import { useAuthStore } from '@/store/authStore'
 
 const initialForm: DeviceFormData = {
   hostname: '',
@@ -23,7 +33,11 @@ const initialForm: DeviceFormData = {
 }
 
 export function DevicesView() {
-  const [filters, setFilters] = useState({ site: '', role: '', search: '' })
+  const [filters, setFilters] = useState({
+    search: '',
+    searchFields: ['hostname', 'mgmt_ip'] as DeviceSearchField[],
+    showDisabled: false,
+  })
   const [formData, setFormData] = useState<DeviceFormData>(initialForm)
   const [importFile, setImportFile] = useState<File | null>(null)
   const [importResult, setImportResult] = useState<DeviceImportSummary | null>(null)
@@ -36,12 +50,17 @@ export function DevicesView() {
   })
   const [deviceToDelete, setDeviceToDelete] = useState<Device | null>(null)
   const [terminalDevice, setTerminalDevice] = useState<Device | null>(null)
+  const [historyDevice, setHistoryDevice] = useState<Device | null>(null)
+  const currentUser = useAuthStore((s) => s.user)
 
   const queryClient = useQueryClient()
 
   const { data, isLoading, error: queryError } = useQuery({
-    queryKey: ['devices', filters.site, filters.role, filters.search],
-    queryFn: () => apiClient.getDevices({ site: filters.site, role: filters.role, search: filters.search }),
+    queryKey: ['devices', filters.showDisabled],
+    queryFn: () =>
+      apiClient.getDevices({
+        enabled: filters.showDisabled ? undefined : true,
+      }),
     refetchInterval: 5000,
   })
 
@@ -93,15 +112,30 @@ export function DevicesView() {
     },
   })
 
+  const recoverDeviceMutation = useMutation({
+    mutationFn: (device: Device) =>
+      apiClient.updateDevice(device.id, {
+        enabled: true,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['devices'] })
+      toast.success('Device recovered')
+    },
+    onError: (err: any) => {
+      const message = err.response?.data?.detail || 'Failed to recover device'
+      toast.error(message)
+    },
+  })
+
   const importDevicesMutation = useMutation({
     mutationFn: (file: File) => apiClient.importDevices(file),
-    onSuccess: (summary) => {
+    onSuccess: (summary: DeviceImportSummary) => {
       queryClient.invalidateQueries({ queryKey: ['devices'] })
       setImportResult(summary)
       toast.success(`Imported ${summary.created} devices`)
     },
-    onError: (err: any) => {
-      const message = err.response?.data?.detail || 'Failed to import devices'
+    onError: (err: Error & { data?: { detail?: string } }) => {
+      const message = err.data?.detail || err.message || 'Failed to import devices'
       setError(message)
       toast.error(message)
     },
@@ -155,27 +189,108 @@ export function DevicesView() {
   }
 
   const devices = data?.devices ?? []
-  const totalDevices = data?.total ?? 0
+  const totalDevices = data?.total ?? devices.length
+
+  const getFieldValue = (device: Device, field: DeviceSearchField): string | null => {
+    switch (field) {
+      case 'hostname':
+        return device.hostname
+      case 'mgmt_ip':
+        return device.mgmt_ip
+      case 'vendor':
+        return device.vendor
+      case 'platform':
+        return device.platform
+      case 'role':
+        return device.role ?? null
+      case 'site':
+        return device.site ?? null
+      case 'reachability_status':
+        return device.reachability_status ?? null
+      case 'status':
+        return device.enabled ? 'enabled' : 'disabled'
+      default:
+        return null
+    }
+  }
+
+  const fuzzyIncludes = (query: string, value: string) => {
+    if (!query) return true
+    let qi = 0
+    const q = query.toLowerCase()
+    const v = value.toLowerCase()
+    for (const char of v) {
+      if (char === q[qi]) {
+        qi += 1
+        if (qi === q.length) return true
+      }
+    }
+    return v.includes(q)
+  }
+
+  const filteredDevices = filters.search
+    ? devices.filter((device) => {
+        const query = filters.search.trim().toLowerCase()
+        if (!query) return true
+        return filters.searchFields.some((field) => {
+          const value = getFieldValue(device, field)
+          if (!value) return false
+          const normalized = value.toLowerCase()
+          return normalized.includes(query) || fuzzyIncludes(query, normalized)
+        })
+      })
+    : devices
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold tracking-tight">Devices</h1>
-        <div className="flex gap-2">
-          <Button onClick={openAddDialog}>Add Device</Button>
-          <Button variant="secondary" onClick={() => setDialogState((state) => ({ ...state, import: true }))}>
-            Import CSV
-          </Button>
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button className="gap-2">
+              <Plus className="h-4 w-4" />
+              New device
+              <ChevronDown className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem onSelect={openAddDialog}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add device
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() =>
+                setDialogState((state) => ({
+                  ...state,
+                  import: true,
+                }))
+              }
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              Import from CSV
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <Card>
         <CardContent className="pt-6">
           <DeviceFilters
             search={filters.search}
-            site={filters.site}
-            role={filters.role}
-            onChange={(values) => setFilters((prev) => ({ ...prev, ...values }))}
+            searchFields={filters.searchFields}
+            showDisabled={filters.showDisabled}
+            onChange={(values) =>
+              setFilters((prev) => ({
+                ...prev,
+                ...values,
+                searchFields:
+                  values.searchFields !== undefined
+                    ? values.searchFields.length
+                      ? values.searchFields
+                      : ['hostname']
+                    : prev.searchFields,
+              }))
+            }
           />
         </CardContent>
       </Card>
@@ -183,15 +298,20 @@ export function DevicesView() {
       <Card>
         <CardContent className="p-0">
           <DeviceTable
-            devices={devices}
+            devices={filteredDevices}
             onEdit={openEditDialog}
             onDelete={openDeleteDialog}
             onOpenTerminal={(device) => setTerminalDevice(device)}
+            onConfigHistory={(device) => setHistoryDevice(device)}
+            onRecover={(device) => recoverDeviceMutation.mutate(device)}
+            currentUserRole={currentUser?.role ?? null}
           />
         </CardContent>
       </Card>
 
-      <div className="text-sm text-muted-foreground">Total devices: {totalDevices}</div>
+      <div className="text-sm text-muted-foreground">
+        Showing {filteredDevices.length} of {totalDevices} devices
+      </div>
 
       <DeviceFormDialog
         open={dialogState.add}
@@ -256,8 +376,13 @@ export function DevicesView() {
         device={terminalDevice}
         onClose={() => setTerminalDevice(null)}
       />
+
+      <ConfigHistoryDialog
+        open={Boolean(historyDevice)}
+        deviceId={historyDevice?.id ?? null}
+        hostname={historyDevice?.hostname}
+        onClose={() => setHistoryDevice(null)}
+      />
     </div>
   )
 }
-
-

@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { apiClient } from '../api/client'
+import type { JobCreateResponse } from '@/types'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -19,6 +20,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { toast } from "sonner"
+import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 const SUPPORTED_PLATFORMS = ['ios', 'nxos', 'eos', 'junos']
 
@@ -29,6 +32,7 @@ export default function CommandsPage() {
   const [cursorPos, setCursorPos] = useState(0)
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
   const [invalidCommands, setInvalidCommands] = useState<string[]>([])
+  const [previewMode, setPreviewMode] = useState<'commands' | 'payload'>('commands')
   
   // Fetch suggestions based on selected platform
   const { data: suggestions = [] } = useQuery({
@@ -38,12 +42,12 @@ export default function CommandsPage() {
   })
 
   const runCommandsMutation = useMutation({
-    mutationFn: (data: any) => apiClient.runCommands(data),
-    onSuccess: (data) => {
+    mutationFn: (data: Parameters<typeof apiClient.runCommands>[0]) => apiClient.runCommands(data),
+    onSuccess: (data: JobCreateResponse) => {
       setResult({ success: true, job_id: data.job_id })
       toast.success(`Job started: #${data.job_id}`)
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       setResult({ success: false, error: error.message })
       toast.error(error.message || "Failed to start job")
     },
@@ -66,11 +70,20 @@ export default function CommandsPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    
-    const commandList = commands.split('\n').filter(cmd => cmd.trim())
+    const commandList = commandLines
+
+    if (!populatedTargets) {
+      toast.error('Add at least one target filter (site/role/vendor/platform) before running commands')
+      return
+    }
+
+    if (commandList.length === 0) {
+      toast.error('Add at least one command')
+      return
+    }
     
     // Validation: Check if commands are in the suggestion list (if platform is selected)
-    if (targets.platform && targets.platform !== 'unknown' && suggestions.length > 0) {
+    if (hasPlatform && suggestions.length > 0) {
       const invalid = commandList.filter(cmd => !suggestions.includes(cmd.trim()))
       if (invalid.length > 0) {
         setInvalidCommands(invalid)
@@ -112,8 +125,55 @@ export default function CommandsPage() {
     }
   }
 
+  const recentSnippets = useMemo(
+    () => [
+      'show version',
+      'show ip interface brief',
+      'show interfaces description',
+      'show inventory',
+      'show logging last 50',
+      'show configuration | display set',
+    ],
+    []
+  )
+
+  const populatedTargets = Object.values(targets).some(Boolean)
+  const hasPlatform = Boolean(targets.platform && targets.platform !== 'unknown')
+
+  const commandLines = useMemo(
+    () => commands.split('\n').map((c) => c.trim()).filter(Boolean),
+    [commands]
+  )
+
+  const canSubmit = commandLines.length > 0 && populatedTargets
+
+  const payloadPreview = useMemo(
+    () => {
+      const targetFilters: any = {}
+      if (targets.site) targetFilters.site = targets.site
+      if (targets.role) targetFilters.role = targets.role
+      if (targets.vendor) targetFilters.vendor = targets.vendor
+      if (hasPlatform) targetFilters.platform = targets.platform
+
+      const commandList = commands
+        .split('\n')
+        .map((c) => c.trim())
+        .filter(Boolean)
+
+      return JSON.stringify(
+        {
+          targets: targetFilters,
+          commands: commandList,
+        },
+        null,
+        2
+      )
+    },
+    [commands, targets, hasPlatform]
+  )
+
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6 max-w-5xl">
       <h1 className="text-3xl font-bold tracking-tight">Run Commands</h1>
       
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -122,7 +182,7 @@ export default function CommandsPage() {
           <CardHeader>
             <CardTitle>Target Devices</CardTitle>
             <CardDescription>
-              Select a platform to enable command autocompletion. Press Tab to accept suggestions.
+              Select filters to scope devices. Choose a platform to enable autocomplete (Tab to accept).
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -178,30 +238,41 @@ export default function CommandsPage() {
           </CardContent>
         </Card>
 
-        {/* Commands Input */}
+        {/* Commands Input & Preview */}
         <Card>
-          <CardHeader>
-            <CardTitle>Commands</CardTitle>
-            <CardDescription>
-              Commands will be executed on all matching devices in parallel
-            </CardDescription>
+          <CardHeader className="flex flex-col gap-2">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <CardTitle>Commands</CardTitle>
+                <CardDescription>
+                  Commands run in parallel on all matching devices. One per line; press Tab to accept autocomplete.
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex flex-wrap gap-2">
+                  {recentSnippets.slice(0, 3).map((snippet) => (
+                    <Badge
+                      key={snippet}
+                      variant="outline"
+                      className="cursor-pointer"
+                      onClick={() => setCommands((prev) => (prev ? prev + `\n${snippet}` : snippet))}
+                    >
+                      + {snippet}
+                    </Badge>
+                  ))}
+                </div>
+                <Tabs value={previewMode} onValueChange={(v) => setPreviewMode(v as 'commands' | 'payload')}>
+                  <TabsList>
+                    <TabsTrigger value="commands">Editor</TabsTrigger>
+                    <TabsTrigger value="payload">Preview</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="relative">
-             <div className="relative">
-                {/* Ghost Text Overlay - simplistic approach for shadcn/tailwind */}
-                {/* Note: Precise overlay alignment with Textarea in all browsers is tricky. 
-                    For this migration, we'll rely on the user knowing they can press Tab if suggestions appear.
-                    Or we can try to preserve the overlay if essential.
-                */}
-                {/* <div
-                  aria-hidden="true"
-                  className="absolute inset-0 p-3 border border-transparent font-mono text-sm text-gray-400 pointer-events-none whitespace-pre-wrap overflow-hidden z-0"
-                >
-                  {commands.slice(0, cursorPos - currentLineText.length)}
-                  <span className="text-transparent">{currentLineText}</span>
-                  {firstSuggestion ? firstSuggestion.slice(currentLineText.length) : ''}
-                </div> */}
-                
+            {previewMode === 'commands' ? (
+              <div className="space-y-2">
                 <Textarea
                   value={commands}
                   onChange={(e) => {
@@ -214,20 +285,36 @@ export default function CommandsPage() {
                   placeholder="Enter commands, one per line..."
                   required
                   rows={8}
-                  className="font-mono z-10 relative bg-transparent"
+                  className="font-mono bg-slate-50"
                 />
+                <div className="flex items-center justify-between text-sm text-muted-foreground">
+                  {firstSuggestion ? (
+                    <span>
+                      Suggestion: <span className="font-mono font-bold">{firstSuggestion}</span> (Tab)
+                    </span>
+                  ) : (
+                    <span>Autocomplete shows when a platform is selected.</span>
+                  )}
+                  <span>{commands.split('\n').filter((c) => c.trim()).length} lines</span>
+                </div>
+                {/* Extra suggestions removed per feedback */}
               </div>
-              {firstSuggestion && (
-                  <div className="mt-2 text-sm text-muted-foreground">
-                      Suggestion: <span className="font-mono font-bold">{firstSuggestion}</span> (Press Tab)
-                  </div>
-              )}
+            ) : (
+              <div className="rounded-md border bg-slate-950 text-slate-100 p-4 font-mono text-xs whitespace-pre-wrap">
+                {payloadPreview}
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        <Button type="submit" disabled={runCommandsMutation.isPending} size="lg">
-          {runCommandsMutation.isPending ? 'Submitting...' : 'Run Commands'}
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button type="submit" disabled={runCommandsMutation.isPending || !canSubmit} size="lg">
+            {runCommandsMutation.isPending ? 'Submitting...' : 'Run Commands'}
+          </Button>
+          {!populatedTargets && (
+            <span className="text-sm text-muted-foreground">Tip: add site/role/platform filters to scope blast radius.</span>
+          )}
+        </div>
       </form>
 
       {/* Result */}

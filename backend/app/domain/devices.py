@@ -11,9 +11,9 @@ class DeviceFilters:
     site: Optional[str] = None
     role: Optional[str] = None
     vendor: Optional[str] = None
+    reachability_status: Optional[str] = None
     search: Optional[str] = None
     enabled: Optional[bool] = None
     skip: int = 0
     limit: int = 100
-
 

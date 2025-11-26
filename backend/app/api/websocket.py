@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import decode_token
 from app.core.config import settings
 from app.core.logging import get_logger
-from app.db import Customer, Device, Job, User, get_db
+from app.db import Customer, Device, Job, JobLog, User, get_db
 from app.dependencies import get_ssh_manager
 from app.domain import TenantRequestContext
 from app.services.ssh import SSHSessionManager
@@ -119,6 +119,7 @@ async def job_logs_websocket(
         from app.jobs.manager import get_job_logs
 
         logs = get_job_logs(db, job_id, limit=100)
+        last_ts = logs[-1].ts if logs else None
         for log in logs:
             await websocket.send_json(
                 {
@@ -135,6 +136,24 @@ async def job_logs_websocket(
         while True:
             # Poll for new logs every second
             await asyncio.sleep(1)
+
+            # Stream incremental logs
+            new_logs_query = db.query(JobLog).filter(JobLog.job_id == job_id)
+            if last_ts:
+                new_logs_query = new_logs_query.filter(JobLog.ts > last_ts)
+            new_logs = new_logs_query.order_by(JobLog.ts.asc()).all()
+            for log in new_logs:
+                await websocket.send_json(
+                    {
+                        "type": "log",
+                        "ts": log.ts.isoformat(),
+                        "level": log.level,
+                        "host": log.host,
+                        "message": log.message,
+                        "extra": log.extra_json,
+                    }
+                )
+                last_ts = log.ts
 
             # Check if job is complete
             db.refresh(job)

@@ -14,6 +14,7 @@ from .models import (
     CustomerIPRange,
 )
 from .session import get_db, engine, SessionLocal
+from .utils import seed_default_data
 
 __all__ = [
     "Base",
@@ -30,4 +31,5 @@ __all__ = [
     "get_db",
     "engine",
     "SessionLocal",
+    "seed_default_data",
 ]

@@ -21,6 +21,7 @@ from app.repositories import (
     CustomerIPRangeRepository,
     DeviceRepository,
 )
+from app.celery_app import celery_app
 
 
 class DeviceService:
@@ -56,9 +57,7 @@ class DeviceService:
         payload,
         context: TenantRequestContext,
     ) -> Device:
-        target_customer_id = self._resolve_customer_for_ip(
-            payload.mgmt_ip, context.customer_id
-        )
+        target_customer_id = self._resolve_customer_for_ip(payload.mgmt_ip, context.customer_id)
         context.assert_customer_access(target_customer_id)
 
         self._ensure_hostname_unique(
@@ -80,6 +79,11 @@ class DeviceService:
         self.session.add(device)
         self.session.commit()
         self.session.refresh(device)
+        # Kick off background info discovery (best effort)
+        try:  # pragma: no cover - async best effort
+            celery_app.send_task("refresh_device_info", args=[device.id])
+        except Exception:
+            pass
         return device
 
     def update_device(
@@ -176,13 +180,30 @@ class DeviceService:
             raise NotFoundError("Credential not found for the customer")
         return credential
 
-    def _resolve_customer_for_ip(self, ip: str, default_customer_id: int) -> int:
+    def _resolve_customer_for_ip(
+        self,
+        ip: str,
+        default_customer_id: int,
+        ranges: Sequence[CustomerIPRange] | None = None,
+    ) -> int:
+        """Resolve customer ID for an IP address based on IP ranges.
+
+        Args:
+            ip: The IP address to resolve.
+            default_customer_id: The customer ID to return if no match is found.
+            ranges: Optional pre-fetched IP ranges. If None, fetches from repository.
+
+        Returns:
+            The customer ID that owns the IP range containing the IP, or default.
+        """
         try:
             device_ip = ipaddress.ip_address(ip)
         except ValueError:
             return default_customer_id
 
-        for ip_range in self.ip_ranges.list_all():
+        ip_ranges = ranges if ranges is not None else self.ip_ranges.list_all()
+
+        for ip_range in ip_ranges:
             try:
                 network = ipaddress.ip_network(ip_range.cidr)
             except ValueError:
@@ -203,10 +224,10 @@ class DeviceService:
         if missing:
             raise ValidationError(f"Missing required fields: {', '.join(missing)}")
 
-        target_customer_id = self._resolve_customer_for_ip_from_ranges(
+        target_customer_id = self._resolve_customer_for_ip(
             row["mgmt_ip"],
-            ranges,
             context.customer_id,
+            ranges=ranges,
         )
         context.assert_customer_access(target_customer_id)
 
@@ -234,72 +255,3 @@ class DeviceService:
             enabled=True,
         )
         self.session.add(device)
-
-    def _resolve_customer_for_ip_from_ranges(
-        self,
-        ip: str,
-        ranges: Sequence[CustomerIPRange],
-        default_customer_id: int,
-    ) -> int:
-        try:
-            device_ip = ipaddress.ip_address(ip)
-        except ValueError:
-            return default_customer_id
-
-        for ip_range in ranges:
-            try:
-                network = ipaddress.ip_network(ip_range.cidr)
-            except ValueError:
-                continue
-            if device_ip in network:
-                return ip_range.customer_id
-
-        return default_customer_id
-
-
-class CredentialService:
-    """Business logic for credential CRUD operations."""
-
-    def __init__(self, session: Session) -> None:
-        self.session = session
-        self.credentials = CredentialRepository(session)
-
-    def list_credentials(self, context: TenantRequestContext) -> Sequence[Credential]:
-        return self.credentials.list_for_customer(context.customer_id)
-
-    def get_credential(
-        self,
-        credential_id: int,
-        context: TenantRequestContext,
-    ) -> Credential:
-        credential = self.credentials.get_by_id_for_customer(
-            credential_id,
-            context.customer_id,
-        )
-        if not credential:
-            raise NotFoundError("Credential not found")
-        return credential
-
-    def create_credential(
-        self,
-        payload,
-        context: TenantRequestContext,
-    ) -> Credential:
-        existing = self.credentials.get_by_name_for_customer(
-            payload.name,
-            context.customer_id,
-        )
-        if existing:
-            raise ConflictError("Credential with this name already exists for the customer")
-
-        credential = Credential(
-            **payload.model_dump(),
-            customer_id=context.customer_id,
-        )
-
-        self.session.add(credential)
-        self.session.commit()
-        self.session.refresh(credential)
-        return credential
-
-

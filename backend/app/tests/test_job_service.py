@@ -1,5 +1,7 @@
 """Tests for the JobService orchestration layer."""
 
+from datetime import datetime, timedelta
+
 from app.db import Customer, User
 from app.services.job_service import JobService
 
@@ -84,6 +86,24 @@ def test_append_log_persists_entries(db_session):
     assert logs[0].message == "Started"
     assert logs[1].host == "router1"
 
+
+def test_create_job_can_be_scheduled(db_session):
+    """Scheduled jobs should record scheduled_for and status."""
+    user = _create_user(db_session)
+    customer = _create_customer(db_session)
+    service = JobService(db_session)
+    schedule_time = datetime.utcnow() + timedelta(hours=1)
+
+    job = service.create_job(
+        job_type="run_commands",
+        user=user,
+        customer_id=customer.id,
+        scheduled_for=schedule_time,
+    )
+
+    assert job.status == "scheduled"
+    # Stored timestamp may lose microseconds; compare using timestamp
+    assert int(job.scheduled_for.timestamp()) == int(schedule_time.timestamp())
 
 
 

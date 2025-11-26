@@ -1,17 +1,20 @@
 """Authentication API endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import (
-    verify_password,
-    get_password_hash,
     create_access_token,
     create_refresh_token,
     get_current_user,
+    verify_password,
 )
-from app.db import get_db, User
-from app.schemas.auth import Token, UserLogin, UserResponse, UserCreate
+from app.db import User, get_db
+from app.dependencies import get_user_service
+from app.domain.exceptions import ForbiddenError, UnauthorizedError
+from app.repositories import UserRepository
+from app.schemas.auth import Token, UserCreate, UserLogin, UserResponse
+from app.services.user_service import UserService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -19,21 +22,18 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post("/login", response_model=Token)
 def login(user_login: UserLogin, db: Session = Depends(get_db)) -> Token:
     """Login user."""
-    user = db.query(User).filter(User.username == user_login.username).first()
+    user_repo = UserRepository(db)
+    user = user_repo.get_by_username(user_login.username)
+
     if not user or not verify_password(user_login.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-        )
+        raise UnauthorizedError("Incorrect username or password")
+
     if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Inactive user",
-        )
-    
+        raise ForbiddenError("Inactive user")
+
     access_token = create_access_token(data={"sub": user.username})
     refresh_token = create_refresh_token(data={"sub": user.username})
-    
+
     return Token(access_token=access_token, refresh_token=refresh_token)
 
 
@@ -44,27 +44,13 @@ def get_me(current_user: User = Depends(get_current_user)) -> UserResponse:
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-def register(user_create: UserCreate, db: Session = Depends(get_db)) -> UserResponse:
+def register(
+    user_create: UserCreate,
+    service: UserService = Depends(get_user_service),
+) -> UserResponse:
     """Register new user.
-    
+
     New users are created as inactive and require admin approval.
     """
-    existing_user = db.query(User).filter(User.username == user_create.username).first()
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Username already registered",
-        )
-    
-    hashed_password = get_password_hash(user_create.password)
-    new_user = User(
-        username=user_create.username,
-        hashed_password=hashed_password,
-        role="viewer",  # Force viewer role
-        is_active=False,  # Require approval
-    )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    
+    new_user = service.create_user(user_create)
     return UserResponse.model_validate(new_user)

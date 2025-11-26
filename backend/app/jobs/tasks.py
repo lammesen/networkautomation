@@ -18,6 +18,8 @@ from app.automation import (
 from app.core.logging import get_logger
 from app.db import ConfigSnapshot, Device, SessionLocal
 from app.services.job_service import JobService
+from app.core.crypto import decrypt_text
+from napalm import get_network_driver
 
 logger = get_logger(__name__)
 
@@ -450,7 +452,7 @@ def check_reachability_job() -> None:
     
     db = SessionLocal()
     try:
-        devices = db.query(Device).filter(Device.enabled == True).all()
+        devices = db.query(Device).filter(Device.enabled.is_(True)).all()
         logger.info(f"Checking reachability for {len(devices)} devices")
         
         for device in devices:
@@ -477,5 +479,68 @@ def check_reachability_job() -> None:
         
     except Exception as e:
         logger.exception(f"Error in check_reachability_job: {e}")
+    finally:
+        db.close()
+
+
+@shared_task(name="refresh_device_info")
+def refresh_device_info(device_id: int) -> None:
+    """Fetch basic facts from a device and store them on the record."""
+    db = SessionLocal()
+    try:
+        device = db.query(Device).filter(Device.id == device_id).first()
+        if not device:
+            return
+        cred = device.credential
+        if not cred:
+            return
+
+        username = cred.username
+        password = decrypt_text(cred.password)
+        enable = decrypt_text(cred.enable_password) or password
+
+        driver_map = {
+            ("cisco", "ios"): "ios",
+            ("cisco", "iosxe"): "ios",
+            ("cisco", "iosxr"): "iosxr",
+            ("cisco", "nxos"): "nxos",
+            ("arista", "eos"): "eos",
+            ("juniper", "junos"): "junos",
+            ("linux", "linux"): "linux",
+        }
+        napalm_driver = driver_map.get(
+            (device.vendor.lower(), device.platform.lower()), "ios"
+        )
+
+        driver = get_network_driver(napalm_driver)
+        optional_args = {}
+        if enable:
+            optional_args["secret"] = enable
+
+        facts = {}
+        try:
+            with driver(
+                hostname=device.mgmt_ip,
+                username=username,
+                password=password,
+                optional_args=optional_args,
+            ) as nap:
+                facts = nap.get_facts()
+        except Exception as exc:
+            logger.warning("refresh_device_info failed for %s: %s", device.hostname, exc)
+            return
+
+        tags = device.tags or {}
+        tags["facts"] = {
+            "vendor": facts.get("vendor"),
+            "model": facts.get("model"),
+            "os_version": facts.get("os_version"),
+            "serial_number": facts.get("serial_number"),
+            "uptime": facts.get("uptime"),
+            "hostname": facts.get("hostname"),
+        }
+        device.tags = tags
+        db.add(device)
+        db.commit()
     finally:
         db.close()

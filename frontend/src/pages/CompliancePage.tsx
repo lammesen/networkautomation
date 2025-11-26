@@ -5,12 +5,16 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Table, TableBody, TableHead, TableHeader, TableRow, TableCell } from '@/components/ui/table'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/ui/status-badge'
+import { EmptyTableRow } from '@/components/ui/empty-table-row'
+import { LoadingSpinner } from '@/components/ui/query-state'
 import { toast } from "sonner"
+import { formatDateTime } from '@/lib/formatters'
+import type { CompliancePolicy, CompliancePolicyCreate, ComplianceResult } from '@/types'
 
 export default function CompliancePage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
@@ -21,16 +25,16 @@ export default function CompliancePage() {
 
   const { data: policies, isLoading: isLoadingPolicies } = useQuery({
     queryKey: ['compliancePolicies'],
-    queryFn: () => apiClient.request('/compliance/policies'), // Assuming generic request method or need to add to client
+    queryFn: () => apiClient.getCompliancePolicies(),
   })
 
-  const { data: results, isLoading: isLoadingResults } = useQuery({
+  const { data: results } = useQuery({
     queryKey: ['complianceResults'],
-    queryFn: () => apiClient.request('/compliance/results'),
+    queryFn: () => apiClient.getComplianceResults(),
   })
 
   const createPolicyMutation = useMutation({
-    mutationFn: (data: any) => apiClient.request('/compliance/policies', { method: 'POST', body: JSON.stringify({ ...data, scope_json: {} }) }),
+    mutationFn: (data: CompliancePolicyCreate) => apiClient.createCompliancePolicy(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['compliancePolicies'] })
       setIsCreateModalOpen(false)
@@ -38,22 +42,22 @@ export default function CompliancePage() {
       setError('')
       toast.success("Policy created")
     },
-    onError: (err: any) => {
-        const msg = err.response?.data?.detail || 'Failed to create policy'
+    onError: (err: Error & { data?: { detail?: string } }) => {
+        const msg = err.data?.detail || err.message || 'Failed to create policy'
         setError(msg)
         toast.error(msg)
     },
   })
 
   const runComplianceMutation = useMutation({
-    mutationFn: (policyId: number) => apiClient.request('/compliance/run', { method: 'POST', body: JSON.stringify({ policy_id: policyId }) }),
+    mutationFn: (policyId: number) => apiClient.runComplianceCheck(policyId),
     onSuccess: () => {
       toast.success('Compliance check started')
     },
-    onError: (err: any) => toast.error('Failed to start check: ' + err.message)
+    onError: (err: Error) => toast.error('Failed to start check: ' + err.message)
   })
 
-  if (isLoadingPolicies) return <div>Loading compliance data...</div>
+  if (isLoadingPolicies) return <LoadingSpinner message="Loading compliance data..." />
 
   return (
     <div className="space-y-6">
@@ -78,7 +82,7 @@ export default function CompliancePage() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {policies?.map((policy: any) => (
+                        {policies?.map((policy: CompliancePolicy) => (
                             <TableRow key={policy.id}>
                                 <TableCell className="font-medium">{policy.name}</TableCell>
                                 <TableCell>
@@ -89,11 +93,7 @@ export default function CompliancePage() {
                             </TableRow>
                         ))}
                          {(!policies || policies.length === 0) && (
-                            <TableRow>
-                                <TableCell colSpan={2} className="text-center text-muted-foreground h-24">
-                                No policies found
-                                </TableCell>
-                            </TableRow>
+                            <EmptyTableRow colSpan={2} message="No policies found" />
                         )}
                     </TableBody>
                 </Table>
@@ -115,24 +115,18 @@ export default function CompliancePage() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {results?.map((res: any) => (
+                        {results?.map((res: ComplianceResult) => (
                             <TableRow key={res.id}>
                                 <TableCell>{res.device_id}</TableCell> 
-                                <TableCell>{res.policy_name}</TableCell>
+                                <TableCell>{res.policy_id}</TableCell>
                                 <TableCell>
-                                    <Badge variant={res.status === 'pass' ? 'default' : 'destructive'}>
-                                        {res.status}
-                                    </Badge>
+                                    <StatusBadge status={res.status} />
                                 </TableCell>
-                                <TableCell>{new Date(res.ts).toLocaleString()}</TableCell>
+                                <TableCell>{formatDateTime(res.ts)}</TableCell>
                             </TableRow>
                         ))}
                         {(!results || results.length === 0) && (
-                            <TableRow>
-                                <TableCell colSpan={4} className="text-center text-muted-foreground h-24">
-                                No results found
-                                </TableCell>
-                            </TableRow>
+                            <EmptyTableRow colSpan={4} message="No results found" />
                         )}
                     </TableBody>
                 </Table>
@@ -147,7 +141,12 @@ export default function CompliancePage() {
             </DialogHeader>
             <form onSubmit={(e) => {
                 e.preventDefault()
-                createPolicyMutation.mutate(newPolicy)
+                createPolicyMutation.mutate({
+                  name: newPolicy.name,
+                  definition_yaml: newPolicy.definition_yaml,
+                  scope_json: {},
+                  description: newPolicy.description || undefined,
+                })
             }} className="space-y-4">
                 <div className="space-y-2">
                     <Label htmlFor="name">Name</Label>

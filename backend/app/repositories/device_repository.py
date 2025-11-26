@@ -34,6 +34,8 @@ class DeviceRepository(SQLAlchemyRepository[Device]):
             query = query.filter(Device.role == filters.role)
         if filters.vendor:
             query = query.filter(Device.vendor == filters.vendor)
+        if filters.reachability_status:
+            query = query.filter(Device.reachability_status == filters.reachability_status)
         if filters.enabled is not None:
             query = query.filter(Device.enabled == filters.enabled)
         if filters.search:
@@ -73,5 +75,4 @@ class DeviceRepository(SQLAlchemyRepository[Device]):
         if exclude_id is not None:
             query = query.filter(Device.id != exclude_id)
         return query.first()
-
 

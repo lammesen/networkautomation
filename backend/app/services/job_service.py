@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Optional, Sequence
 
@@ -9,9 +10,12 @@ from sqlalchemy.orm import Session
 
 from app.db import Job, JobLog, User
 from app.domain.context import TenantRequestContext
-from app.domain.exceptions import ForbiddenError, NotFoundError
+from app.domain.exceptions import NotFoundError
 from app.domain.jobs import JobFilters
 from app.repositories import JobLogRepository, JobRepository
+from app.celery_app import celery_app
+
+logger = logging.getLogger(__name__)
 
 
 class JobService:
@@ -33,15 +37,23 @@ class JobService:
         customer_id: int,
         target_summary: Optional[dict] = None,
         payload: Optional[dict] = None,
+        scheduled_for: Optional[datetime] = None,
     ) -> Job:
+        status = "queued"
+        now = datetime.utcnow()
+        if scheduled_for and scheduled_for > now:
+            status = "scheduled"
+        scheduled_at = scheduled_for if scheduled_for else None
+
         job = Job(
             type=job_type,
-            status="queued",
+            status=status,
             user_id=user.id,
             customer_id=customer_id,
             target_summary_json=target_summary,
             payload_json=payload,
-            requested_at=datetime.utcnow(),
+            requested_at=now,
+            scheduled_for=scheduled_at,
         )
         self.session.add(job)
         self.session.commit()
@@ -125,4 +137,98 @@ class JobService:
         job = self.get_job(job_id, context)
         return self.logs.list_for_job(job.id, limit=limit)
 
+    def retry_job(self, job: Job, user: User) -> Job:
+        """Create a new job based on an existing one (for retry)."""
+        clone = Job(
+            type=job.type,
+            status="queued",
+            user_id=user.id,
+            customer_id=job.customer_id,
+            target_summary_json=job.target_summary_json,
+            payload_json=job.payload_json,
+            requested_at=datetime.utcnow(),
+        )
+        self.session.add(clone)
+        self.session.commit()
+        self.session.refresh(clone)
+        self._enqueue(clone)
+        return clone
 
+    # Internal ------------------------------------------------------
+    def _enqueue(self, job: Job) -> None:
+        """Dispatch job to Celery based on its type."""
+        task_map = {
+            "run_commands": (
+                "run_commands_job",
+                lambda j: (
+                    j.id,
+                    j.target_summary_json["filters"],
+                    j.payload_json["commands"],
+                    j.payload_json.get("timeout"),
+                ),
+            ),
+            "config_backup": (
+                "config_backup_job",
+                lambda j: (
+                    j.id,
+                    j.target_summary_json.get("filters", {}),
+                    j.payload_json.get("source_label", "manual"),
+                ),
+            ),
+            "config_deploy_preview": (
+                "config_deploy_preview_job",
+                lambda j: (
+                    j.id,
+                    j.target_summary_json["filters"],
+                    j.payload_json["mode"],
+                    j.payload_json["snippet"],
+                ),
+            ),
+            "config_deploy_commit": (
+                "config_deploy_commit_job",
+                lambda j: (
+                    j.id,
+                    j.target_summary_json["filters"],
+                    j.payload_json["mode"],
+                    j.payload_json["snippet"],
+                ),
+            ),
+            "compliance_check": (
+                "compliance_check_job",
+                lambda j: (j.id, j.payload_json["policy_id"]),
+            ),
+        }
+        entry = task_map.get(job.type)
+        if not entry:
+            return
+        task_name, args_fn = entry
+        try:
+            celery_app.send_task(task_name, args=args_fn(job))
+        except Exception as exc:
+            logger.warning("Failed to enqueue job %s: %s", job.id, exc)
+
+    # ---------------- Admin (global) ----------------
+    def list_jobs_admin(
+        self,
+        filters: JobFilters,
+        customer_id: Optional[int] = None,
+        user_id: Optional[int] = None,
+    ) -> Sequence[Job]:
+        return self.jobs.list_all(
+            job_type=filters.job_type,
+            status=filters.status,
+            customer_id=customer_id,
+            user_id=user_id,
+            skip=filters.skip,
+            limit=filters.limit,
+        )
+
+    def get_job_admin(self, job_id: int) -> Job:
+        job = self.jobs.get_by_id(job_id)
+        if not job:
+            raise NotFoundError("Job not found")
+        return job
+
+    def get_job_logs_admin(self, job_id: int, *, limit: int) -> Sequence[JobLog]:
+        job = self.get_job_admin(job_id)
+        return self.logs.list_for_job(job.id, limit=limit)

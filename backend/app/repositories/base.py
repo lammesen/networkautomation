@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Generic, Optional, TypeVar
+from typing import Generic, TypeVar
 
 from sqlalchemy.orm import Session
 
@@ -31,5 +31,4 @@ class SQLAlchemyRepository(Generic[TModel]):
 
     def flush(self) -> None:
         self.session.flush()
-
 

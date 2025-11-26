@@ -9,6 +9,8 @@ PYTHON_BIN  := $(VENV_DIR)/bin/python
 PIP_BIN     := $(VENV_DIR)/bin/pip
 RUFF        := $(VENV_DIR)/bin/ruff
 BLACK       := $(VENV_DIR)/bin/black
+UVICORN     := $(VENV_DIR)/bin/uvicorn
+CELERY      := $(VENV_DIR)/bin/celery
 
 BUN         ?= bun
 DOCKER      ?= docker
@@ -53,6 +55,10 @@ help:
 	@echo "  backend-test         Run backend pytest suite"
 	@echo "  ssh-test             Run SSH service + websocket tests"
 	@echo "  frontend-build       Build frontend (vite)"
+	@echo "  dev-backend          Start FastAPI locally (requires .env)"
+	@echo "  dev-worker           Start Celery worker (requires .env)"
+	@echo "  dev-beat             Start Celery beat (requires .env)"
+	@echo "  dev-frontend         Start frontend dev server"
 	@echo "  test                 Run backend tests + frontend build"
 	@echo
 	@echo "Runtime:"
@@ -132,6 +138,48 @@ frontend-build:
 .PHONY: frontend-dev
 frontend-dev:
 	cd frontend && $(BUN) run dev
+
+# -------------------------------------------------------------------
+# Local dev runtime
+# -------------------------------------------------------------------
+.PHONY: dev-backend
+dev-backend: venv
+	cd backend && ../$(UVICORN) app.main:app --reload --host 0.0.0.0 --port 8000
+
+.PHONY: dev-worker
+dev-worker: venv
+	cd backend && ../$(CELERY) -A app.celery_app:celery_app worker -l info
+
+.PHONY: dev-beat
+dev-beat: venv
+	cd backend && rm -f celerybeat-schedule* && ../$(CELERY) -A app.celery_app:celery_app beat -l info
+
+.PHONY: dev-services
+dev-services: venv
+	# Start backend, worker, and beat in background tmux session "netauto"
+	# If tmux is not installed, fall back to spawning background processes.
+	if command -v tmux >/dev/null 2>&1; then \
+		tmux kill-session -t netauto >/dev/null 2>&1 || true; \
+		tmux new-session -d -s netauto "cd backend && ../$(UVICORN) app.main:app --reload --host 0.0.0.0 --port 8000"; \
+		tmux split-window -h -t netauto:0 "cd backend && ../$(CELERY) -A app.celery_app:celery_app worker -l info"; \
+		tmux select-pane -t netauto:0.0; \
+		tmux split-window -v -t netauto:0 "cd backend && rm -f celerybeat-schedule* && ../$(CELERY) -A app.celery_app:celery_app beat -l info"; \
+		tmux select-pane -t netauto:0.1; \
+		tmux split-window -v -t netauto:0 "cd frontend && $(BUN) run dev -- --host --port 5173"; \
+		tmux select-layout -t netauto even-vertical; \
+		tmux set-option -t netauto mouse on; \
+		tmux attach -t netauto; \
+	else \
+		( cd backend && ../$(UVICORN) app.main:app --reload --host 0.0.0.0 --port 8000 & echo $$! > /tmp/netauto-api.pid ); \
+		( cd backend && ../$(CELERY) -A app.celery_app:celery_app worker -l info & echo $$! > /tmp/netauto-worker.pid ); \
+		( cd backend && rm -f celerybeat-schedule* && ../$(CELERY) -A app.celery_app:celery_app beat -l info & echo $$! > /tmp/netauto-beat.pid ); \
+		( cd frontend && $(BUN) run dev -- --host --port 5173 & echo $$! > /tmp/netauto-frontend.pid ); \
+		echo "Started api/worker/beat/frontend without tmux. PIDs stored in /tmp/netauto-*.pid"; \
+	fi
+
+.PHONY: dev-frontend
+dev-frontend:
+	cd frontend && $(BUN) run dev -- --host --port 5173
 
 # -------------------------------------------------------------------
 # Combined convenience

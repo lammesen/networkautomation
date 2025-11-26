@@ -85,6 +85,8 @@ class DeviceResponse(DeviceBase):
 
     id: int
     credentials_ref: int
+    reachability_status: Optional[str] = None
+    last_reachability_check: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 
