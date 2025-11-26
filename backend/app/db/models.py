@@ -19,6 +19,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from app.core.crypto import decrypt_text, encrypt_text
 
+
 class Base(DeclarativeBase):
     """Base class for all models."""
 
@@ -63,9 +64,7 @@ class CustomerIPRange(Base):
     """Customer IP Range model for auto-assignment."""
 
     __tablename__ = "customer_ip_ranges"
-    __table_args__ = (
-        Index("ix_customer_ip_ranges_customer_id", "customer_id"),
-    )
+    __table_args__ = (Index("ix_customer_ip_ranges_customer_id", "customer_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("customers.id"), nullable=False)
@@ -105,9 +104,7 @@ class Credential(Base):
     """Credential model for device authentication."""
 
     __tablename__ = "credentials"
-    __table_args__ = (
-        UniqueConstraint("customer_id", "name", name="uix_credential_customer_name"),
-    )
+    __table_args__ = (UniqueConstraint("customer_id", "name", name="uix_credential_customer_name"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("customers.id"), nullable=False)
@@ -126,12 +123,12 @@ class Credential(Base):
     customer: Mapped["Customer"] = relationship("Customer", back_populates="credentials")
 
     @property
-    def password(self) -> str:
-        return decrypt_text(self._password)
+    def password(self) -> Optional[str]:
+        return decrypt_text(self._password) if self._password else None
 
     @password.setter
-    def password(self, value: str) -> None:
-        self._password = encrypt_text(value) or ""
+    def password(self, value: Optional[str]) -> None:
+        self._password = encrypt_text(value) if value is not None else None
 
     @property
     def enable_password(self) -> Optional[str]:
@@ -222,7 +219,7 @@ class Job(Base):
 
 class JobLog(Base):
     """Job log model."""
-    
+
     # ... unchanged ...
     __tablename__ = "job_logs"
     __table_args__ = (Index("ix_job_logs_job_id", "job_id"),)
@@ -230,9 +227,7 @@ class JobLog(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     job_id: Mapped[int] = mapped_column(Integer, ForeignKey("jobs.id"), nullable=False)
     ts: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
-    level: Mapped[str] = mapped_column(
-        String(10), nullable=False
-    )  # INFO, WARN, ERROR, DEBUG
+    level: Mapped[str] = mapped_column(String(10), nullable=False)  # INFO, WARN, ERROR, DEBUG
     host: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     message: Mapped[str] = mapped_column(Text, nullable=False)
     extra_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
@@ -243,7 +238,7 @@ class JobLog(Base):
 
 class ConfigSnapshot(Base):
     """Configuration snapshot model."""
-    
+
     # ... unchanged ...
     __tablename__ = "config_snapshots"
     __table_args__ = (
@@ -269,17 +264,13 @@ class CompliancePolicy(Base):
     """Compliance policy model."""
 
     __tablename__ = "compliance_policies"
-    __table_args__ = (
-        UniqueConstraint("customer_id", "name", name="uix_policy_customer_name"),
-    )
+    __table_args__ = (UniqueConstraint("customer_id", "name", name="uix_policy_customer_name"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("customers.id"), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    scope_json: Mapped[dict] = mapped_column(
-        JSON, nullable=False
-    )  # Filters for device selection
+    scope_json: Mapped[dict] = mapped_column(JSON, nullable=False)  # Filters for device selection
     definition_yaml: Mapped[str] = mapped_column(Text, nullable=False)  # NAPALM validation YAML
     created_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
@@ -296,6 +287,7 @@ class CompliancePolicy(Base):
 
 class ComplianceResult(Base):
     """Compliance result model."""
+
     # ... unchanged ...
     __tablename__ = "compliance_results"
     __table_args__ = (
@@ -311,13 +303,9 @@ class ComplianceResult(Base):
     device_id: Mapped[int] = mapped_column(Integer, ForeignKey("devices.id"), nullable=False)
     job_id: Mapped[int] = mapped_column(Integer, ForeignKey("jobs.id"), nullable=False)
     ts: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
-    status: Mapped[str] = mapped_column(
-        String(20), nullable=False
-    )  # pass, fail, error
+    status: Mapped[str] = mapped_column(String(20), nullable=False)  # pass, fail, error
     details_json: Mapped[dict] = mapped_column(JSON, nullable=False)
 
     # Relationships
-    policy: Mapped["CompliancePolicy"] = relationship(
-        "CompliancePolicy", back_populates="results"
-    )
+    policy: Mapped["CompliancePolicy"] = relationship("CompliancePolicy", back_populates="results")
     device: Mapped["Device"] = relationship("Device", back_populates="compliance_results")

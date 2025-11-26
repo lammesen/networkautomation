@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Optional
 
 from cryptography.fernet import Fernet, InvalidToken
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 _fernet: Optional[Fernet] = None
 
@@ -31,11 +34,12 @@ def encrypt_text(plaintext: Optional[str]) -> Optional[str]:
 def decrypt_text(ciphertext: Optional[str]) -> Optional[str]:
     """Decrypt text previously encrypted with encrypt_text.
 
-    If the ciphertext cannot be decrypted (legacy plaintext), return it as-is.
+    Raises InvalidToken if the ciphertext cannot be decrypted.
     """
     if ciphertext is None:
         return None
     try:
         return _get_fernet().decrypt(ciphertext.encode()).decode()
     except InvalidToken:
-        return ciphertext
+        logger.error("Failed to decrypt ciphertext - invalid token or corrupted data")
+        raise

@@ -2,6 +2,7 @@
 
 import os
 
+from cryptography.fernet import Fernet
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -69,6 +70,7 @@ class Settings(BaseSettings):
                 return parts
             # fallback: try JSON parsing (e.g., '["http://..."]')
             import json
+
             try:
                 parsed = json.loads(value)
                 if isinstance(parsed, list):
@@ -99,9 +101,13 @@ class Settings(BaseSettings):
     @field_validator("encryption_key")
     @classmethod
     def require_encryption_key(cls, value: str | None) -> str:
-        """Force callers to supply ENCRYPTION_KEY; fail fast otherwise."""
+        """Force callers to supply a valid ENCRYPTION_KEY; fail fast otherwise."""
         if not value:
             raise ValueError("ENCRYPTION_KEY must be set to encrypt device credentials")
+        try:
+            Fernet(value.encode())
+        except Exception:
+            raise ValueError("ENCRYPTION_KEY must be a valid base64-encoded Fernet key")
         return value
 
 

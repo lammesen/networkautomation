@@ -1,6 +1,7 @@
 """Tests for crypto module."""
 
 import pytest
+from cryptography.fernet import InvalidToken
 
 from app.core.crypto import decrypt_text, encrypt_text
 
@@ -25,11 +26,11 @@ class TestEncryptDecrypt:
         """Test that decrypting None returns None."""
         assert decrypt_text(None) is None
 
-    def test_decrypt_invalid_returns_original(self):
-        """Test that decrypting invalid ciphertext returns the original string (legacy plaintext)."""
+    def test_decrypt_invalid_raises_exception(self):
+        """Test that decrypting invalid ciphertext raises InvalidToken."""
         plaintext = "not_encrypted_value"
-        result = decrypt_text(plaintext)
-        assert result == plaintext
+        with pytest.raises(InvalidToken):
+            decrypt_text(plaintext)
 
     def test_encrypt_empty_string(self):
         """Test that encrypting empty string works."""

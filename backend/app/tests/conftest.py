@@ -2,15 +2,16 @@
 
 import os
 
-from cryptography.fernet import Fernet
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-# Ensure encryption key exists before importing app settings
-os.environ.setdefault("ENCRYPTION_KEY", Fernet.generate_key().decode())
+# Use a fixed, valid Fernet key for test reproducibility
+# Generated via: Fernet.generate_key().decode()
+TEST_ENCRYPTION_KEY = "6zcciVWk9pw0xGyzngHL5zpIYNF7ryit-8IOGo8RwuU="
+os.environ.setdefault("ENCRYPTION_KEY", TEST_ENCRYPTION_KEY)
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 
 from app.main import app

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Optional, Sequence
 
@@ -13,6 +14,8 @@ from app.domain.exceptions import NotFoundError
 from app.domain.jobs import JobFilters
 from app.repositories import JobLogRepository, JobRepository
 from app.celery_app import celery_app
+
+logger = logging.getLogger(__name__)
 
 
 class JobService:
@@ -155,11 +158,45 @@ class JobService:
     def _enqueue(self, job: Job) -> None:
         """Dispatch job to Celery based on its type."""
         task_map = {
-            "run_commands": ("run_commands_job", lambda j: (j.id, j.target_summary_json["filters"], j.payload_json["commands"], j.payload_json.get("timeout"))),
-            "config_backup": ("config_backup_job", lambda j: (j.id, j.target_summary_json.get("filters", {}), j.payload_json.get("source_label", "manual"))),
-            "config_deploy_preview": ("config_deploy_preview_job", lambda j: (j.id, j.target_summary_json["filters"], j.payload_json["mode"], j.payload_json["snippet"])),
-            "config_deploy_commit": ("config_deploy_commit_job", lambda j: (j.id, j.target_summary_json["filters"], j.payload_json["mode"], j.payload_json["snippet"])),
-            "compliance_check": ("compliance_check_job", lambda j: (j.id, j.payload_json["policy_id"])),
+            "run_commands": (
+                "run_commands_job",
+                lambda j: (
+                    j.id,
+                    j.target_summary_json["filters"],
+                    j.payload_json["commands"],
+                    j.payload_json.get("timeout"),
+                ),
+            ),
+            "config_backup": (
+                "config_backup_job",
+                lambda j: (
+                    j.id,
+                    j.target_summary_json.get("filters", {}),
+                    j.payload_json.get("source_label", "manual"),
+                ),
+            ),
+            "config_deploy_preview": (
+                "config_deploy_preview_job",
+                lambda j: (
+                    j.id,
+                    j.target_summary_json["filters"],
+                    j.payload_json["mode"],
+                    j.payload_json["snippet"],
+                ),
+            ),
+            "config_deploy_commit": (
+                "config_deploy_commit_job",
+                lambda j: (
+                    j.id,
+                    j.target_summary_json["filters"],
+                    j.payload_json["mode"],
+                    j.payload_json["snippet"],
+                ),
+            ),
+            "compliance_check": (
+                "compliance_check_job",
+                lambda j: (j.id, j.payload_json["policy_id"]),
+            ),
         }
         entry = task_map.get(job.type)
         if not entry:
@@ -167,9 +204,8 @@ class JobService:
         task_name, args_fn = entry
         try:
             celery_app.send_task(task_name, args=args_fn(job))
-        except Exception:
-            # best-effort; job will remain queued
-            pass
+        except Exception as exc:
+            logger.warning("Failed to enqueue job %s: %s", job.id, exc)
 
     # ---------------- Admin (global) ----------------
     def list_jobs_admin(
