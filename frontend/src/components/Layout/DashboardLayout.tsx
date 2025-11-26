@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar'
@@ -11,6 +12,9 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb'
+import { CommandPalette } from '@/components/CommandPalette'
+import { DeviceTerminalDialog } from '@/features/devices/components/DeviceTerminalDialog'
+import type { Device } from '@/types/device'
 
 const routeLabels: Record<string, string> = {
   devices: 'Devices',
@@ -27,6 +31,7 @@ export default function DashboardLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const clearAuth = useAuthStore((s) => s.clearAuth)
+  const [terminalDevice, setTerminalDevice] = useState<Device | null>(null)
 
   const handleLogout = () => {
     clearAuth()
@@ -63,11 +68,26 @@ export default function DashboardLayout() {
               ))}
             </BreadcrumbList>
           </Breadcrumb>
+          <div className="ml-auto flex items-center gap-2">
+            <kbd className="hidden sm:inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+              <span className="text-xs">⌘</span>K
+            </kbd>
+          </div>
         </header>
         <main className="flex-1 overflow-auto p-6">
           <Outlet />
         </main>
       </SidebarInset>
+
+      {/* Global command palette */}
+      <CommandPalette onOpenTerminal={(device) => setTerminalDevice(device)} />
+
+      {/* Terminal dialog opened from command palette */}
+      <DeviceTerminalDialog
+        open={Boolean(terminalDevice)}
+        device={terminalDevice}
+        onClose={() => setTerminalDevice(null)}
+      />
     </SidebarProvider>
   )
 }
