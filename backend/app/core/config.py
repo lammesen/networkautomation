@@ -76,6 +76,7 @@ class Settings(BaseSettings):
                 if isinstance(parsed, list):
                     return parsed
             except Exception:
+                # If JSON parsing fails, treat as no valid origins; fallback to empty list.
                 pass
             return []
         return value
@@ -103,11 +104,19 @@ class Settings(BaseSettings):
     def require_encryption_key(cls, value: str | None) -> str:
         """Force callers to supply a valid ENCRYPTION_KEY; fail fast otherwise."""
         if not value:
-            raise ValueError("ENCRYPTION_KEY must be set to encrypt device credentials")
+            raise ValueError(
+                "ENCRYPTION_KEY must be set to encrypt device credentials.\n"
+                'Generate one with: python -c "from cryptography.fernet import Fernet; '
+                'print(Fernet.generate_key().decode())"'
+            )
         try:
             Fernet(value.encode())
         except Exception:
-            raise ValueError("ENCRYPTION_KEY must be a valid base64-encoded Fernet key")
+            raise ValueError(
+                "ENCRYPTION_KEY must be a valid base64-encoded Fernet key.\n"
+                'Generate one with: python -c "from cryptography.fernet import Fernet; '
+                'print(Fernet.generate_key().decode())"'
+            )
         return value
 
 

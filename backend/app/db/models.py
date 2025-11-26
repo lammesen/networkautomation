@@ -127,8 +127,10 @@ class Credential(Base):
         return decrypt_text(self._password) if self._password else None
 
     @password.setter
-    def password(self, value: Optional[str]) -> None:
-        self._password = encrypt_text(value) if value is not None else None
+    def password(self, value: str) -> None:
+        if value is None:
+            raise ValueError("Password cannot be None.")
+        self._password = encrypt_text(value)
 
     @property
     def enable_password(self) -> Optional[str]:
@@ -137,6 +139,16 @@ class Credential(Base):
     @enable_password.setter
     def enable_password(self, value: Optional[str]) -> None:
         self._enable_password = encrypt_text(value)
+
+    def to_dict(self) -> dict:
+        """Serialize Credential without exposing sensitive password fields."""
+        return {
+            "id": self.id,
+            "customer_id": self.customer_id,
+            "name": self.name,
+            "username": self.username,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
 
 
 class Device(Base):

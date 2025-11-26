@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from typing import Optional
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -12,15 +13,21 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 _fernet: Optional[Fernet] = None
+_fernet_lock = threading.Lock()
 
 
 def _get_fernet() -> Fernet:
     global _fernet
     if _fernet is None:
-        try:
-            _fernet = Fernet(settings.encryption_key)
-        except Exception as exc:  # pragma: no cover - fail-fast
-            raise RuntimeError("ENCRYPTION_KEY is invalid; expected base64 Fernet key") from exc
+        with _fernet_lock:
+            # Double-check locking pattern
+            if _fernet is None:
+                try:
+                    _fernet = Fernet(settings.encryption_key)
+                except Exception as exc:  # pragma: no cover - fail-fast
+                    raise RuntimeError(
+                        "ENCRYPTION_KEY is invalid; expected base64 Fernet key"
+                    ) from exc
     return _fernet
 
 
