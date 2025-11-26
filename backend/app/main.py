@@ -1,6 +1,7 @@
 """Main FastAPI application."""
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import (
@@ -14,89 +15,11 @@ from app.api import (
     users,
     websocket,
 )
+from app.api import errors
 from app.core import settings, setup_logging
 from app.core.logging import get_logger
-from app.db import Credential, Customer, Device, SessionLocal
-
-
-def _ensure_linux_lab_device() -> None:
-    """Guarantee the linux-device sample record exists (idempotent)."""
-    try:
-        db = SessionLocal()
-    except Exception as exc:  # pragma: no cover - best effort
-        get_logger(__name__).warning(
-            "Skipping linux sample device bootstrap (session error): %s", exc
-        )
-        return
-    try:
-        customer = (
-            db.query(Customer)
-            .filter(Customer.name == "Default Organization")
-            .first()
-        )
-        if not customer:
-            return
-
-        cred = (
-            db.query(Credential)
-            .filter(
-                Credential.customer_id == customer.id,
-                Credential.name == "linux-device-creds",
-            )
-            .first()
-        )
-        if not cred:
-            cred = Credential(
-                customer_id=customer.id,
-                name="linux-device-creds",
-                username="testuser",
-                password="testpassword",
-            )
-            db.add(cred)
-            db.commit()
-            db.refresh(cred)
-        else:
-            cred.username = "testuser"
-            cred.password = "testpassword"
-            db.commit()
-
-        device = (
-            db.query(Device)
-            .filter(
-                Device.customer_id == customer.id,
-                Device.hostname == "linux-lab-01",
-            )
-            .first()
-        )
-        if not device:
-            device = Device(
-                customer_id=customer.id,
-                hostname="linux-lab-01",
-                mgmt_ip="linux-device",
-                vendor="linux",
-                platform="linux",
-                role="lab",
-                site="docker",
-                credentials_ref=cred.id,
-                enabled=True,
-            )
-            db.add(device)
-        else:
-            device.mgmt_ip = "linux-device"
-            device.vendor = "linux"
-            device.platform = "linux"
-            device.credentials_ref = cred.id
-            device.enabled = True
-            device.role = device.role or "lab"
-            device.site = device.site or "docker"
-
-        db.commit()
-    except Exception as exc:  # pragma: no cover - best effort
-        get_logger(__name__).warning(
-            "Skipping linux sample device bootstrap (operation error): %s", exc
-        )
-    finally:
-        db.close()
+from app.db import SessionLocal, seed_default_data
+from app.domain.exceptions import DomainError
 
 # Setup logging
 setup_logging()
@@ -123,6 +46,7 @@ app.include_router(customers.router, prefix=settings.api_prefix)
 app.include_router(devices.router, prefix=settings.api_prefix)
 app.include_router(devices.cred_router, prefix=settings.api_prefix)
 app.include_router(jobs.router, prefix=settings.api_prefix)
+app.include_router(jobs.admin_router, prefix=settings.api_prefix)
 app.include_router(commands.router, prefix=settings.api_prefix)
 app.include_router(config.router, prefix=settings.api_prefix)
 app.include_router(compliance.router, prefix=settings.api_prefix)
@@ -130,8 +54,19 @@ app.include_router(websocket.router, prefix=settings.api_prefix)
 
 
 @app.on_event("startup")
-async def ensure_sample_devices() -> None:
-    _ensure_linux_lab_device()
+async def seed_defaults() -> None:
+    """Seed default data on startup; ignore failures but log them."""
+    try:
+        db = SessionLocal()
+    except Exception as exc:  # pragma: no cover - best effort
+        get_logger(__name__).warning("Skipping default seed (session error): %s", exc)
+        return
+    try:
+        seed_default_data(db)
+    except Exception as exc:  # pragma: no cover - best effort
+        get_logger(__name__).warning("Skipping default seed (operation error): %s", exc)
+    finally:
+        db.close()
 
 
 @app.get("/health")
@@ -148,3 +83,13 @@ async def root() -> dict:
         "version": settings.api_version,
         "docs": "/docs",
     }
+
+
+@app.exception_handler(DomainError)
+async def domain_exception_handler(request: Request, exc: DomainError):
+    """Translate domain errors to HTTP responses globally."""
+    http_exc = errors.to_http(exc)
+    return JSONResponse(
+        status_code=http_exc.status_code,
+        content={"detail": http_exc.detail},
+    )

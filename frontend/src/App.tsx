@@ -33,6 +33,7 @@ function App() {
             <Route index element={<Navigate to="/devices" replace />} />
             <Route path="devices" element={<DevicesPage />} />
             <Route path="jobs" element={<JobsPage />} />
+            <Route path="admin/jobs" element={<Navigate to="/jobs" replace />} />
             <Route path="commands" element={<CommandsPage />} />
             <Route path="compliance" element={<CompliancePage />} />
             <Route path="credentials" element={<CredentialsPage />} />

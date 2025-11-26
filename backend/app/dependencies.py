@@ -12,6 +12,8 @@ from app.core.auth import (
 from app.db import Customer, User, get_db
 from app.domain import TenantRequestContext
 from app.services import (
+    ComplianceService,
+    ConfigService,
     CredentialService,
     CustomerService,
     DeviceService,
@@ -70,3 +72,9 @@ def get_ssh_manager() -> SSHSessionManager:
     return get_ssh_session_manager()
 
 
+def get_config_service(session: Session = Depends(get_session)) -> ConfigService:
+    return ConfigService(session)
+
+
+def get_compliance_service(session: Session = Depends(get_session)) -> ComplianceService:
+    return ComplianceService(session)

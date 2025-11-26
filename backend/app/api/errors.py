@@ -7,6 +7,7 @@ from app.domain.exceptions import (
     DomainError,
     ForbiddenError,
     NotFoundError,
+    UnauthorizedError,
     ValidationError,
 )
 
@@ -20,6 +21,6 @@ def to_http(exc: DomainError) -> HTTPException:
         return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=exc.message)
     if isinstance(exc, ValidationError):
         return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.message)
+    if isinstance(exc, UnauthorizedError):
+        return HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=exc.message)
     return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=exc.message)
-
-

@@ -2,6 +2,14 @@ import { Device } from '../types'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
   Table,
   TableBody,
   TableCell,
@@ -9,15 +17,34 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import {
+  MoreHorizontal,
+  Pencil,
+  ScrollText,
+  Terminal,
+  Trash2,
+  RotateCcw,
+} from 'lucide-react'
 
 interface DeviceTableProps {
   devices: Device[]
   onEdit: (device: Device) => void
   onDelete: (device: Device) => void
   onOpenTerminal: (device: Device) => void
+  onConfigHistory: (device: Device) => void
+  onRecover: (device: Device) => void
+  currentUserRole: string | null
 }
 
-export function DeviceTable({ devices, onEdit, onDelete, onOpenTerminal }: DeviceTableProps) {
+export function DeviceTable({
+  devices,
+  onEdit,
+  onDelete,
+  onOpenTerminal,
+  onConfigHistory,
+  onRecover,
+  currentUserRole,
+}: DeviceTableProps) {
   return (
     <Table>
       <TableHeader>
@@ -30,7 +57,7 @@ export function DeviceTable({ devices, onEdit, onDelete, onOpenTerminal }: Devic
           <TableHead>Site</TableHead>
           <TableHead>Reachability</TableHead>
           <TableHead>Status</TableHead>
-          <TableHead>Actions</TableHead>
+          <TableHead className="text-right">Actions</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -63,25 +90,60 @@ export function DeviceTable({ devices, onEdit, onDelete, onOpenTerminal }: Devic
                 <Badge variant={device.enabled ? 'default' : 'destructive'}>
                   {device.enabled ? 'Enabled' : 'Disabled'}
                 </Badge>
+                {device.tags?.facts && (
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {device.tags.facts.model || ''} {device.tags.facts.os_version ? `• ${device.tags.facts.os_version}` : ''}
+                  </div>
+                )}
               </TableCell>
-              <TableCell>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => onEdit(device)}>
-                    Edit
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => onOpenTerminal(device)}
-                    disabled={!device.enabled}
-                    title={device.enabled ? 'Open interactive terminal' : 'Enable the device before opening a terminal'}
-                  >
-                    Terminal
-                  </Button>
-                  <Button variant="destructive" size="sm" onClick={() => onDelete(device)}>
-                    Delete
-                  </Button>
-                </div>
+              <TableCell className="text-right">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <MoreHorizontal className="h-4 w-4" />
+                      <span className="sr-only">Open device actions</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                    <DropdownMenuItem onSelect={() => onEdit(device)} disabled={!device.enabled}>
+                      <Pencil className="mr-2 h-4 w-4" />
+                      Edit details
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => onOpenTerminal(device)}
+                      disabled={!device.enabled}
+                    >
+                      <Terminal className="mr-2 h-4 w-4" />
+                      Open terminal
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => onConfigHistory(device)}
+                      disabled={!device.enabled}
+                    >
+                      <ScrollText className="mr-2 h-4 w-4" />
+                      View configs
+                    </DropdownMenuItem>
+                    {currentUserRole === 'admin' && !device.enabled && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onSelect={() => onRecover(device)}>
+                          <RotateCcw className="mr-2 h-4 w-4" />
+                          Recover device
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onSelect={() => onDelete(device)}
+                      disabled={!device.enabled}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </TableCell>
             </TableRow>
           ))
@@ -96,5 +158,3 @@ export function DeviceTable({ devices, onEdit, onDelete, onOpenTerminal }: Devic
     </Table>
   )
 }
-
-

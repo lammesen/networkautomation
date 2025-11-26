@@ -39,6 +39,27 @@ class JobRepository(SQLAlchemyRepository[Job]):
             query = query.filter(Job.status == status)
         return query.offset(skip).limit(min(limit, 1000)).all()
 
+    def list_all(
+        self,
+        *,
+        job_type: Optional[str] = None,
+        status: Optional[str] = None,
+        customer_id: Optional[int] = None,
+        user_id: Optional[int] = None,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> Sequence[Job]:
+        query = self.session.query(Job).order_by(Job.requested_at.desc())
+        if job_type:
+            query = query.filter(Job.type == job_type)
+        if status:
+            query = query.filter(Job.status == status)
+        if customer_id:
+            query = query.filter(Job.customer_id == customer_id)
+        if user_id:
+            query = query.filter(Job.user_id == user_id)
+        return query.offset(skip).limit(min(limit, 1000)).all()
+
 
 class JobLogRepository(SQLAlchemyRepository[JobLog]):
     """Encapsulates job log queries."""
@@ -54,4 +75,3 @@ class JobLogRepository(SQLAlchemyRepository[JobLog]):
             .limit(limit)
             .all()
         )
-

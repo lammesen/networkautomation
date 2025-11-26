@@ -4,6 +4,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { toast } from 'sonner'
 import { Device } from '../types'
 import { useAuthStore } from '@/store/authStore'
@@ -58,7 +59,7 @@ export function DeviceTerminalDialog({ open, device, onClose }: DeviceTerminalDi
   const [status, setStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
-  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const bottomRef = useRef<HTMLDivElement | null>(null)
 
   const wsUrl = useMemo(() => {
     if (!device || !token) return null
@@ -71,11 +72,10 @@ export function DeviceTerminalDialog({ open, device, onClose }: DeviceTerminalDi
   }, [device, token, activeCustomerId])
 
   useEffect(() => {
-    setTimeout(() => {
-      if (scrollRef.current) {
-        scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-      }
+    const id = setTimeout(() => {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
     }, 10)
+    return () => clearTimeout(id)
   }, [messages])
 
   useEffect(() => {
@@ -103,8 +103,8 @@ export function DeviceTerminalDialog({ open, device, onClose }: DeviceTerminalDi
     wsRef.current = ws
 
     ws.onopen = () => {
-      setStatus('connected')
-      addMessage('system', 'Connection established. Type commands below.')
+      // Wait for server "connected" event before marking connected
+      setStatus('connecting')
     }
 
     ws.onclose = (evt) => {
@@ -153,7 +153,8 @@ export function DeviceTerminalDialog({ open, device, onClose }: DeviceTerminalDi
 
   const handleServerEvent = (payload: SSHWebsocketEvent) => {
     if (payload.type === 'connected') {
-      addMessage('system', `Connected to ${payload.device_name} (${payload.prompt?.trim() || 'session'})`)
+      addMessage('system', `Connected to ${payload.device_name}`)
+      setStatus('connected')
       return
     }
 
@@ -242,29 +243,37 @@ export function DeviceTerminalDialog({ open, device, onClose }: DeviceTerminalDi
           {error ? <span className="text-destructive text-sm">{error}</span> : null}
         </div>
 
-        <ScrollArea className="h-72 rounded-md border p-3" ref={scrollRef as any}>
-          <div className="space-y-2">
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`text-sm whitespace-pre-wrap ${
-                  message.role === 'user'
-                    ? 'text-blue-600'
-                    : message.role === 'device'
-                      ? 'text-foreground'
-                      : message.role === 'error'
-                        ? 'text-destructive'
-                        : 'text-muted-foreground'
-                }`}
-              >
-                {message.role === 'user' ? `› ${message.text}` : message.text}
+        <Card className="bg-slate-900 text-slate-50 border-slate-700">
+          <CardHeader className="p-3 pb-0">
+            <CardTitle className="text-sm text-slate-200">Session Output</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <ScrollArea className="h-72">
+              <div className="space-y-2 p-3 font-mono text-xs leading-5">
+                {messages.map((message) => (
+                  <div
+                    key={message.id}
+                    className={
+                      message.role === 'user'
+                        ? 'text-sky-200'
+                        : message.role === 'device'
+                          ? 'text-slate-50'
+                          : message.role === 'error'
+                            ? 'text-rose-300'
+                            : 'text-slate-400'
+                    }
+                  >
+                    {message.role === 'user' ? `› ${message.text}` : message.text}
+                  </div>
+                ))}
+                {messages.length === 0 ? (
+                  <div className="text-slate-400">Output will appear here once the session starts.</div>
+                ) : null}
+                <div ref={bottomRef} />
               </div>
-            ))}
-            {messages.length === 0 ? (
-              <div className="text-muted-foreground text-sm">Output will appear here once the session starts.</div>
-            ) : null}
-          </div>
-        </ScrollArea>
+            </ScrollArea>
+          </CardContent>
+        </Card>
 
         <form onSubmit={handleSubmit} className="flex gap-2">
           <Input
@@ -282,4 +291,3 @@ export function DeviceTerminalDialog({ open, device, onClose }: DeviceTerminalDi
     </Dialog>
   )
 }
-

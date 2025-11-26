@@ -24,6 +24,7 @@ class JobResponse(JobBase):
 
     id: int
     status: str
+    scheduled_for: Optional[datetime] = None
     user_id: int
     requested_at: datetime
     started_at: Optional[datetime] = None
@@ -53,6 +54,10 @@ class CommandRunRequest(BaseModel):
     targets: dict = Field(..., description="Device filters (site, role, vendor, device_ids)")
     commands: list[str] = Field(..., min_length=1, description="Commands to execute")
     timeout_sec: Optional[int] = Field(default=30, description="Command timeout in seconds")
+    execute_at: Optional[datetime] = Field(
+        default=None,
+        description="UTC datetime to schedule execution; run immediately if absent or past",
+    )
 
 
 class ConfigBackupRequest(BaseModel):

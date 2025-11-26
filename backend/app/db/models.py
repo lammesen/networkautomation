@@ -17,6 +17,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+from app.core.crypto import decrypt_text, encrypt_text
 
 class Base(DeclarativeBase):
     """Base class for all models."""
@@ -112,13 +113,33 @@ class Credential(Base):
     customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("customers.id"), nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     username: Mapped[str] = mapped_column(String(100), nullable=False)
-    password: Mapped[str] = mapped_column(String(255), nullable=False)  # Should be encrypted
-    enable_password: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    _password: Mapped[str] = mapped_column("password", String(255), nullable=False)
+    _enable_password: Mapped[Optional[str]] = mapped_column(
+        "enable_password",
+        String(255),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Relationships
     devices: Mapped[list["Device"]] = relationship("Device", back_populates="credential")
     customer: Mapped["Customer"] = relationship("Customer", back_populates="credentials")
+
+    @property
+    def password(self) -> str:
+        return decrypt_text(self._password)
+
+    @password.setter
+    def password(self, value: str) -> None:
+        self._password = encrypt_text(value) or ""
+
+    @property
+    def enable_password(self) -> Optional[str]:
+        return decrypt_text(self._enable_password)
+
+    @enable_password.setter
+    def enable_password(self, value: Optional[str]) -> None:
+        self._enable_password = encrypt_text(value)
 
 
 class Device(Base):
@@ -181,11 +202,12 @@ class Job(Base):
     )  # run_commands, config_backup, config_deploy, compliance
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="queued"
-    )  # queued, running, success, partial, failed
+    )  # queued, scheduled, running, success, partial, failed
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
     requested_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )
+    scheduled_for: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     target_summary_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)

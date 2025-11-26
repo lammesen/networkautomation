@@ -1,10 +1,17 @@
 """Test configuration and fixtures."""
 
+import os
+
+from cryptography.fernet import Fernet
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
+
+# Ensure encryption key exists before importing app settings
+os.environ.setdefault("ENCRYPTION_KEY", Fernet.generate_key().decode())
+os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 
 from app.main import app
 from app.db import Base, get_db
@@ -38,13 +45,13 @@ def db_session():
 @pytest.fixture
 def client(db_session):
     """Create a test client with overridden database dependency."""
-    
+
     def override_get_db():
         try:
             yield db_session
         finally:
             pass
-    
+
     app.dependency_overrides[get_db] = override_get_db
     with TestClient(app) as test_client:
         yield test_client
@@ -135,3 +142,80 @@ def auth_headers(client, admin_user, test_customer):
         "Authorization": f"Bearer {token}",
         "X-Customer-ID": str(test_customer.id),
     }
+
+
+@pytest.fixture
+def operator_headers(client, operator_user, test_customer):
+    """Get authentication headers for operator user."""
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"username": "operator", "password": "operator123"},
+    )
+    token = response.json()["access_token"]
+    return {
+        "Authorization": f"Bearer {token}",
+        "X-Customer-ID": str(test_customer.id),
+    }
+
+
+@pytest.fixture
+def viewer_headers(client, viewer_user, test_customer):
+    """Get authentication headers for viewer user."""
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"username": "viewer", "password": "viewer123"},
+    )
+    token = response.json()["access_token"]
+    return {
+        "Authorization": f"Bearer {token}",
+        "X-Customer-ID": str(test_customer.id),
+    }
+
+
+@pytest.fixture
+def test_device(db_session, test_customer, test_credential):
+    """Create a test device."""
+    from app.db.models import Device
+
+    device = Device(
+        hostname="test-router-1",
+        mgmt_ip="192.168.1.1",
+        vendor="cisco",
+        platform="ios",
+        credentials_ref=test_credential.id,
+        customer_id=test_customer.id,
+        enabled=True,
+    )
+    db_session.add(device)
+    db_session.commit()
+    db_session.refresh(device)
+    return device
+
+
+@pytest.fixture
+def test_job(db_session, admin_user, test_customer):
+    """Create a test job."""
+    from app.db.models import Job
+
+    job = Job(
+        type="run_commands",
+        status="queued",
+        user_id=admin_user.id,
+        customer_id=test_customer.id,
+        target_summary_json={"devices": []},
+        payload_json={"commands": ["show version"]},
+    )
+    db_session.add(job)
+    db_session.commit()
+    db_session.refresh(job)
+    return job
+
+
+@pytest.fixture
+def second_customer(db_session):
+    """Create a second customer for multi-tenancy tests."""
+    customer = Customer(name="second_customer")
+    db_session.add(customer)
+    db_session.commit()
+    db_session.refresh(customer)
+    return customer

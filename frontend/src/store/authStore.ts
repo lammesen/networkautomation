@@ -46,7 +46,6 @@ const saveToStorage = (state: AuthState) => {
 const initialState = loadFromStorage()
 
 export const useAuthStore = create<AuthState>((set) => ({
-// ... (keep rest of file)
   token: initialState.token || null,
   refreshToken: initialState.refreshToken || null,
   user: initialState.user || null,

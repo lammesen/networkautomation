@@ -7,8 +7,9 @@ from typing import Optional, Sequence
 from sqlalchemy.orm import Session
 
 from app.db import User
-from app.domain.exceptions import ForbiddenError, NotFoundError
+from app.domain.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.repositories.user_repository import UserRepository
+from app.core.auth import get_password_hash
 
 
 class UserService:
@@ -23,6 +24,22 @@ class UserService:
         if active is not None:
             query = query.filter(User.is_active == active)
         return query.order_by(User.username.asc()).all()
+
+    def create_user(self, payload) -> User:
+        """Register a new user with default viewer role, inactive by default."""
+        if self.users.get_by_username(payload.username):
+            raise ConflictError("Username already registered")
+
+        user = User(
+            username=payload.username,
+            hashed_password=get_password_hash(payload.password),
+            role="viewer",
+            is_active=False,
+        )
+        self.session.add(user)
+        self.session.commit()
+        self.session.refresh(user)
+        return user
 
     def update_user(self, user_id: int, payload, acting_admin: User) -> User:
         user = self.users.get_by_id(user_id)
@@ -40,5 +57,4 @@ class UserService:
         self.session.commit()
         self.session.refresh(user)
         return user
-
 

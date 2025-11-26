@@ -11,6 +11,7 @@ from nornir.core.inventory import (
     ConnectionOptions,
 )
 from app.db import SessionLocal, Device
+from app.core.crypto import decrypt_text
 
 
 def get_nornir_inventory() -> Inventory:
@@ -18,7 +19,7 @@ def get_nornir_inventory() -> Inventory:
     db = SessionLocal()
     
     try:
-        devices = db.query(Device).filter(Device.enabled == True).all()
+        devices = db.query(Device).filter(Device.enabled.is_(True)).all()
         
         hosts = {}
         groups: Dict[str, Group] = {}
@@ -32,13 +33,17 @@ def get_nornir_inventory() -> Inventory:
                 ("cisco", "nxos"): ("nxos", "cisco_nxos"),
                 ("arista", "eos"): ("eos", "arista_eos"),
                 ("juniper", "junos"): ("junos", "juniper_junos"),
+                ("linux", "linux"): ("linux", "linux"),
             }
             
             key = (device.vendor.lower(), device.platform.lower())
             napalm_driver, netmiko_type = driver_map.get(key, ("ios", "cisco_ios"))
             
-            # Get credentials
+            # Get credentials (decrypt at the edge)
             cred = device.credential
+            password = decrypt_text(cred.password)
+            enable_password = decrypt_text(cred.enable_password)
+            secret_password = enable_password or password
             
             # Create host
             host = Host(
@@ -58,19 +63,19 @@ def get_nornir_inventory() -> Inventory:
                     "napalm": ConnectionOptions(
                         extras={
                             "optional_args": {
-                                "secret": cred.enable_password or cred.password,
+                                "secret": secret_password,
                             }
                         }
                     ),
                     "netmiko": ConnectionOptions(
                         extras={
                             "device_type": netmiko_type,
-                            "secret": cred.enable_password or cred.password,
+                            "secret": secret_password,
                         }
                     ),
                 },
                 username=cred.username,
-                password=cred.password,
+                password=password,
             )
             
             hosts[device.hostname] = host
@@ -97,7 +102,7 @@ def filter_devices_from_db(filters: Dict[str, Any]) -> list[int]:
     db = SessionLocal()
     
     try:
-        query = db.query(Device).filter(Device.enabled == True)
+        query = db.query(Device).filter(Device.enabled.is_(True))
         
         if "site" in filters:
             query = query.filter(Device.site == filters["site"])

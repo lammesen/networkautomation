@@ -19,7 +19,9 @@ class UserRepository(SQLAlchemyRepository[User]):
     def get_by_id(self, user_id: int) -> Optional[User]:
         return self.session.query(User).filter(User.id == user_id).first()
 
+    def get_by_username(self, username: str) -> Optional[User]:
+        return self.session.query(User).filter(User.username == username).first()
+
     def list_all(self) -> Sequence[User]:
         return self.session.query(User).order_by(User.username.asc()).all()
-
 

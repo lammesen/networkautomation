@@ -29,3 +29,5 @@ class ValidationError(DomainError):
     """Raised when input fails validation rules."""
 
 
+class UnauthorizedError(DomainError):
+    """Raised when authentication credentials are invalid."""

@@ -282,6 +282,8 @@ npm run build
 3. **Credential Storage**: Consider integrating HashiCorp Vault for credential management
 4. **Network Security**: Restrict access to management network
 5. **Regular Updates**: Keep dependencies updated
+6. **Encrypt Device Secrets**: Set `ENCRYPTION_KEY` (Fernet) in all environments; the API refuses to start without it.
+7. **Production Hardening**: When `ENVIRONMENT=production`, supply a non-default `DATABASE_URL` and explicit CORS origins (wildcards are rejected).
 
 ## Architecture
 

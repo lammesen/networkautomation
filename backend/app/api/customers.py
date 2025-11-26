@@ -2,20 +2,14 @@
 
 from fastapi import APIRouter, Depends, status
 
-from app.api import errors
 from app.core.auth import get_current_user
 from app.db import User
 from app.dependencies import get_admin_user, get_customer_service
-from app.domain.exceptions import DomainError
 from app.schemas.customer import CustomerCreate, CustomerResponse
 from app.schemas.customer_ip_range import CustomerIPRangeCreate, CustomerIPRangeResponse
 from app.services.customer_service import CustomerService
 
 router = APIRouter(prefix="/customers", tags=["customers"])
-
-
-def _handle_error(exc: DomainError):
-    raise errors.to_http(exc)
 
 
 @router.post("", response_model=CustomerResponse, status_code=status.HTTP_201_CREATED)
@@ -25,11 +19,8 @@ def create_customer(
     _: object = Depends(get_admin_user),
 ) -> CustomerResponse:
     """Create a new customer (admin only)."""
-    try:
-        customer = service.create_customer(payload)
-        return CustomerResponse.model_validate(customer)
-    except DomainError as exc:
-        _handle_error(exc)
+    customer = service.create_customer(payload)
+    return CustomerResponse.model_validate(customer)
 
 
 @router.get("", response_model=list[CustomerResponse])
@@ -49,11 +40,8 @@ def get_customer(
     current_user: User = Depends(get_current_user),
 ) -> CustomerResponse:
     """Get customer details."""
-    try:
-        customer = service.get_customer(customer_id, current_user)
-        return CustomerResponse.model_validate(customer)
-    except DomainError as exc:
-        _handle_error(exc)
+    customer = service.get_customer(customer_id, current_user)
+    return CustomerResponse.model_validate(customer)
 
 
 @router.post("/{customer_id}/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -64,10 +52,7 @@ def add_user_to_customer(
     _: object = Depends(get_admin_user),
 ) -> None:
     """Assign a user to a customer (admin only)."""
-    try:
-        service.add_user_to_customer(customer_id, user_id)
-    except DomainError as exc:
-        _handle_error(exc)
+    service.add_user_to_customer(customer_id, user_id)
 
 
 @router.delete("/{customer_id}/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -78,10 +63,7 @@ def remove_user_from_customer(
     _: object = Depends(get_admin_user),
 ) -> None:
     """Remove a user from a customer (admin only)."""
-    try:
-        service.remove_user_from_customer(customer_id, user_id)
-    except DomainError as exc:
-        _handle_error(exc)
+    service.remove_user_from_customer(customer_id, user_id)
 
 
 @router.get("/{customer_id}/ranges", response_model=list[CustomerIPRangeResponse])
@@ -91,11 +73,8 @@ def list_customer_ip_ranges(
     current_user: User = Depends(get_current_user),
 ) -> list[CustomerIPRangeResponse]:
     """List IP ranges for a customer."""
-    try:
-        ranges = service.list_ip_ranges(customer_id, current_user)
-        return [CustomerIPRangeResponse.model_validate(r) for r in ranges]
-    except DomainError as exc:
-        _handle_error(exc)
+    ranges = service.list_ip_ranges(customer_id, current_user)
+    return [CustomerIPRangeResponse.model_validate(r) for r in ranges]
 
 
 @router.post(
@@ -110,11 +89,8 @@ def create_customer_ip_range(
     _: object = Depends(get_admin_user),
 ) -> CustomerIPRangeResponse:
     """Add an IP range to a customer (admin only)."""
-    try:
-        ip_range = service.create_ip_range(customer_id, payload)
-        return CustomerIPRangeResponse.model_validate(ip_range)
-    except DomainError as exc:
-        _handle_error(exc)
+    ip_range = service.create_ip_range(customer_id, payload)
+    return CustomerIPRangeResponse.model_validate(ip_range)
 
 
 @router.delete("/{customer_id}/ranges/{range_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -125,7 +101,4 @@ def delete_customer_ip_range(
     _: object = Depends(get_admin_user),
 ) -> None:
     """Delete an IP range (admin only)."""
-    try:
-        service.delete_ip_range(customer_id, range_id)
-    except DomainError as exc:
-        _handle_error(exc)
+    service.delete_ip_range(customer_id, range_id)
