@@ -88,18 +88,31 @@ async def job_logs_websocket(
 
     Query parameter 'token' should contain the JWT access token.
     """
-    # Require and validate token
+    # Require and validate token and tenancy
     try:
-        decode_token(token)
+        token_data = decode_token(token)
+        user = db.query(User).filter(User.username == token_data.username).first()
     except Exception:
         await websocket.close(code=1008, reason="Invalid token")
         return
 
-    # Verify job exists
+    if not user:
+        await websocket.close(code=1008, reason="User not found")
+        return
+    if not user.is_active:
+        await websocket.close(code=1008, reason="Inactive user")
+        return
+
+    # Verify job exists and enforce tenancy/role
     job = db.query(Job).filter(Job.id == job_id).first()
     if not job:
         await websocket.close(code=1008, reason="Job not found")
         return
+
+    if user.role != "admin":
+        if not any(customer.id == job.customer_id for customer in user.customers):
+            await websocket.close(code=1008, reason="Access to this job denied")
+            return
 
     await manager.connect(websocket, job_id)
 

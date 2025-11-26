@@ -321,3 +321,54 @@ class ComplianceResult(Base):
     # Relationships
     policy: Mapped["CompliancePolicy"] = relationship("CompliancePolicy", back_populates="results")
     device: Mapped["Device"] = relationship("Device", back_populates="compliance_results")
+
+
+class TopologyLink(Base):
+    """Network topology link discovered via CDP/LLDP."""
+
+    __tablename__ = "topology_links"
+    __table_args__ = (
+        Index("ix_topology_links_local_device_id", "local_device_id"),
+        Index("ix_topology_links_remote_device_id", "remote_device_id"),
+        Index("ix_topology_links_customer_id", "customer_id"),
+        UniqueConstraint(
+            "customer_id",
+            "local_device_id",
+            "local_interface",
+            "remote_device_id",
+            "remote_interface",
+            name="uix_topology_link",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("customers.id"), nullable=False)
+
+    # Local side (our device)
+    local_device_id: Mapped[int] = mapped_column(Integer, ForeignKey("devices.id"), nullable=False)
+    local_interface: Mapped[str] = mapped_column(String(100), nullable=False)
+
+    # Remote side (neighbor)
+    remote_device_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("devices.id"), nullable=True
+    )  # May be null if neighbor not in inventory
+    remote_hostname: Mapped[str] = mapped_column(String(255), nullable=False)
+    remote_interface: Mapped[str] = mapped_column(String(100), nullable=False)
+    remote_ip: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)
+    remote_platform: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+
+    # Discovery metadata
+    protocol: Mapped[str] = mapped_column(String(10), nullable=False)  # cdp, lldp
+    discovered_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    job_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("jobs.id"), nullable=True)
+
+    # Relationships
+    local_device: Mapped["Device"] = relationship(
+        "Device", foreign_keys=[local_device_id], backref="outgoing_links"
+    )
+    remote_device: Mapped[Optional["Device"]] = relationship(
+        "Device", foreign_keys=[remote_device_id], backref="incoming_links"
+    )
+    customer: Mapped["Customer"] = relationship("Customer")

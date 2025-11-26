@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -8,9 +8,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { ChevronDown, Plus, Upload, Server, Wifi, WifiOff, Building2, Loader2 } from 'lucide-react'
+import { ChevronDown, Plus, Upload, Server, Wifi, WifiOff, Building2, X, Terminal, Trash2 } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Progress } from '@/components/ui/progress'
 import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/page-header'
 import { apiClient } from '@/api/client'
@@ -22,7 +21,7 @@ import { DeviceImportDialog } from './DeviceImportDialog'
 import { DeviceDeleteDialog } from './DeviceDeleteDialog'
 import { DeviceTerminalDialog } from './DeviceTerminalDialog'
 import { ConfigHistoryDialog } from './ConfigHistoryDialog'
-import { useAuthStore } from '@/store/authStore'
+import { useAuthStore, selectCanModify } from '@/store/authStore'
 
 const initialForm: DeviceFormData = {
   hostname: '',
@@ -51,13 +50,16 @@ export function DevicesView() {
     delete: false,
   })
   const [deviceToDelete, setDeviceToDelete] = useState<Device | null>(null)
+  const [deviceToEdit, setDeviceToEdit] = useState<Device | null>(null)
   const [terminalDevice, setTerminalDevice] = useState<Device | null>(null)
   const [historyDevice, setHistoryDevice] = useState<Device | null>(null)
+  const [selectedDeviceIds, setSelectedDeviceIds] = useState<Set<number>>(new Set())
   const currentUser = useAuthStore((s) => s.user)
+  const canModify = useAuthStore(selectCanModify)
 
   const queryClient = useQueryClient()
 
-  const { data, isLoading, isFetching, error: queryError } = useQuery({
+  const { data, isLoading, error: queryError } = useQuery({
     queryKey: ['devices', filters.showDisabled],
     queryFn: () =>
       apiClient.getDevices({
@@ -81,26 +83,6 @@ export function DevicesView() {
     }
     return map
   }, [credentials])
-
-  // Animated progress for refresh indicator
-  const [refreshProgress, setRefreshProgress] = useState(0)
-  useEffect(() => {
-    if (isFetching) {
-      setRefreshProgress(0)
-      const interval = setInterval(() => {
-        setRefreshProgress((prev) => {
-          if (prev >= 90) return prev // Cap at 90% until complete
-          return prev + Math.random() * 15
-        })
-      }, 150)
-      return () => clearInterval(interval)
-    } else {
-      // Complete the progress bar when done
-      setRefreshProgress(100)
-      const timeout = setTimeout(() => setRefreshProgress(0), 300)
-      return () => clearTimeout(timeout)
-    }
-  }, [isFetching])
 
   // Compute stats
   const stats = useMemo(() => {
@@ -168,6 +150,22 @@ export function DevicesView() {
     },
   })
 
+  const toggleEnabledMutation = useMutation({
+    mutationFn: ({ id, enabled }: { id: number; enabled: boolean }) =>
+      apiClient.updateDevice(id, { enabled }),
+    onSuccess: (_, { enabled }) => {
+      queryClient.invalidateQueries({ queryKey: ['devices'] })
+      if (deviceToEdit) {
+        setDeviceToEdit({ ...deviceToEdit, enabled })
+      }
+      toast.success(enabled ? 'Device enabled' : 'Device disabled')
+    },
+    onError: (err: Error & { message?: string }) => {
+      const message = err.message || 'Failed to update device'
+      toast.error(message)
+    },
+  })
+
   const recoverDeviceMutation = useMutation({
     mutationFn: (device: Device) =>
       apiClient.updateDevice(device.id, {
@@ -204,6 +202,7 @@ export function DevicesView() {
   }
 
   const openEditDialog = (device: Device) => {
+    setDeviceToEdit(device)
     setFormData({
       id: device.id,
       hostname: device.hostname,
@@ -324,7 +323,7 @@ export function DevicesView() {
         actions={
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button className="gap-2">
+              <Button className="gap-2" disabled={!canModify} title={!canModify ? 'Viewers cannot add devices' : undefined}>
                 <Plus className="h-4 w-4" />
                 Add Device
                 <ChevronDown className="h-4 w-4" />
@@ -409,27 +408,9 @@ export function DevicesView() {
       {/* Filters */}
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-base">Filter Devices</CardTitle>
-              <CardDescription>Search and filter your device inventory</CardDescription>
-            </div>
-            <div className="flex items-center gap-3 text-sm text-muted-foreground">
-              {isFetching || refreshProgress > 0 ? (
-                <>
-                  <Loader2 className="h-4 w-4 text-primary animate-spin" />
-                  <div className="flex flex-col gap-1">
-                    <span className="text-xs font-medium">Refreshing...</span>
-                    <Progress
-                      value={refreshProgress}
-                      className="h-1.5 w-28 transition-all duration-150"
-                    />
-                  </div>
-                </>
-              ) : (
-                <span className="text-xs">Auto-refresh: 5s</span>
-              )}
-            </div>
+          <div>
+            <CardTitle className="text-base">Filter Devices</CardTitle>
+            <CardDescription>Search and filter your device inventory</CardDescription>
           </div>
         </CardHeader>
         <CardContent className="pt-0">
@@ -463,12 +444,74 @@ export function DevicesView() {
                 Showing {filteredDevices.length} of {totalDevices} devices
               </CardDescription>
             </div>
+            <div className="hidden sm:flex items-center gap-1 text-xs text-muted-foreground">
+              <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">j</kbd>
+              <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">k</kbd>
+              <span>navigate</span>
+              <span className="mx-1">|</span>
+              <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">Enter</kbd>
+              <span>edit</span>
+              <span className="mx-1">|</span>
+              <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">t</kbd>
+              <span>terminal</span>
+              <span className="mx-1">|</span>
+              <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">f</kbd>
+              <span>favorite</span>
+            </div>
           </div>
         </CardHeader>
+        {selectedDeviceIds.size > 0 && (
+          <div className="border-b bg-muted/30 px-4 py-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm">
+                <span className="font-medium">{selectedDeviceIds.size} device{selectedDeviceIds.size !== 1 ? 's' : ''} selected</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    // Open terminal for first selected device
+                    const device = filteredDevices.find((d) => selectedDeviceIds.has(d.id))
+                    if (device) setTerminalDevice(device)
+                  }}
+                  disabled={selectedDeviceIds.size !== 1 || !canModify}
+                  title={!canModify ? 'Viewers cannot open terminal' : undefined}
+                >
+                  <Terminal className="h-4 w-4 mr-1" />
+                  Terminal
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => {
+                    // For now just clear selection - could implement bulk delete
+                    toast.info('Bulk delete coming soon')
+                  }}
+                  disabled={!canModify}
+                  title={!canModify ? 'Viewers cannot delete devices' : undefined}
+                >
+                  <Trash2 className="h-4 w-4 mr-1" />
+                  Delete
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setSelectedDeviceIds(new Set())}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
         <CardContent className="p-0">
           <DeviceTable
             devices={filteredDevices}
             credentialMap={credentialMap}
+            selectedIds={selectedDeviceIds}
+            onSelectionChange={setSelectedDeviceIds}
             onEdit={openEditDialog}
             onDelete={openDeleteDialog}
             onOpenTerminal={(device) => setTerminalDevice(device)}
@@ -481,9 +524,7 @@ export function DevicesView() {
 
       <DeviceFormDialog
         open={dialogState.add}
-        title="Add New Device"
-        description="Add a new network device to your inventory."
-        submitLabel="Create Device"
+        mode="create"
         formData={formData}
         credentials={credentials}
         isLoading={createDeviceMutation.isPending}
@@ -498,18 +539,25 @@ export function DevicesView() {
 
       <DeviceFormDialog
         open={dialogState.edit}
-        title="Edit Device"
-        description="Update device configuration and settings."
-        submitLabel="Save Changes"
+        mode="edit"
         formData={formData}
+        device={deviceToEdit}
         credentials={credentials}
         isLoading={updateDeviceMutation.isPending}
         error={error}
-        onClose={() => setDialogState((state) => ({ ...state, edit: false }))}
+        onClose={() => {
+          setDialogState((state) => ({ ...state, edit: false }))
+          setDeviceToEdit(null)
+        }}
         onChange={(values) => setFormData((prev) => ({ ...prev, ...values }))}
         onSubmit={(payload) => {
           setError('')
           updateDeviceMutation.mutate(payload)
+        }}
+        onToggleEnabled={(enabled) => {
+          if (deviceToEdit) {
+            toggleEnabledMutation.mutate({ id: deviceToEdit.id, enabled })
+          }
         }}
       />
 

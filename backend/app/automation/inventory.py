@@ -4,17 +4,19 @@ Note: Credential rotation should trigger inventory rebuild. Decrypted credential
 are kept in memory only for the duration of inventory construction.
 """
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
+
 from nornir.core.inventory import (
-    Inventory,
-    Groups,
-    Hosts,
-    Host,
-    Group,
-    Defaults,
     ConnectionOptions,
+    Defaults,
+    Group,
+    Groups,
+    Host,
+    Hosts,
+    Inventory,
 )
-from app.db import SessionLocal, Device
+
+from app.db import Device, SessionLocal
 
 
 def get_nornir_inventory() -> Inventory:
@@ -100,12 +102,15 @@ def get_nornir_inventory() -> Inventory:
         db.close()
 
 
-def filter_devices_from_db(filters: Dict[str, Any]) -> list[int]:
+def filter_devices_from_db(filters: Dict[str, Any], customer_id: Optional[int] = None) -> list[int]:
     """Filter devices based on criteria and return device IDs."""
     db = SessionLocal()
 
     try:
         query = db.query(Device).filter(Device.enabled.is_(True))
+
+        if customer_id is not None:
+            query = query.filter(Device.customer_id == customer_id)
 
         if "site" in filters:
             query = query.filter(Device.site == filters["site"])

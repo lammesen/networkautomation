@@ -1,5 +1,6 @@
 """Compliance API endpoints."""
 
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, status
@@ -15,11 +16,13 @@ from app.dependencies import (
 )
 from app.domain.context import TenantRequestContext
 from app.schemas.compliance import (
+    ComplianceOverviewResponse,
     ComplianceResultResponse,
     DeviceComplianceSummary,
     PolicyCreate,
     PolicyListResponse,
     PolicyResponse,
+    PolicyStatsResponse,
     PolicyUpdate,
     RunComplianceRequest,
 )
@@ -138,6 +141,8 @@ def list_compliance_results(
     status_filter: Optional[str] = Query(None, alias="status"),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
+    start: Optional[datetime] = Query(None, description="Start timestamp (UTC)"),
+    end: Optional[datetime] = Query(None, description="End timestamp (UTC)"),
     service: ComplianceService = Depends(get_compliance_service),
     context: TenantRequestContext = Depends(get_tenant_context),
 ) -> list[ComplianceResultResponse]:
@@ -149,8 +154,40 @@ def list_compliance_results(
         status_filter=status_filter,
         skip=skip,
         limit=limit,
+        start_ts=start,
+        end_ts=end,
     )
     return [ComplianceResultResponse.model_validate(r) for r in results]
+
+
+@router.get("/overview", response_model=ComplianceOverviewResponse)
+def compliance_overview(
+    recent_limit: int = Query(20, ge=1, le=200),
+    service: ComplianceService = Depends(get_compliance_service),
+    context: TenantRequestContext = Depends(get_tenant_context),
+) -> ComplianceOverviewResponse:
+    """Return aggregated compliance stats and recent results for dashboards."""
+    overview = service.get_overview(context, recent_limit=recent_limit)
+    return ComplianceOverviewResponse(
+        policies=[PolicyStatsResponse.model_validate(p) for p in overview["policies"]],
+        recent_results=[
+            ComplianceResultResponse.model_validate(r) for r in overview["recent_results"]
+        ],
+        latest_by_policy=[
+            ComplianceResultResponse.model_validate(r) for r in overview["latest_by_policy"]
+        ],
+    )
+
+
+@router.get("/results/{result_id}", response_model=ComplianceResultResponse)
+def get_compliance_result(
+    result_id: int,
+    service: ComplianceService = Depends(get_compliance_service),
+    context: TenantRequestContext = Depends(get_tenant_context),
+) -> ComplianceResultResponse:
+    """Get a specific compliance result (scoped to tenant)."""
+    result = service.get_result(result_id, context)
+    return ComplianceResultResponse.model_validate(result)
 
 
 @router.get("/devices/{device_id}", response_model=DeviceComplianceSummary)

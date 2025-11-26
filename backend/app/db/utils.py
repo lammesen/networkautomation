@@ -11,6 +11,9 @@ logger = get_logger(__name__)
 
 def seed_default_data(db_session) -> None:
     """Create default org/admin and sample devices/credentials (idempotent)."""
+    if settings.environment.lower() == "production":
+        logger.info("Skipping default seed in production environment")
+        return
     # Ensure tables exist for the bound engine (safe to call repeatedly)
     try:
         bind = db_session.get_bind()

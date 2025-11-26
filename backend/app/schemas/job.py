@@ -80,3 +80,16 @@ class ConfigDeployCommitRequest(BaseModel):
 
     previous_job_id: int = Field(..., description="Previous preview job ID")
     confirm: bool = Field(..., description="Confirmation flag")
+
+
+class ConfigRollbackPreviewRequest(BaseModel):
+    """Request to preview a config rollback to a previous snapshot."""
+
+    snapshot_id: int = Field(..., description="Snapshot ID to rollback to")
+
+
+class ConfigRollbackCommitRequest(BaseModel):
+    """Request to commit a config rollback."""
+
+    previous_job_id: int = Field(..., description="Previous rollback preview job ID")
+    confirm: bool = Field(..., description="Confirmation flag")

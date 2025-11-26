@@ -57,7 +57,9 @@ class ComplianceResultResponse(BaseModel):
 
     id: int
     policy_id: int
+    policy_name: Optional[str] = None
     device_id: int
+    device_hostname: Optional[str] = None
     job_id: int
     ts: datetime
     status: str
@@ -77,3 +79,24 @@ class DeviceComplianceSummary(BaseModel):
 
     device_id: int
     policies: list[dict]
+
+
+class PolicyStatsResponse(BaseModel):
+    """Aggregated policy status for dashboards."""
+
+    policy_id: int
+    name: str
+    description: Optional[str] = None
+    total: int
+    pass_count: int
+    fail_count: int
+    error_count: int
+    last_run: Optional[datetime] = None
+
+
+class ComplianceOverviewResponse(BaseModel):
+    """Compliance overview combining policy stats and recent results."""
+
+    policies: list[PolicyStatsResponse]
+    recent_results: list[ComplianceResultResponse]
+    latest_by_policy: list[ComplianceResultResponse]

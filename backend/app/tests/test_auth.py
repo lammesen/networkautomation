@@ -12,6 +12,18 @@ def test_health_endpoint(client):
     assert response.json() == {"status": "healthy"}
 
 
+def test_health_ready_endpoint(client):
+    """Test readiness check endpoint with dependency status."""
+    response = client.get("/health/ready")
+    # In test environment, both database and redis should be mocked/available
+    assert response.status_code == 200
+    data = response.json()
+    assert "status" in data
+    assert "dependencies" in data
+    assert "database" in data["dependencies"]
+    assert "redis" in data["dependencies"]
+
+
 def test_root_endpoint(client):
     """Test root endpoint."""
     response = client.get("/")

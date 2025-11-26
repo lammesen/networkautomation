@@ -7,8 +7,10 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useAuthStore, selectCanModify } from '@/store/authStore'
 
 interface Customer {
   id: number
@@ -25,9 +27,14 @@ interface IPRange {
 }
 
 export default function CustomersPage() {
+  const canModify = useAuthStore(selectCanModify)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [isIPModalOpen, setIsIPModalOpen] = useState(false)
+  
+  // Confirm dialog state
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
+  const [rangeToDelete, setRangeToDelete] = useState<IPRange | null>(null)
   
   // Form states
   const [newCustomerData, setNewCustomerData] = useState({ name: '', description: '' })
@@ -83,7 +90,7 @@ export default function CustomersPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold tracking-tight">Customer Management</h1>
-        <Button onClick={() => setIsCreateModalOpen(true)}>
+        <Button onClick={() => setIsCreateModalOpen(true)} disabled={!canModify} title={!canModify ? 'Viewers cannot add customers' : undefined}>
           Add Customer
         </Button>
       </div>
@@ -116,6 +123,8 @@ export default function CustomersPage() {
                         setSelectedCustomer(customer)
                         setIsIPModalOpen(true)
                         }}
+                        disabled={!canModify}
+                        title={!canModify ? 'Viewers cannot manage IP ranges' : undefined}
                     >
                         Manage IP Ranges
                     </Button>
@@ -213,9 +222,8 @@ export default function CustomersPage() {
                                 variant="destructive"
                                 size="sm"
                                 onClick={() => {
-                                    if (confirm('Delete this IP range?')) {
-                                    deleteIPRangeMutation.mutate(range.id)
-                                    }
+                                    setRangeToDelete(range)
+                                    setConfirmDialogOpen(true)
                                 }}
                                 >
                                 Delete
@@ -275,6 +283,33 @@ export default function CustomersPage() {
             </div>
         </DialogContent>
       </Dialog>
+
+      {/* Confirm Delete Dialog */}
+      <AlertDialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete IP Range</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete the IP range <strong>{rangeToDelete?.cidr}</strong>? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setRangeToDelete(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (rangeToDelete) {
+                  deleteIPRangeMutation.mutate(rangeToDelete.id)
+                }
+                setConfirmDialogOpen(false)
+                setRangeToDelete(null)
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

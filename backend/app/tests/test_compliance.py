@@ -1,7 +1,8 @@
 """Tests for Compliance API endpoints."""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from app.db.models import CompliancePolicy
 
@@ -309,3 +310,128 @@ class TestComplianceResultsAPI:
         )
 
         assert response.status_code == 404
+
+
+def test_compliance_overview(
+    client, auth_headers, db_session, admin_user, test_customer, test_credential
+):
+    """Ensure overview returns policy stats and recent results with names."""
+    from app.db.models import CompliancePolicy, ComplianceResult, Device, Job
+
+    device = Device(
+        hostname="ov-dev1",
+        mgmt_ip="192.0.2.200",
+        vendor="cisco",
+        platform="ios",
+        credentials_ref=test_credential.id,
+        customer_id=test_customer.id,
+        enabled=True,
+    )
+    policy = CompliancePolicy(
+        name="overview-policy",
+        scope_json={},
+        definition_yaml="---",
+        created_by=admin_user.id,
+        customer_id=test_customer.id,
+    )
+    job = Job(
+        type="compliance_check",
+        status="success",
+        user_id=admin_user.id,
+        customer_id=test_customer.id,
+    )
+    db_session.add_all([device, policy, job])
+    db_session.commit()
+    db_session.refresh(device)
+    db_session.refresh(policy)
+    db_session.refresh(job)
+
+    result = ComplianceResult(
+        policy_id=policy.id,
+        device_id=device.id,
+        job_id=job.id,
+        status="pass",
+        details_json={"complies": True},
+    )
+    db_session.add(result)
+    db_session.commit()
+
+    response = client.get("/api/v1/compliance/overview", headers=auth_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert "policies" in data and "recent_results" in data
+
+    policy_entry = next((p for p in data["policies"] if p["policy_id"] == policy.id), None)
+    assert policy_entry is not None
+    assert policy_entry["total"] == 1
+    assert policy_entry["pass_count"] == 1
+
+    recent = data["recent_results"][0]
+    assert recent["policy_name"] == policy.name
+    assert recent["device_hostname"] == device.hostname
+    assert data["latest_by_policy"]
+    assert any(entry["policy_id"] == policy.id for entry in data["latest_by_policy"])
+
+
+def test_compliance_result_detail_and_filters(
+    client, auth_headers, db_session, admin_user, test_customer, test_credential
+):
+    """Detail endpoint should enforce tenant scope and filters should apply."""
+    from datetime import datetime, timedelta
+
+    from app.db.models import CompliancePolicy, ComplianceResult, Device, Job
+
+    device = Device(
+        hostname="filter-dev1",
+        mgmt_ip="192.0.2.201",
+        vendor="cisco",
+        platform="ios",
+        credentials_ref=test_credential.id,
+        customer_id=test_customer.id,
+        enabled=True,
+    )
+    policy = CompliancePolicy(
+        name="filter-policy",
+        scope_json={},
+        definition_yaml="---",
+        created_by=admin_user.id,
+        customer_id=test_customer.id,
+    )
+    job = Job(
+        type="compliance_check",
+        status="success",
+        user_id=admin_user.id,
+        customer_id=test_customer.id,
+    )
+    db_session.add_all([device, policy, job])
+    db_session.commit()
+    db_session.refresh(device)
+    db_session.refresh(policy)
+    db_session.refresh(job)
+
+    ts = datetime.utcnow()
+    result = ComplianceResult(
+        policy_id=policy.id,
+        device_id=device.id,
+        job_id=job.id,
+        status="fail",
+        ts=ts,
+        details_json={"complies": False},
+    )
+    db_session.add(result)
+    db_session.commit()
+    db_session.refresh(result)
+
+    detail_resp = client.get(f"/api/v1/compliance/results/{result.id}", headers=auth_headers)
+    assert detail_resp.status_code == 200
+    assert detail_resp.json()["policy_id"] == policy.id
+
+    start = (ts - timedelta(minutes=1)).isoformat()
+    end = (ts + timedelta(minutes=1)).isoformat()
+    filter_resp = client.get(
+        f"/api/v1/compliance/results?policy_id={policy.id}&start={start}&end={end}",
+        headers=auth_headers,
+    )
+    assert filter_resp.status_code == 200
+    filtered = filter_resp.json()
+    assert any(r["id"] == result.id for r in filtered)

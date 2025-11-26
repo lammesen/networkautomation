@@ -77,6 +77,14 @@ make seed-admin
 - Backend API: http://localhost:8000
 - API Documentation: http://localhost:8000/docs
 
+### Required Environment
+
+- `ENCRYPTION_KEY` (Fernet base64) **required** for backend start; generate with  
+  `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
+- `SECRET_KEY` must be set for JWT signing (use a random 32+ char string).
+- `ADMIN_DEFAULT_PASSWORD` should be overridden for any non-dev environment.
+- `DATABASE_URL`, `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`, and `REDIS_URL` should be set per environment; defaults are for local dev only.
+
 ## Project Structure
 
 ```

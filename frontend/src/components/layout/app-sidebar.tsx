@@ -10,6 +10,9 @@ import {
   Network,
   LogOut,
   ChevronUp,
+  Sun,
+  Moon,
+  Monitor,
 } from 'lucide-react'
 import {
   Sidebar,
@@ -30,9 +33,15 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { useAuthStore } from '@/store/authStore'
+import { useUIStore } from '@/store/uiStore'
 
 const navSections = [
   {
@@ -76,6 +85,8 @@ interface AppSidebarProps {
 export function AppSidebar({ onLogout }: AppSidebarProps) {
   const location = useLocation()
   const user = useAuthStore((s) => s.user)
+  const theme = useUIStore((s) => s.theme)
+  const setTheme = useUIStore((s) => s.setTheme)
 
   const isActive = (path: string) =>
     location.pathname === path || location.pathname.startsWith(`${path}/`)
@@ -196,6 +207,35 @@ export function AppSidebar({ onLogout }: AppSidebarProps) {
                     <DropdownMenuSeparator />
                   </>
                 )}
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    {theme === 'dark' ? (
+                      <Moon className="size-4 mr-2" />
+                    ) : theme === 'light' ? (
+                      <Sun className="size-4 mr-2" />
+                    ) : (
+                      <Monitor className="size-4 mr-2" />
+                    )}
+                    Theme
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    <DropdownMenuRadioGroup value={theme} onValueChange={(v) => setTheme(v as 'light' | 'dark' | 'system')}>
+                      <DropdownMenuRadioItem value="light">
+                        <Sun className="size-4 mr-2" />
+                        Light
+                      </DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="dark">
+                        <Moon className="size-4 mr-2" />
+                        Dark
+                      </DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="system">
+                        <Monitor className="size-4 mr-2" />
+                        System
+                      </DropdownMenuRadioItem>
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={onLogout} className="text-destructive">
                   <LogOut className="size-4 mr-2" />
                   Log out

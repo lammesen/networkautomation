@@ -1,14 +1,17 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/api/client'
 import { useState } from 'react'
-import { useAuthStore } from '@/store/authStore'
+import { useAuthStore, selectCanModify } from '@/store/authStore'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
+import { Plus } from 'lucide-react'
+import { CreateUserDialog } from './CreateUserDialog'
 
 interface Customer {
   id: number
@@ -28,9 +31,15 @@ export function UsersTab() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false)
   const [selectedCustomerToAdd, setSelectedCustomerToAdd] = useState<string>("")
+  const [isCreateUserOpen, setIsCreateUserOpen] = useState(false)
+  
+  // Confirm dialog state
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
+  const [confirmAction, setConfirmAction] = useState<{ type: 'toggle_status' | 'remove_customer'; user: User; customerId?: number } | null>(null)
   
   const queryClient = useQueryClient()
   const currentUser = useAuthStore((state) => state.user)
+  const canModify = useAuthStore(selectCanModify)
 
   const { data: users, isLoading: isLoadingUsers, error: usersError } = useQuery({
     queryKey: ['users', filter],
@@ -99,16 +108,13 @@ export function UsersTab() {
   }
 
   const handleToggleStatus = (user: User) => {
-    const action = user.is_active ? 'Deactivate' : 'Activate'
-
     if (currentUser?.id === user.id && currentUser.role === 'admin' && user.is_active) {
       toast.error("Admins cannot deactivate their own account.")
       return
     }
 
-    if (confirm(`${action} user ${user.username}?`)) {
-      updateUserMutation.mutate({ id: user.id, data: { is_active: !user.is_active } })
-    }
+    setConfirmAction({ type: 'toggle_status', user })
+    setConfirmDialogOpen(true)
   }
 
   const openCustomerModal = (user: User) => {
@@ -124,10 +130,22 @@ export function UsersTab() {
 
   const handleRemoveCustomer = (customerId: number) => {
     if (selectedUser) {
-      if (confirm('Are you sure you want to remove access to this customer?')) {
-        removeUserFromCustomerMutation.mutate({ customerId, userId: selectedUser.id })
-      }
+      setConfirmAction({ type: 'remove_customer', user: selectedUser, customerId })
+      setConfirmDialogOpen(true)
     }
+  }
+
+  const handleConfirmAction = () => {
+    if (!confirmAction) return
+    
+    if (confirmAction.type === 'toggle_status') {
+      updateUserMutation.mutate({ id: confirmAction.user.id, data: { is_active: !confirmAction.user.is_active } })
+    } else if (confirmAction.type === 'remove_customer' && confirmAction.customerId) {
+      removeUserFromCustomerMutation.mutate({ customerId: confirmAction.customerId, userId: confirmAction.user.id })
+    }
+    
+    setConfirmDialogOpen(false)
+    setConfirmAction(null)
   }
 
   return (
@@ -136,9 +154,9 @@ export function UsersTab() {
         <p className="text-sm text-muted-foreground">
           Manage user accounts, roles, and customer assignments.
         </p>
-        <div className="w-[200px]">
+        <div className="flex items-center gap-2">
           <Select value={filter} onValueChange={(val) => setFilter(val as 'all' | 'pending')}>
-            <SelectTrigger>
+            <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Filter Users" />
             </SelectTrigger>
             <SelectContent>
@@ -146,6 +164,10 @@ export function UsersTab() {
               <SelectItem value="pending">Pending Approval</SelectItem>
             </SelectContent>
           </Select>
+          <Button onClick={() => setIsCreateUserOpen(true)} disabled={!canModify} title={!canModify ? 'Viewers cannot add users' : undefined}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add User
+          </Button>
         </div>
       </div>
 
@@ -177,7 +199,7 @@ export function UsersTab() {
                       <Select
                         value={user.role}
                         onValueChange={(val) => handleRoleChange(user, val)}
-                        disabled={currentUser?.id === user.id}
+                        disabled={currentUser?.id === user.id || !canModify}
                       >
                         <SelectTrigger className="w-[130px] h-8">
                           <SelectValue />
@@ -199,6 +221,7 @@ export function UsersTab() {
                             size="sm" 
                             className="h-7 text-xs"
                             onClick={() => openCustomerModal(user)}
+                            disabled={!canModify}
                           >
                             Manage
                           </Button>
@@ -214,7 +237,7 @@ export function UsersTab() {
                         variant={user.is_active ? "destructive" : "default"}
                         size="sm"
                         onClick={() => handleToggleStatus(user)}
-                        disabled={!!isCurrentUserAdminAndActive}
+                        disabled={!!isCurrentUserAdminAndActive || !canModify}
                         className="h-8"
                       >
                         {user.is_active ? 'Deactivate' : 'Activate'}
@@ -307,6 +330,35 @@ export function UsersTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Confirm Action Dialog */}
+      <AlertDialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirmAction?.type === 'toggle_status' 
+                ? `${confirmAction.user.is_active ? 'Deactivate' : 'Activate'} User`
+                : 'Remove Customer Access'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmAction?.type === 'toggle_status'
+                ? `Are you sure you want to ${confirmAction.user.is_active ? 'deactivate' : 'activate'} user ${confirmAction.user.username}?`
+                : 'Are you sure you want to remove access to this customer?'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setConfirmAction(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmAction}>
+              {confirmAction?.type === 'toggle_status'
+                ? (confirmAction.user.is_active ? 'Deactivate' : 'Activate')
+                : 'Remove'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Create User Dialog */}
+      <CreateUserDialog open={isCreateUserOpen} onOpenChange={setIsCreateUserOpen} />
     </div>
   )
 }

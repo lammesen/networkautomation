@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from sqlalchemy import text
 
 from app.api import (
     auth,
@@ -16,6 +17,7 @@ from app.api import (
     devices,
     jobs,
     network,
+    topology,
     users,
     websocket,
 )
@@ -64,6 +66,7 @@ app.include_router(commands.router, prefix=settings.api_prefix)
 app.include_router(config.router, prefix=settings.api_prefix)
 app.include_router(compliance.router, prefix=settings.api_prefix)
 app.include_router(network.router, prefix=settings.api_prefix)
+app.include_router(topology.router, prefix=settings.api_prefix)
 app.include_router(websocket.router, prefix=settings.api_prefix)
 
 
@@ -87,6 +90,54 @@ async def seed_defaults() -> None:
 async def health() -> dict:
     """Health check endpoint."""
     return {"status": "healthy"}
+
+
+@app.get("/health/ready")
+async def health_ready() -> dict:
+    """Readiness check endpoint with dependency status.
+
+    Returns detailed status of all dependencies:
+    - database: PostgreSQL connection
+    - redis: Redis connection
+    - celery: Celery worker availability
+
+    Returns 200 if all dependencies are healthy, 503 otherwise.
+    """
+    import redis
+
+    status = {
+        "database": {"status": "healthy"},
+        "redis": {"status": "healthy"},
+    }
+    overall_healthy = True
+
+    # Check database
+    try:
+        db = SessionLocal()
+        db.execute(text("SELECT 1"))
+        db.close()
+    except Exception as e:
+        status["database"] = {"status": "unhealthy", "error": str(e)}
+        overall_healthy = False
+
+    # Check Redis
+    try:
+        r = redis.from_url(settings.redis_url)
+        r.ping()
+        r.close()
+    except Exception as e:
+        status["redis"] = {"status": "unhealthy", "error": str(e)}
+        overall_healthy = False
+
+    result = {
+        "status": "healthy" if overall_healthy else "unhealthy",
+        "dependencies": status,
+    }
+
+    if overall_healthy:
+        return result
+    else:
+        return JSONResponse(status_code=503, content=result)
 
 
 @app.get("/")

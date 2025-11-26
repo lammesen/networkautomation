@@ -86,6 +86,30 @@ class UserCreate(BaseModel):
         return validate_password_complexity(v)
 
 
+class AdminUserCreate(BaseModel):
+    """Admin user creation request - allows setting role and active status."""
+
+    username: str = Field(..., min_length=3, max_length=100)
+    password: str = Field(..., min_length=8)
+    role: str = Field(default="viewer", pattern="^(viewer|operator|admin)$")
+    is_active: bool = Field(default=True)
+    customer_ids: list[int] = Field(default_factory=list)
+
+    @field_validator("username")
+    @classmethod
+    def validate_username(cls, v: str) -> str:
+        if not USERNAME_PATTERN.match(v):
+            raise ValueError(
+                "Username must start with a letter and contain only letters, numbers, underscores, or hyphens"
+            )
+        return v
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        return validate_password_complexity(v)
+
+
 class UserUpdate(BaseModel):
     """User update request."""
 

@@ -63,6 +63,12 @@ export const useAuthStore = create<AuthStore>()(
 // Derived selectors
 export const selectIsAuthenticated = (state: AuthStore) => !!state.token
 export const selectIsAdmin = (state: AuthStore) => state.user?.role === 'admin'
+export const selectIsOperator = (state: AuthStore) =>
+  state.user?.role === 'admin' || state.user?.role === 'operator'
+export const selectIsViewer = (state: AuthStore) => state.user?.role === 'viewer'
+/** Returns true if user can modify resources (admin or operator) */
+export const selectCanModify = (state: AuthStore) =>
+  state.user?.role === 'admin' || state.user?.role === 'operator'
 export const selectUser = (state: AuthStore) => state.user
 export const selectToken = (state: AuthStore) => state.token
 export const selectActiveCustomerId = (state: AuthStore) => state.activeCustomerId

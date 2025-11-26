@@ -20,14 +20,16 @@ class AutomationContext:
         job_id: int,
         targets: Dict,
         job_service: JobService,
+        customer_id: Optional[int] = None,
     ) -> None:
         self.job_id = job_id
         self.targets = targets or {}
         self.job_service = job_service
+        self.customer_id = customer_id
         self.device_ids: List[int] = []
 
     def select_devices(self) -> List[int]:
-        self.device_ids = filter_devices_from_db(self.targets)
+        self.device_ids = filter_devices_from_db(self.targets, customer_id=self.customer_id)
         return self.device_ids
 
     def log(self, level: str, message: str, host: Optional[str] = None, extra: Optional[dict] = None) -> None:
@@ -44,5 +46,3 @@ class AutomationContext:
         if self.device_ids:
             nr = filter_nornir_hosts(nr, self.device_ids)
         return nr
-
-

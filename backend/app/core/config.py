@@ -101,6 +101,24 @@ class Settings(BaseSettings):
             raise ValueError("database_url must be provided via environment for production")
         return value
 
+    @field_validator("secret_key")
+    @classmethod
+    def require_secret_key(cls, value: str) -> str:
+        """Reject the placeholder secret in production deployments."""
+        env = os.getenv("ENVIRONMENT", "development").lower()
+        if env == "production" and value.startswith("change-me"):
+            raise ValueError("SECRET_KEY must be set via environment for production")
+        return value
+
+    @field_validator("admin_default_password")
+    @classmethod
+    def require_strong_admin_password(cls, value: str) -> str:
+        """Ensure a non-default admin password in production."""
+        env = os.getenv("ENVIRONMENT", "development").lower()
+        if env == "production" and value == "Admin123!":
+            raise ValueError("ADMIN_DEFAULT_PASSWORD must be overridden in production")
+        return value
+
     @field_validator("encryption_key")
     @classmethod
     def require_encryption_key(cls, value: str | None) -> str:

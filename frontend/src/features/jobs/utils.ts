@@ -1,4 +1,4 @@
-import type { Job, NormalizedJob, JobResultSummary, JobHostResult } from '../types'
+import type { Job, NormalizedJob, JobResultSummary, JobHostResult } from '@/types/job'
 
 /**
  * Normalize job fields to handle API inconsistencies
@@ -78,4 +78,65 @@ export function formatJobType(type: string): string {
   return type
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (l) => l.toUpperCase())
+}
+
+/**
+ * Escape a value for CSV (handle quotes, commas, newlines)
+ */
+function escapeCSV(value: string): string {
+  if (value.includes('"') || value.includes(',') || value.includes('\n') || value.includes('\r')) {
+    return `"${value.replace(/"/g, '""')}"`
+  }
+  return value
+}
+
+/**
+ * Export job results to CSV format
+ */
+export function exportJobResultsToCSV(
+  jobId: number,
+  hostResults: Record<string, JobHostResult>
+): void {
+  const rows: string[] = []
+
+  // Header row
+  rows.push(['Hostname', 'Status', 'Command', 'Output', 'Error'].map(escapeCSV).join(','))
+
+  // Data rows
+  Object.entries(hostResults).forEach(([hostname, res]) => {
+    if (res.results && typeof res.results === 'object') {
+      // Multiple command results
+      Object.entries(res.results).forEach(([cmd, output]) => {
+        const outputStr = typeof output === 'string' ? output : JSON.stringify(output)
+        rows.push(
+          [hostname, res.status || '', cmd, outputStr, res.error || ''].map(escapeCSV).join(',')
+        )
+      })
+    } else if (res.diff) {
+      // Config diff result
+      rows.push(
+        [hostname, res.status || '', 'config_diff', res.diff, res.error || ''].map(escapeCSV).join(',')
+      )
+    } else if (res.result) {
+      // Single result
+      const resultStr = typeof res.result === 'string' ? res.result : JSON.stringify(res.result)
+      rows.push(
+        [hostname, res.status || '', '', resultStr, res.error || ''].map(escapeCSV).join(',')
+      )
+    } else if (res.error) {
+      // Error only
+      rows.push([hostname, res.status || '', '', '', res.error].map(escapeCSV).join(','))
+    }
+  })
+
+  const csvContent = rows.join('\n')
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `job-${jobId}-results.csv`
+  link.click()
+
+  URL.revokeObjectURL(url)
 }

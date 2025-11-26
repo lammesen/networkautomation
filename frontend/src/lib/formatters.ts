@@ -2,30 +2,24 @@
  * Shared date/time formatters for consistent display across the app
  */
 
-const dateTimeFormatter = new Intl.DateTimeFormat('en-GB', {
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-  second: '2-digit',
-  hour12: false,
-})
-
-const dateFormatter = new Intl.DateTimeFormat('en-GB', {
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-})
-
-const timeFormatter = new Intl.DateTimeFormat('en-GB', {
-  hour: '2-digit',
-  minute: '2-digit',
-  second: '2-digit',
-  hour12: false,
-})
-
 const relativeFormatter = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
+
+function pad(num: number): string {
+  return num.toString().padStart(2, '0')
+}
+
+function formatParts(date: Date): { date: string; time: string } {
+  const day = pad(date.getUTCDate())
+  const month = pad(date.getUTCMonth() + 1)
+  const year = date.getUTCFullYear()
+  const hours = pad(date.getUTCHours())
+  const minutes = pad(date.getUTCMinutes())
+  const seconds = pad(date.getUTCSeconds())
+  return {
+    date: `${day}/${month}/${year}`,
+    time: `${hours}:${minutes}:${seconds}`,
+  }
+}
 
 /**
  * Format a date string to a localized date-time string
@@ -34,7 +28,8 @@ export function formatDateTime(date: string | Date | null | undefined): string {
   if (!date) return '-'
   try {
     const d = typeof date === 'string' ? new Date(date) : date
-    return dateTimeFormatter.format(d)
+    const parts = formatParts(d)
+    return `${parts.date} ${parts.time}`
   } catch {
     return '-'
   }
@@ -47,7 +42,7 @@ export function formatDate(date: string | Date | null | undefined): string {
   if (!date) return '-'
   try {
     const d = typeof date === 'string' ? new Date(date) : date
-    return dateFormatter.format(d)
+    return formatParts(d).date
   } catch {
     return '-'
   }
@@ -60,7 +55,7 @@ export function formatTime(date: string | Date | null | undefined): string {
   if (!date) return '-'
   try {
     const d = typeof date === 'string' ? new Date(date) : date
-    return timeFormatter.format(d)
+    return formatParts(d).time
   } catch {
     return '-'
   }

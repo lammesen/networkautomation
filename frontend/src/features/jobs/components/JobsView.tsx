@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useAuthStore } from '@/store/authStore'
+import { useAuthStore, selectCanModify } from '@/store/authStore'
 import { apiClient } from '@/api/client'
 import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/page-header'
@@ -15,6 +15,7 @@ import type { NormalizedJob } from '../types'
 export function JobsView() {
   const user = useAuthStore((s) => s.user)
   const isAdmin = user?.role === 'admin'
+  const canModify = useAuthStore(selectCanModify)
 
   // Filter state
   const [statusFilter, setStatusFilter] = useState('all')
@@ -70,6 +71,16 @@ export function JobsView() {
     }
   }
 
+  const handleCancelJob = async (job: NormalizedJob) => {
+    try {
+      await apiClient.cancelJob(job.id)
+      toast.success(`Job #${job.id} cancelled`)
+    } catch (err) {
+      const error = err as Error
+      toast.error(`Failed to cancel job: ${error.message}`)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -119,8 +130,10 @@ export function JobsView() {
             jobs={filteredJobs}
             isAdmin={isAdmin}
             scope={scope}
+            canModify={canModify}
             onViewJob={handleViewJob}
             onRetryJob={handleRetryJob}
+            onCancelJob={handleCancelJob}
           />
         </CardContent>
       </Card>

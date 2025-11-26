@@ -2,11 +2,13 @@ import { useMemo } from 'react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { StatusBadge } from '@/components/ui/status-badge'
+import { Button } from '@/components/ui/button'
+import { Download } from 'lucide-react'
 import { JobLiveLogs } from './JobLiveLogs'
 import { JobSummaryCard } from './JobSummaryCard'
 import { JobHostResults } from './JobHostResults'
 import { useJobWebSocket } from '../hooks/useJobWebSocket'
-import { parseResults, calculateHostCounts } from '../utils'
+import { parseResults, calculateHostCounts, exportJobResultsToCSV } from '../utils'
 import type { NormalizedJob, JobHostResult } from '../types'
 
 interface JobDetailsModalProps {
@@ -34,6 +36,13 @@ export function JobDetailsModal({ job, open, onOpenChange }: JobDetailsModalProp
   const hostCounts = useMemo(() => calculateHostCounts(hostResults), [hostResults])
 
   const displayStatus = status || job?.status
+  const hasExportableResults = hostResults && Object.keys(hostResults).length > 0
+
+  const handleExportCSV = () => {
+    if (job && hostResults) {
+      exportJobResultsToCSV(job.id, hostResults)
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -46,7 +55,15 @@ export function JobDetailsModal({ job, open, onOpenChange }: JobDetailsModalProp
                 Results per device and live logs
               </DialogDescription>
             </div>
-            {displayStatus && <StatusBadge status={displayStatus} />}
+            <div className="flex items-center gap-2">
+              {hasExportableResults && (
+                <Button variant="outline" size="sm" onClick={handleExportCSV}>
+                  <Download className="h-4 w-4 mr-1" />
+                  Export CSV
+                </Button>
+              )}
+              {displayStatus && <StatusBadge status={displayStatus} />}
+            </div>
           </div>
         </DialogHeader>
 

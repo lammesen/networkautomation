@@ -6,7 +6,7 @@ from typing import Optional, Sequence
 
 from sqlalchemy.orm import Session
 
-from app.db import User
+from app.db import User, Customer
 from app.domain.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.repositories.user_repository import UserRepository
 from app.core.auth import get_password_hash
@@ -41,6 +41,32 @@ class UserService:
         self.session.refresh(user)
         return user
 
+    def admin_create_user(self, payload) -> User:
+        """Admin creates a new user with specified role and active status."""
+        if self.users.get_by_username(payload.username):
+            raise ConflictError("Username already registered")
+
+        user = User(
+            username=payload.username,
+            hashed_password=get_password_hash(payload.password),
+            role=payload.role,
+            is_active=payload.is_active,
+        )
+        self.session.add(user)
+        self.session.flush()
+
+        # Assign customers if provided
+        if payload.customer_ids:
+            customers = (
+                self.session.query(Customer).filter(Customer.id.in_(payload.customer_ids)).all()
+            )
+            for customer in customers:
+                user.customers.append(customer)
+
+        self.session.commit()
+        self.session.refresh(user)
+        return user
+
     def update_user(self, user_id: int, payload, acting_admin: User) -> User:
         user = self.users.get_by_id(user_id)
         if not user:
@@ -57,4 +83,3 @@ class UserService:
         self.session.commit()
         self.session.refresh(user)
         return user
-

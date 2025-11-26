@@ -1,9 +1,11 @@
 import { useAuthStore } from '../store/authStore'
 import { ApiError } from '@/lib/api/errors'
 import type {
+  AdminUserCreate,
   CompliancePolicy,
   CompliancePolicyCreate,
   ComplianceResult,
+  ComplianceOverview,
   ConfigDiff,
   ConfigSnapshot,
   Credential,
@@ -143,8 +145,17 @@ class ApiClient {
 
   // Users
   getUsers(params?: { active?: boolean }): Promise<User[]> {
-    const queryString = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : ''
+    const queryString = params
+      ? '?' + new URLSearchParams(params as Record<string, string>).toString()
+      : ''
     return this.request<User[]>(`/users${queryString}`)
+  }
+
+  createUser(data: AdminUserCreate): Promise<User> {
+    return this.request<User>('/users', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
   }
 
   updateUser(id: number, data: UserUpdate): Promise<User> {
@@ -155,7 +166,9 @@ class ApiClient {
   }
 
   // Devices
-  getDevices(params?: Record<string, string | number | boolean | undefined>): Promise<DeviceListResponse> {
+  getDevices(
+    params?: Record<string, string | number | boolean | undefined>
+  ): Promise<DeviceListResponse> {
     const cleanParams = Object.fromEntries(
       Object.entries(params || {}).filter(([_, v]) => v != null && v !== '')
     )
@@ -165,6 +178,17 @@ class ApiClient {
 
   getDevice(id: number): Promise<Device> {
     return this.request<Device>(`/devices/${id}`)
+  }
+
+  getDeviceJobs(
+    deviceId: number,
+    params?: { type?: string; status?: string; skip?: number; limit?: number }
+  ): Promise<Job[]> {
+    const cleanParams = Object.fromEntries(
+      Object.entries(params || {}).filter(([_, v]) => v != null && v !== '')
+    )
+    const queryString = new URLSearchParams(cleanParams as Record<string, string>).toString()
+    return this.request<Job[]>(`/devices/${deviceId}/jobs?${queryString}`)
   }
 
   createDevice(data: DeviceCreate): Promise<Device> {
@@ -242,6 +266,10 @@ class ApiClient {
     return this.request<JobRetryResponse>(`/jobs/${id}/retry`, { method: 'POST' })
   }
 
+  cancelJob(id: number): Promise<{ status: string }> {
+    return this.request<{ status: string }>(`/jobs/${id}/cancel`, { method: 'POST' })
+  }
+
   // Admin job visibility
   getAdminJobs(params?: Record<string, string | number | undefined>): Promise<Job[]> {
     const cleanParams = Object.fromEntries(
@@ -277,7 +305,11 @@ class ApiClient {
     return this.request<ConfigSnapshot[]>(`/config/devices/${deviceId}/snapshots?limit=${limit}`)
   }
 
-  getDeviceConfigDiff(deviceId: number, fromSnapshot: number, toSnapshot: number): Promise<ConfigDiff> {
+  getDeviceConfigDiff(
+    deviceId: number,
+    fromSnapshot: number,
+    toSnapshot: number
+  ): Promise<ConfigDiff> {
     const params = new URLSearchParams({
       from: fromSnapshot.toString(),
       to: toSnapshot.toString(),
@@ -312,12 +344,126 @@ class ApiClient {
     policy_id?: number
     device_id?: number
     status?: string
+    start?: string
+    end?: string
+    skip?: number
+    limit?: number
   }): Promise<ComplianceResult[]> {
     const cleanParams = Object.fromEntries(
       Object.entries(params || {}).filter(([_, v]) => v != null && v !== '')
     )
     const queryString = new URLSearchParams(cleanParams as Record<string, string>).toString()
     return this.request<ComplianceResult[]>(`/compliance/results?${queryString}`)
+  }
+
+  getComplianceOverview(recentLimit = 20): Promise<ComplianceOverview> {
+    return this.request<ComplianceOverview>(`/compliance/overview?recent_limit=${recentLimit}`)
+  }
+
+  getComplianceResult(resultId: number): Promise<ComplianceResult> {
+    return this.request<ComplianceResult>(`/compliance/results/${resultId}`)
+  }
+
+  // Config rollback
+  rollbackPreview(snapshotId: number): Promise<JobCreateResponse> {
+    return this.request<JobCreateResponse>('/config/rollback/preview', {
+      method: 'POST',
+      body: JSON.stringify({ snapshot_id: snapshotId }),
+    })
+  }
+
+  rollbackCommit(previousJobId: number): Promise<JobCreateResponse> {
+    return this.request<JobCreateResponse>('/config/rollback/commit', {
+      method: 'POST',
+      body: JSON.stringify({ previous_job_id: previousJobId, confirm: true }),
+    })
+  }
+
+  getSnapshot(snapshotId: number): Promise<{
+    id: number
+    device_id: number
+    created_at: string
+    source: string
+    config_text: string
+    hash: string
+  }> {
+    return this.request(`/config/snapshots/${snapshotId}`)
+  }
+
+  // Config backup
+  backupConfig(targets: Record<string, unknown> = {}): Promise<JobCreateResponse> {
+    return this.request<JobCreateResponse>('/config/backup', {
+      method: 'POST',
+      body: JSON.stringify({ targets, source_label: 'manual' }),
+    })
+  }
+
+  // Topology
+  discoverTopology(targets: Record<string, unknown> = {}): Promise<JobCreateResponse> {
+    return this.request<JobCreateResponse>('/topology/discover', {
+      method: 'POST',
+      body: JSON.stringify(targets),
+    })
+  }
+
+  getTopologyLinks(deviceId?: number): Promise<
+    Array<{
+      id: number
+      local_device_id: number
+      local_device_hostname: string
+      local_interface: string
+      remote_device_id: number | null
+      remote_device_hostname: string
+      remote_interface: string
+      remote_ip: string | null
+      remote_platform: string | null
+      protocol: string
+      discovered_at: string
+      is_known_device: boolean
+    }>
+  > {
+    const params = deviceId ? `?device_id=${deviceId}` : ''
+    return this.request(`/topology/links${params}`)
+  }
+
+  getTopologyGraph(): Promise<{
+    nodes: Array<{
+      id: string
+      label: string
+      data: {
+        hostname: string
+        mgmt_ip: string
+        vendor?: string
+        platform?: string
+        role?: string
+        site?: string
+        reachability?: string
+        is_unknown?: boolean
+      }
+      type: string
+    }>
+    edges: Array<{
+      id: string
+      source: string
+      target: string
+      data: {
+        local_interface: string
+        remote_interface: string
+        protocol: string
+        discovered_at: string
+      }
+    }>
+    stats: {
+      known_devices: number
+      unknown_devices: number
+      total_links: number
+    }
+  }> {
+    return this.request('/topology/graph')
+  }
+
+  clearTopologyLinks(): Promise<{ deleted: number }> {
+    return this.request('/topology/links', { method: 'DELETE' })
   }
 }
 

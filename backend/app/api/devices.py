@@ -11,12 +11,14 @@ from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 from app.dependencies import (
     get_credential_service,
     get_device_service,
+    get_job_service,
     get_operator_context,
     get_tenant_context,
 )
 from app.domain.context import TenantRequestContext
 from app.domain.devices import DeviceFilters
 from app.domain.exceptions import DomainError
+from app.domain.jobs import JobFilters
 from app.schemas.device import (
     CredentialCreate,
     CredentialResponse,
@@ -26,8 +28,10 @@ from app.schemas.device import (
     DeviceResponse,
     DeviceUpdate,
 )
+from app.schemas.job import JobResponse
 from app.services.credential_service import CredentialService
 from app.services.device_service import DeviceService
+from app.services.job_service import JobService
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 cred_router = APIRouter(prefix="/credentials", tags=["credentials"])
@@ -185,3 +189,23 @@ def delete_device(
 ) -> None:
     """Disable device (soft delete)."""
     service.disable_device(device_id, context)
+
+
+@router.get("/{device_id}/jobs", response_model=list[JobResponse])
+def list_device_jobs(
+    device_id: int,
+    job_type: Optional[str] = Query(None, alias="type"),
+    status: Optional[str] = Query(None),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=500),
+    device_service: DeviceService = Depends(get_device_service),
+    job_service: JobService = Depends(get_job_service),
+    context: TenantRequestContext = Depends(get_tenant_context),
+) -> list[JobResponse]:
+    """List jobs that targeted a specific device."""
+    # First get the device to get its hostname and verify access
+    device = device_service.get_device(device_id, context)
+
+    filters = JobFilters(job_type=job_type, status=status, skip=skip, limit=limit)
+    jobs = job_service.list_jobs_for_device(device.hostname, filters, context)
+    return [JobResponse.model_validate(job) for job in jobs]

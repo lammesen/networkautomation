@@ -18,15 +18,15 @@ from app.automation.tasks_network import (
     execute_adhoc_getters,
     execute_adhoc_reachability,
 )
-from app.core.auth import get_current_user
-from app.db import User
+from app.dependencies import get_operator_context
+from app.domain.context import TenantRequestContext
 
 router = APIRouter(prefix="/network", tags=["network"])
 
 
 @router.post("/run_commands")
 async def run_commands_endpoint(
-    req: CommandRequest, current_user: User = Depends(get_current_user)
+    req: CommandRequest, context: TenantRequestContext = Depends(get_operator_context)
 ) -> dict[str, Any]:
     """Run CLI commands on devices.
 
@@ -38,7 +38,7 @@ async def run_commands_endpoint(
 
 @router.post("/compliance/getters")
 async def run_compliance_endpoint(
-    req: ComplianceRequest, current_user: User = Depends(get_current_user)
+    req: ComplianceRequest, context: TenantRequestContext = Depends(get_operator_context)
 ) -> dict[str, Any]:
     """Run NAPALM getters on devices.
 
@@ -50,7 +50,7 @@ async def run_compliance_endpoint(
 
 @router.post("/check_reachability")
 async def check_reachability_endpoint(
-    req: ReachabilityRequest, current_user: User = Depends(get_current_user)
+    req: ReachabilityRequest, context: TenantRequestContext = Depends(get_operator_context)
 ) -> dict[str, Any]:
     """Check TCP reachability on devices.
 

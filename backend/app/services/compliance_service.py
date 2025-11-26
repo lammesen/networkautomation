@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Optional, Sequence
 
 from sqlalchemy.orm import Session
@@ -123,6 +124,8 @@ class ComplianceService:
         status_filter: Optional[str] = None,
         skip: int = 0,
         limit: int = 100,
+        start_ts: Optional[datetime] = None,
+        end_ts: Optional[datetime] = None,
     ) -> Sequence[ComplianceResult]:
         """List compliance results with optional filters."""
         return self.results.list_for_customer(
@@ -132,7 +135,46 @@ class ComplianceService:
             status_filter=status_filter,
             skip=skip,
             limit=limit,
+            start_ts=start_ts,
+            end_ts=end_ts,
         )
+
+    def get_overview(self, context: TenantRequestContext, recent_limit: int = 20) -> dict:
+        """Provide per-policy stats and recent results for dashboards."""
+        policies = self.policies.list_for_customer(context.customer_id)
+        stats_rows = self.results.policy_stats_for_customer(context.customer_id)
+        stats_map = {row["policy_id"]: row for row in stats_rows}
+
+        policy_stats: list[dict] = []
+        for policy in policies:
+            stat = stats_map.get(policy.id, {})
+            policy_stats.append(
+                {
+                    "policy_id": policy.id,
+                    "name": policy.name,
+                    "description": policy.description,
+                    "total": int(stat.get("total", 0) or 0),
+                    "pass_count": int(stat.get("pass_count", 0) or 0),
+                    "fail_count": int(stat.get("fail_count", 0) or 0),
+                    "error_count": int(stat.get("error_count", 0) or 0),
+                    "last_run": stat.get("last_run"),
+                }
+            )
+
+        recent = self.results.list_recent_with_meta(context.customer_id, limit=recent_limit)
+        latest_by_policy = self.results.latest_by_policy(context.customer_id)
+        return {
+            "policies": policy_stats,
+            "recent_results": recent,
+            "latest_by_policy": latest_by_policy,
+        }
+
+    def get_result(self, result_id: int, context: TenantRequestContext) -> ComplianceResult:
+        """Fetch a specific compliance result scoped to the active customer."""
+        result = self.results.get_by_id_for_customer(result_id, context.customer_id)
+        if not result:
+            raise NotFoundError("Result not found")
+        return result
 
     def get_device_compliance_summary(
         self,

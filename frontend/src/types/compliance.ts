@@ -19,7 +19,9 @@ export interface CompliancePolicyCreate {
 export interface ComplianceResult {
   id: number
   policy_id: number
+  policy_name?: string
   device_id: number
+  device_hostname?: string
   job_id: number
   ts: string
   status: 'pass' | 'fail' | 'error'
@@ -35,4 +37,21 @@ export interface DeviceComplianceSummary {
     last_check: string
     details: Record<string, unknown>
   }>
+}
+
+export interface CompliancePolicyStats {
+  policy_id: number
+  name: string
+  description?: string | null
+  total: number
+  pass_count: number
+  fail_count: number
+  error_count: number
+  last_run?: string | null
+}
+
+export interface ComplianceOverview {
+  policies: CompliancePolicyStats[]
+  recent_results: ComplianceResult[]
+  latest_by_policy: ComplianceResult[]
 }

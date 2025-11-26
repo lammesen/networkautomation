@@ -121,6 +121,22 @@ class JobService:
             limit=filters.limit,
         )
 
+    def list_jobs_for_device(
+        self,
+        hostname: str,
+        filters: JobFilters,
+        context: TenantRequestContext,
+    ) -> Sequence[Job]:
+        """List jobs that targeted a specific device."""
+        return self.jobs.list_for_device(
+            context.customer_id,
+            hostname,
+            job_type=filters.job_type,
+            status=filters.status,
+            skip=filters.skip,
+            limit=filters.limit,
+        )
+
     def get_job(self, job_id: int, context: TenantRequestContext) -> Job:
         job = self.jobs.get_by_id(job_id)
         if not job or job.customer_id != context.customer_id:
@@ -153,6 +169,30 @@ class JobService:
         self.session.refresh(clone)
         self._enqueue(clone)
         return clone
+
+    def cancel_job(self, job_id: int, context: TenantRequestContext) -> Job:
+        """Cancel a scheduled or queued job."""
+        from app.domain.exceptions import ValidationError
+
+        job = self.get_job(job_id, context)
+
+        if job.status not in ("scheduled", "queued"):
+            raise ValidationError(
+                f"Cannot cancel job with status '{job.status}'. Only 'scheduled' or 'queued' jobs can be cancelled."
+            )
+
+        job.status = "cancelled"
+        job.finished_at = datetime.utcnow()
+        self.session.commit()
+
+        # Log the cancellation
+        self.append_log(
+            job_id,
+            level="INFO",
+            message=f"Job cancelled by user {context.user.id}",
+        )
+
+        return job
 
     # Internal ------------------------------------------------------
     def _enqueue(self, job: Job) -> None:

@@ -13,6 +13,7 @@ from app.services.job_service import JobService
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 admin_router = APIRouter(prefix="/jobs/admin", tags=["jobs-admin"])
 
+
 @router.get("", response_model=list[JobResponse])
 def list_jobs(
     job_type: Optional[str] = Query(None, alias="type"),
@@ -76,6 +77,17 @@ def retry_job(
     job = service.get_job(job_id, context)
     new_job = service.retry_job(job, context.user)
     return {"job_id": new_job.id, "status": new_job.status}
+
+
+@router.post("/{job_id}/cancel")
+def cancel_job(
+    job_id: int,
+    service: JobService = Depends(get_job_service),
+    context: TenantRequestContext = Depends(get_tenant_context),
+) -> dict:
+    """Cancel a scheduled or queued job."""
+    job = service.cancel_job(job_id, context)
+    return {"job_id": job.id, "status": job.status}
 
 
 # ---------------- Admin-only endpoints ----------------

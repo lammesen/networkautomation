@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { toast } from 'sonner'
 import type { Credential, CredentialCreate, CredentialUpdate } from '@/types'
+import { useAuthStore, selectCanModify } from '@/store/authStore'
 
 type ModalMode = 'create' | 'edit' | null
 
@@ -47,6 +48,7 @@ const emptyFormData: CredentialFormData = {
 }
 
 export default function CredentialsPage() {
+  const canModify = useAuthStore(selectCanModify)
   const [modalMode, setModalMode] = useState<ModalMode>(null)
   const [selectedCredential, setSelectedCredential] = useState<Credential | null>(null)
   const [formData, setFormData] = useState<CredentialFormData>(emptyFormData)
@@ -226,7 +228,7 @@ export default function CredentialsPage() {
             Manage device authentication credentials securely
           </p>
         </div>
-        <Button onClick={openCreateModal}>
+        <Button onClick={openCreateModal} disabled={!canModify} title={!canModify ? 'Viewers cannot add credentials' : undefined}>
           <Plus className="mr-2 h-4 w-4" />
           Add Credential
         </Button>
@@ -341,7 +343,7 @@ export default function CredentialsPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => openEditModal(cred)}>
+                          <DropdownMenuItem onClick={() => openEditModal(cred)} disabled={!canModify}>
                             <Pencil className="mr-2 h-4 w-4" />
                             Edit
                           </DropdownMenuItem>
@@ -349,7 +351,7 @@ export default function CredentialsPage() {
                           <DropdownMenuItem
                             onClick={() => confirmDelete(cred)}
                             className="text-destructive focus:text-destructive"
-                            disabled={deviceCount > 0}
+                            disabled={deviceCount > 0 || !canModify}
                           >
                             <Trash2 className="mr-2 h-4 w-4" />
                             Delete

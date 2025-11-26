@@ -172,6 +172,26 @@ def test_create_device(client, auth_headers, test_credential):
     assert data["vendor"] == "cisco"
 
 
+def test_create_device_accepts_ipv6(client, auth_headers, test_credential):
+    """Test creating a device with IPv6 management address."""
+    response = client.post(
+        "/api/v1/devices",
+        headers=auth_headers,
+        json={
+            "hostname": "router-v6",
+            "mgmt_ip": "2001:db8::1",
+            "vendor": "cisco",
+            "platform": "iosxe",
+            "role": "edge",
+            "site": "dc1",
+            "credentials_ref": test_credential.id,
+            "enabled": True,
+        },
+    )
+    assert response.status_code == 201
+    assert response.json()["mgmt_ip"] == "2001:db8::1"
+
+
 def test_list_devices(client, auth_headers, test_credential, db_session, test_customer):
     """Test listing devices."""
     # Create a test device

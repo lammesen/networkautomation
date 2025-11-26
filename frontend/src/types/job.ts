@@ -5,7 +5,7 @@ export type JobType =
   | 'config_deploy_commit'
   | 'compliance_check'
 
-export type JobStatus = 'queued' | 'scheduled' | 'running' | 'success' | 'partial' | 'failed'
+export type JobStatus = 'queued' | 'scheduled' | 'running' | 'success' | 'partial' | 'failed' | 'cancelled'
 
 export type JobLogLevel = 'INFO' | 'WARN' | 'ERROR' | 'DEBUG'
 

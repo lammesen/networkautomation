@@ -5,9 +5,10 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { toast } from 'sonner'
 import { type Device } from '../types'
-import { useAuthStore } from '@/store/authStore'
+import { useAuthStore, selectCanModify } from '@/store/authStore'
 
 type MessageRole = 'system' | 'user' | 'device' | 'error'
 
@@ -54,6 +55,7 @@ function buildWsUrl(deviceId: number, token: string, customerId?: number | null)
 
 export function DeviceTerminalDialog({ open, device, onClose }: DeviceTerminalDialogProps) {
   const { token, activeCustomerId } = useAuthStore()
+  const canModify = useAuthStore(selectCanModify)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [status, setStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle')
@@ -85,6 +87,13 @@ export function DeviceTerminalDialog({ open, device, onClose }: DeviceTerminalDi
 
     if (!token) {
       setError('Authentication required to open terminal')
+      setStatus('error')
+      return
+    }
+
+    // Block viewers from using terminal - defense in depth
+    if (!canModify) {
+      setError('Terminal access requires operator or admin role')
       setStatus('error')
       return
     }
@@ -138,7 +147,7 @@ export function DeviceTerminalDialog({ open, device, onClose }: DeviceTerminalDi
       setStatus('idle')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, device?.id, wsUrl, token])
+  }, [open, device?.id, wsUrl, token, canModify])
 
   const addMessage = (role: MessageRole, text: string) => {
     setMessages((prev) => [
@@ -198,6 +207,10 @@ export function DeviceTerminalDialog({ open, device, onClose }: DeviceTerminalDi
 
   const sendCommand = (command: string) => {
     if (!command.trim()) return
+    if (!canModify) {
+      toast.error('Terminal access requires operator or admin role')
+      return
+    }
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       toast.error('Terminal not connected')
       return
@@ -279,11 +292,17 @@ export function DeviceTerminalDialog({ open, device, onClose }: DeviceTerminalDi
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={status === 'connected' ? 'Enter a command (e.g. show version)' : 'Waiting for connection…'}
-            disabled={status !== 'connected'}
+            placeholder={
+              !canModify
+                ? 'Terminal access requires operator or admin role'
+                : status === 'connected'
+                  ? 'Enter a command (e.g. show version)'
+                  : 'Waiting for connection…'
+            }
+            disabled={status !== 'connected' || !canModify}
             autoComplete="off"
           />
-          <Button type="submit" disabled={status !== 'connected'}>
+          <Button type="submit" disabled={status !== 'connected' || !canModify}>
             Send
           </Button>
         </form>

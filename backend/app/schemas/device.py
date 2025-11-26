@@ -1,18 +1,15 @@
 """Device schemas."""
 
+import ipaddress
 import re
 from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-
 # Validation patterns
 HOSTNAME_PATTERN = re.compile(
     r"^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$"
-)
-IP_PATTERN = re.compile(
-    r"^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
 )
 # Alphanumeric with underscores, hyphens, and dots for credential/vendor/platform names
 SAFE_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_\-\.]*$")
@@ -20,11 +17,16 @@ SAFE_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_\-\.]*$")
 
 def validate_hostname_or_ip(value: str) -> str:
     """Validate that value is a valid hostname or IP address."""
-    if IP_PATTERN.match(value):
+    try:
+        # Accept IPv4 or IPv6 literals
+        ipaddress.ip_address(value)
         return value
+    except ValueError:
+        pass
+
     if HOSTNAME_PATTERN.match(value):
         return value
-    raise ValueError("Must be a valid hostname or IPv4 address")
+    raise ValueError("Must be a valid hostname or IP address")
 
 
 def validate_safe_name(value: str) -> str:

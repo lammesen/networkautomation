@@ -1,6 +1,7 @@
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatusBadge } from '@/components/ui/status-badge'
+import { CodeEditor, DiffViewer } from '@/components/ui/code-editor'
 import type { JobHostResult } from '../types'
 
 interface JobHostResultsProps {
@@ -34,36 +35,38 @@ export function JobHostResults({ hostResults }: JobHostResultsProps) {
             {res.results && typeof res.results === 'object' && Object.keys(res.results).length > 0 && (
               <div className="space-y-3">
                 {Object.entries(res.results).map(([cmd, output]) => (
-                  <Card key={cmd} className="bg-slate-900 text-slate-100 border-slate-700">
-                    <CardHeader className="p-3 pb-0">
-                      <CardTitle className="text-sm text-slate-200">$ {cmd}</CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-3 pt-2">
-                      <pre className="font-mono text-xs whitespace-pre-wrap leading-5">
-                        {typeof output === 'string' ? output : JSON.stringify(output, null, 2)}
-                      </pre>
-                    </CardContent>
-                  </Card>
+                  <div key={cmd} className="space-y-1">
+                    <div className="text-sm font-medium text-muted-foreground">$ {cmd}</div>
+                    <CodeEditor
+                      value={typeof output === 'string' ? output : JSON.stringify(output, null, 2)}
+                      language="cisco-ios"
+                      height={Math.min(200, (typeof output === 'string' ? output.split('\n').length : 10) * 20 + 20)}
+                      readOnly
+                      showLineNumbers={false}
+                    />
+                  </div>
                 ))}
               </div>
             )}
 
             {res.diff && (
-              <Card className="bg-slate-900 text-slate-100 border-slate-700">
-                <CardContent className="p-3">
-                  <pre className="font-mono text-xs whitespace-pre-wrap leading-5">{res.diff}</pre>
-                </CardContent>
-              </Card>
+              <div className="space-y-1">
+                <div className="text-sm font-medium text-muted-foreground">Config Diff</div>
+                <DiffViewer
+                  diff={res.diff}
+                  height={Math.min(250, res.diff.split('\n').length * 20 + 20)}
+                />
+              </div>
             )}
 
             {res.result && !res.results && (
-              <Card className="bg-slate-900 text-slate-100 border-slate-700">
-                <CardContent className="p-3">
-                  <pre className="font-mono text-xs whitespace-pre-wrap leading-5">
-                    {typeof res.result === 'string' ? res.result : JSON.stringify(res.result, null, 2)}
-                  </pre>
-                </CardContent>
-              </Card>
+              <CodeEditor
+                value={typeof res.result === 'string' ? res.result : JSON.stringify(res.result, null, 2)}
+                language="cisco-ios"
+                height={Math.min(200, (typeof res.result === 'string' ? res.result.split('\n').length : 10) * 20 + 20)}
+                readOnly
+                showLineNumbers={false}
+              />
             )}
           </CardContent>
         </Card>

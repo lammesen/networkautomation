@@ -2,11 +2,11 @@
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 
 from app.db import User
 from app.dependencies import get_admin_user, get_user_service
-from app.schemas.auth import UserResponse, UserUpdate
+from app.schemas.auth import AdminUserCreate, UserResponse, UserUpdate
 from app.services.user_service import UserService
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -21,6 +21,17 @@ def list_users(
     """List users with optional active status filter."""
     users = service.list_users(active)
     return [UserResponse.model_validate(user) for user in users]
+
+
+@router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+def create_user(
+    payload: AdminUserCreate,
+    service: UserService = Depends(get_user_service),
+    _: User = Depends(get_admin_user),
+) -> UserResponse:
+    """Create a new user (admin only)."""
+    user = service.admin_create_user(payload)
+    return UserResponse.model_validate(user)
 
 
 @router.put("/{user_id}", response_model=UserResponse)

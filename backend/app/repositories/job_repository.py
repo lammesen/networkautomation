@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Optional, Sequence
 
+from sqlalchemy import cast, String
 from sqlalchemy.orm import Session  # type: ignore[import]
 
 from app.db import Job, JobLog
@@ -31,6 +32,33 @@ class JobRepository(SQLAlchemyRepository[Job]):
         query = (
             self.session.query(Job)
             .filter(Job.customer_id == customer_id)
+            .order_by(Job.requested_at.desc())
+        )
+        if job_type:
+            query = query.filter(Job.type == job_type)
+        if status:
+            query = query.filter(Job.status == status)
+        return query.offset(skip).limit(min(limit, 1000)).all()
+
+    def list_for_device(
+        self,
+        customer_id: int,
+        hostname: str,
+        *,
+        job_type: Optional[str] = None,
+        status: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> Sequence[Job]:
+        """List jobs that targeted a specific device hostname.
+
+        Searches for the hostname in the target_summary_json field.
+        Uses a text search since target_summary_json has varied structures.
+        """
+        query = (
+            self.session.query(Job)
+            .filter(Job.customer_id == customer_id)
+            .filter(cast(Job.target_summary_json, String).contains(f'"{hostname}"'))
             .order_by(Job.requested_at.desc())
         )
         if job_type:

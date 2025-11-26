@@ -8,6 +8,7 @@ export type StatusType =
   | 'failed'
   | 'partial'
   | 'queued'
+  | 'cancelled'
   | 'pass'
   | 'fail'
   | 'error'
@@ -27,6 +28,7 @@ const statusStyles: Record<string, string> = {
   failed: 'bg-red-100 text-red-800 hover:bg-red-100 border-red-200',
   partial: 'bg-yellow-100 text-yellow-800 hover:bg-yellow-100 border-yellow-200',
   queued: 'bg-gray-100 text-gray-800 hover:bg-gray-100 border-gray-200',
+  cancelled: 'bg-orange-100 text-orange-800 hover:bg-orange-100 border-orange-200',
 
   // Compliance statuses
   pass: 'bg-green-100 text-green-800 hover:bg-green-100 border-green-200',

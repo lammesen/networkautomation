@@ -14,6 +14,8 @@ from app.schemas.job import (
     ConfigBackupRequest,
     ConfigDeployCommitRequest,
     ConfigDeployPreviewRequest,
+    ConfigRollbackCommitRequest,
+    ConfigRollbackPreviewRequest,
 )
 from app.services.config_service import ConfigService
 from app.services.job_service import JobService
@@ -158,3 +160,85 @@ def get_config_diff(
 ) -> dict:
     """Get diff between two configuration snapshots."""
     return config_service.get_config_diff(device_id, from_snapshot, to_snapshot, context)
+
+
+@router.post("/rollback/preview", status_code=status.HTTP_202_ACCEPTED)
+def rollback_config_preview(
+    request: ConfigRollbackPreviewRequest,
+    config_service: ConfigService = Depends(get_config_service),
+    job_service: JobService = Depends(get_job_service),
+    context: TenantRequestContext = Depends(get_operator_context),
+) -> dict:
+    """Preview configuration rollback to a previous snapshot.
+
+    This compares the target snapshot with the device's current running config
+    and shows what would change if the rollback is applied.
+    """
+    # Verify snapshot exists and user has access
+    snapshot = config_service.get_snapshot(request.snapshot_id, context)
+
+    job = job_service.create_job(
+        job_type="config_rollback_preview",
+        user=context.user,
+        customer_id=context.customer_id,
+        target_summary={
+            "snapshot_id": snapshot.id,
+            "device_id": snapshot.device_id,
+        },
+        payload={
+            "snapshot_id": snapshot.id,
+            "config_text": snapshot.config_text,
+        },
+    )
+
+    celery_app.send_task(
+        "config_rollback_preview_job",
+        args=[job.id, snapshot.device_id, snapshot.config_text],
+    )
+
+    return {"job_id": job.id, "status": "queued"}
+
+
+@router.post("/rollback/commit", status_code=status.HTTP_202_ACCEPTED)
+def rollback_config_commit(
+    request: ConfigRollbackCommitRequest,
+    job_service: JobService = Depends(get_job_service),
+    context: TenantRequestContext = Depends(get_operator_context),
+) -> dict:
+    """Commit configuration rollback after previewing.
+
+    Requires a successful rollback preview job first.
+    """
+    from app.domain.exceptions import ValidationError
+
+    preview_job = job_service.get_job(request.previous_job_id, context)
+
+    if preview_job.type != "config_rollback_preview":
+        raise ValidationError("Referenced job is not a rollback preview job")
+
+    if preview_job.status != "success":
+        raise ValidationError("Preview job must be successful before committing")
+
+    if not request.confirm:
+        raise ValidationError("Confirmation required to commit rollback")
+
+    payload = preview_job.payload_json
+    target_summary = preview_job.target_summary_json
+
+    job = job_service.create_job(
+        job_type="config_rollback_commit",
+        user=context.user,
+        customer_id=context.customer_id,
+        target_summary={
+            **target_summary,
+            "preview_job_id": request.previous_job_id,
+        },
+        payload=payload,
+    )
+
+    celery_app.send_task(
+        "config_rollback_commit_job",
+        args=[job.id, target_summary["device_id"], payload["config_text"]],
+    )
+
+    return {"job_id": job.id, "status": "queued"}

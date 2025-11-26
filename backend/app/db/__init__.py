@@ -12,6 +12,7 @@ from .models import (
     ComplianceResult,
     Customer,
     CustomerIPRange,
+    TopologyLink,
 )
 from .session import get_db, engine, SessionLocal
 from .utils import seed_default_data
@@ -28,6 +29,7 @@ __all__ = [
     "ComplianceResult",
     "Customer",
     "CustomerIPRange",
+    "TopologyLink",
     "get_db",
     "engine",
     "SessionLocal",

@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Plus, Building2, Network } from 'lucide-react'
@@ -17,6 +18,10 @@ export function CustomersTab() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [isIPModalOpen, setIsIPModalOpen] = useState(false)
+  
+  // Confirm dialog state
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
+  const [rangeToDelete, setRangeToDelete] = useState<IPRange | null>(null)
   
   // Form states
   const [newCustomerData, setNewCustomerData] = useState({ name: '', description: '' })
@@ -239,9 +244,8 @@ export function CustomersTab() {
                             variant="destructive"
                             size="sm"
                             onClick={() => {
-                              if (confirm('Delete this IP range?')) {
-                                deleteIPRangeMutation.mutate(range.id)
-                              }
+                              setRangeToDelete(range)
+                              setConfirmDialogOpen(true)
                             }}
                           >
                             Delete
@@ -303,6 +307,33 @@ export function CustomersTab() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Confirm Delete Dialog */}
+      <AlertDialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete IP Range</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete the IP range <strong>{rangeToDelete?.cidr}</strong>? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setRangeToDelete(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (rangeToDelete) {
+                  deleteIPRangeMutation.mutate(rangeToDelete.id)
+                }
+                setConfirmDialogOpen(false)
+                setRangeToDelete(null)
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

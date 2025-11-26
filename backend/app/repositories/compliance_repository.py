@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Optional, Sequence
 
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.db import CompliancePolicy, ComplianceResult, Device
@@ -57,6 +58,8 @@ class ComplianceResultRepository(SQLAlchemyRepository[ComplianceResult]):
         status_filter: Optional[str] = None,
         skip: int = 0,
         limit: int = 100,
+        start_ts: Optional[datetime] = None,
+        end_ts: Optional[datetime] = None,
     ) -> Sequence[ComplianceResult]:
         query = (
             self.session.query(ComplianceResult)
@@ -70,6 +73,10 @@ class ComplianceResultRepository(SQLAlchemyRepository[ComplianceResult]):
             query = query.filter(ComplianceResult.device_id == device_id)
         if status_filter:
             query = query.filter(ComplianceResult.status == status_filter)
+        if start_ts:
+            query = query.filter(ComplianceResult.ts >= start_ts)
+        if end_ts:
+            query = query.filter(ComplianceResult.ts <= end_ts)
 
         return query.order_by(ComplianceResult.ts.desc()).offset(skip).limit(limit).all()
 
@@ -114,3 +121,122 @@ class ComplianceResultRepository(SQLAlchemyRepository[ComplianceResult]):
             )
             .first()
         )
+
+    def get_by_id_for_customer(
+        self, result_id: int, customer_id: int
+    ) -> Optional[ComplianceResult]:
+        """Get a specific result ensuring tenant isolation."""
+        return (
+            self.session.query(ComplianceResult)
+            .join(CompliancePolicy, CompliancePolicy.id == ComplianceResult.policy_id)
+            .filter(
+                ComplianceResult.id == result_id,
+                CompliancePolicy.customer_id == customer_id,
+            )
+            .first()
+        )
+
+    def policy_stats_for_customer(self, customer_id: int) -> list[dict]:
+        """Aggregate pass/fail/error counts per policy for a customer."""
+        status_case = {
+            "pass": case((ComplianceResult.status == "pass", 1), else_=0),
+            "fail": case((ComplianceResult.status == "fail", 1), else_=0),
+            "error": case((ComplianceResult.status == "error", 1), else_=0),
+        }
+        rows = (
+            self.session.query(
+                ComplianceResult.policy_id,
+                func.count(ComplianceResult.id).label("total"),
+                func.sum(status_case["pass"]).label("pass_count"),
+                func.sum(status_case["fail"]).label("fail_count"),
+                func.sum(status_case["error"]).label("error_count"),
+                func.max(ComplianceResult.ts).label("last_run"),
+            )
+            .join(CompliancePolicy, CompliancePolicy.id == ComplianceResult.policy_id)
+            .filter(CompliancePolicy.customer_id == customer_id)
+            .group_by(ComplianceResult.policy_id)
+            .all()
+        )
+        return [dict(row._mapping) for row in rows]
+
+    def list_recent_with_meta(self, customer_id: int, limit: int = 20) -> list[dict]:
+        """List recent results including device hostname and policy name."""
+        rows = (
+            self.session.query(
+                ComplianceResult,
+                Device.hostname.label("device_hostname"),
+                CompliancePolicy.name.label("policy_name"),
+            )
+            .join(Device, Device.id == ComplianceResult.device_id)
+            .join(CompliancePolicy, CompliancePolicy.id == ComplianceResult.policy_id)
+            .filter(CompliancePolicy.customer_id == customer_id)
+            .order_by(ComplianceResult.ts.desc())
+            .limit(limit)
+            .all()
+        )
+        return [
+            {
+                "id": res.ComplianceResult.id,
+                "policy_id": res.ComplianceResult.policy_id,
+                "policy_name": res.policy_name,
+                "device_id": res.ComplianceResult.device_id,
+                "device_hostname": res.device_hostname,
+                "job_id": res.ComplianceResult.job_id,
+                "ts": res.ComplianceResult.ts,
+                "status": res.ComplianceResult.status,
+                "details_json": res.ComplianceResult.details_json,
+            }
+            for res in rows
+        ]
+
+    def latest_by_policy(self, customer_id: int, per_policy_limit: int = 5) -> list[dict]:
+        """Latest results per device for each policy (capped per policy)."""
+        subquery = (
+            self.session.query(
+                ComplianceResult.policy_id,
+                ComplianceResult.device_id,
+                func.max(ComplianceResult.ts).label("max_ts"),
+            )
+            .join(CompliancePolicy, CompliancePolicy.id == ComplianceResult.policy_id)
+            .filter(CompliancePolicy.customer_id == customer_id)
+            .group_by(ComplianceResult.policy_id, ComplianceResult.device_id)
+            .subquery()
+        )
+
+        rows = (
+            self.session.query(
+                ComplianceResult,
+                Device.hostname.label("device_hostname"),
+                CompliancePolicy.name.label("policy_name"),
+            )
+            .join(
+                subquery,
+                (ComplianceResult.policy_id == subquery.c.policy_id)
+                & (ComplianceResult.device_id == subquery.c.device_id)
+                & (ComplianceResult.ts == subquery.c.max_ts),
+            )
+            .join(Device, Device.id == ComplianceResult.device_id)
+            .join(CompliancePolicy, CompliancePolicy.id == ComplianceResult.policy_id)
+            .order_by(ComplianceResult.policy_id.asc(), ComplianceResult.ts.desc())
+            .all()
+        )
+
+        grouped: dict[int, list[dict]] = {}
+        for res in rows:
+            entry = {
+                "id": res.ComplianceResult.id,
+                "policy_id": res.ComplianceResult.policy_id,
+                "policy_name": res.policy_name,
+                "device_id": res.ComplianceResult.device_id,
+                "device_hostname": res.device_hostname,
+                "job_id": res.ComplianceResult.job_id,
+                "ts": res.ComplianceResult.ts,
+                "status": res.ComplianceResult.status,
+                "details_json": res.ComplianceResult.details_json,
+            }
+            grouped.setdefault(res.ComplianceResult.policy_id, []).append(entry)
+
+        trimmed: list[dict] = []
+        for entries in grouped.values():
+            trimmed.extend(entries[:per_policy_limit])
+        return trimmed

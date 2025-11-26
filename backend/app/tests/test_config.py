@@ -391,3 +391,191 @@ class TestConfigDeploy:
         assert "job_id" in data
         assert data["status"] == "queued"
         mock_send_task.assert_called_once()
+
+
+class TestConfigRollback:
+    """Tests for config rollback endpoints."""
+
+    def test_rollback_preview_requires_auth(self, client):
+        """Test that rollback preview requires authentication."""
+        response = client.post("/api/v1/config/rollback/preview", json={"snapshot_id": 1})
+        assert response.status_code == 403
+
+    def test_rollback_preview_viewer_forbidden(self, client, viewer_headers):
+        """Test that viewers cannot trigger rollback preview."""
+        response = client.post(
+            "/api/v1/config/rollback/preview",
+            json={"snapshot_id": 1},
+            headers=viewer_headers,
+        )
+        assert response.status_code == 403
+
+    def test_rollback_preview_snapshot_not_found(self, client, operator_headers):
+        """Test that rollback preview fails with non-existent snapshot."""
+        response = client.post(
+            "/api/v1/config/rollback/preview",
+            json={"snapshot_id": 99999},
+            headers=operator_headers,
+        )
+        assert response.status_code == 404
+
+    @patch("app.api.config.celery_app.send_task")
+    def test_rollback_preview_success(
+        self, mock_send_task, client, operator_headers, db_session, test_device
+    ):
+        """Test successful rollback preview."""
+        mock_send_task.return_value = MagicMock()
+
+        # Create a snapshot
+        snapshot = ConfigSnapshot(
+            device_id=test_device.id,
+            source="manual",
+            config_text="hostname router1\ninterface Gi0/0\n",
+            hash="abc123",
+        )
+        db_session.add(snapshot)
+        db_session.commit()
+        db_session.refresh(snapshot)
+
+        response = client.post(
+            "/api/v1/config/rollback/preview",
+            json={"snapshot_id": snapshot.id},
+            headers=operator_headers,
+        )
+
+        assert response.status_code == 202
+        data = response.json()
+        assert "job_id" in data
+        assert data["status"] == "queued"
+        mock_send_task.assert_called_once()
+
+    def test_rollback_commit_requires_auth(self, client):
+        """Test that rollback commit requires authentication."""
+        response = client.post(
+            "/api/v1/config/rollback/commit", json={"previous_job_id": 1, "confirm": True}
+        )
+        assert response.status_code == 403
+
+    def test_rollback_commit_viewer_forbidden(self, client, viewer_headers):
+        """Test that viewers cannot commit rollback."""
+        response = client.post(
+            "/api/v1/config/rollback/commit",
+            json={"previous_job_id": 1, "confirm": True},
+            headers=viewer_headers,
+        )
+        assert response.status_code == 403
+
+    @patch("app.api.config.celery_app.send_task")
+    def test_rollback_commit_requires_preview_job(
+        self, mock_send_task, client, operator_headers, db_session, operator_user, test_customer
+    ):
+        """Test that rollback commit requires a rollback preview job."""
+        # Create a non-rollback-preview job
+        job = Job(
+            type="run_commands",
+            status="success",
+            user_id=operator_user.id,
+            customer_id=test_customer.id,
+            target_summary_json={"filters": {"hostnames": ["router1"]}},
+            payload_json={"commands": ["show version"]},
+        )
+        db_session.add(job)
+        db_session.commit()
+        db_session.refresh(job)
+
+        response = client.post(
+            "/api/v1/config/rollback/commit",
+            json={"previous_job_id": job.id, "confirm": True},
+            headers=operator_headers,
+        )
+
+        assert response.status_code == 422
+        assert "not a rollback preview job" in response.json()["detail"].lower()
+
+    @patch("app.api.config.celery_app.send_task")
+    def test_rollback_commit_requires_successful_preview(
+        self, mock_send_task, client, operator_headers, db_session, operator_user, test_customer
+    ):
+        """Test that rollback commit requires preview to be successful."""
+        # Create a failed rollback preview job
+        job = Job(
+            type="config_rollback_preview",
+            status="failed",
+            user_id=operator_user.id,
+            customer_id=test_customer.id,
+            target_summary_json={"snapshot_id": 1, "device_id": 1},
+            payload_json={"snapshot_id": 1, "config_text": "hostname test"},
+        )
+        db_session.add(job)
+        db_session.commit()
+        db_session.refresh(job)
+
+        response = client.post(
+            "/api/v1/config/rollback/commit",
+            json={"previous_job_id": job.id, "confirm": True},
+            headers=operator_headers,
+        )
+
+        assert response.status_code == 422
+        assert "must be successful" in response.json()["detail"].lower()
+
+    @patch("app.api.config.celery_app.send_task")
+    def test_rollback_commit_requires_confirmation(
+        self, mock_send_task, client, operator_headers, db_session, operator_user, test_customer
+    ):
+        """Test that rollback commit requires explicit confirmation."""
+        mock_send_task.return_value = MagicMock()
+
+        # Create a successful rollback preview job
+        preview_job = Job(
+            type="config_rollback_preview",
+            status="success",
+            user_id=operator_user.id,
+            customer_id=test_customer.id,
+            target_summary_json={"snapshot_id": 1, "device_id": 1},
+            payload_json={"snapshot_id": 1, "config_text": "hostname test"},
+        )
+        db_session.add(preview_job)
+        db_session.commit()
+        db_session.refresh(preview_job)
+
+        response = client.post(
+            "/api/v1/config/rollback/commit",
+            json={"previous_job_id": preview_job.id, "confirm": False},
+            headers=operator_headers,
+        )
+
+        assert response.status_code == 422
+        assert "confirmation required" in response.json()["detail"].lower()
+
+    @patch("app.api.config.celery_app.send_task")
+    def test_rollback_commit_success(
+        self, mock_send_task, client, operator_headers, db_session, operator_user, test_customer
+    ):
+        """Test successful rollback commit."""
+        mock_send_task.return_value = MagicMock()
+
+        # Create a successful rollback preview job
+        preview_job = Job(
+            type="config_rollback_preview",
+            status="success",
+            user_id=operator_user.id,
+            customer_id=test_customer.id,
+            target_summary_json={"snapshot_id": 1, "device_id": 1},
+            payload_json={"snapshot_id": 1, "config_text": "hostname test"},
+        )
+        db_session.add(preview_job)
+        db_session.commit()
+        db_session.refresh(preview_job)
+
+        response = client.post(
+            "/api/v1/config/rollback/commit",
+            json={"previous_job_id": preview_job.id, "confirm": True},
+            headers=operator_headers,
+        )
+
+        assert response.status_code == 202
+        data = response.json()
+        assert "job_id" in data
+        assert data["status"] == "queued"
+        mock_send_task.assert_called_once()
