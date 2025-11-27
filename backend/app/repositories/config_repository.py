@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Union
 
 from sqlalchemy.orm import Session
 
@@ -53,6 +53,33 @@ class ConfigSnapshotRepository(SQLAlchemyRepository[ConfigSnapshot]):
             .filter(
                 Device.id == device_id,
                 Device.customer_id == customer_id,
+            )
+            .first()
+        )
+
+    def get_by_id_for_customers(
+        self, snapshot_id: int, customer_ids: Sequence[int]
+    ) -> Optional[ConfigSnapshot]:
+        """Get snapshot by ID, verifying customer ownership via device for multiple customers."""
+        return (
+            self.session.query(ConfigSnapshot)
+            .join(ConfigSnapshot.device)
+            .filter(
+                ConfigSnapshot.id == snapshot_id,
+                Device.customer_id.in_(customer_ids),
+            )
+            .first()
+        )
+
+    def get_device_with_customers_check(
+        self, device_id: int, customer_ids: Sequence[int]
+    ) -> Optional[Device]:
+        """Get device by ID, filtered by multiple customers."""
+        return (
+            self.session.query(Device)
+            .filter(
+                Device.id == device_id,
+                Device.customer_id.in_(customer_ids),
             )
             .first()
         )

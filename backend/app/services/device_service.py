@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import ipaddress
-from typing import Dict, Iterable, Sequence
+from typing import Dict, Iterable, Sequence, Union
 
 from sqlalchemy.orm import Session
 
 from app.db import Credential, CustomerIPRange, Device
-from app.domain.context import TenantRequestContext
+from app.domain.context import MultiTenantContext, TenantRequestContext
 from app.domain.devices import DeviceFilters
 from app.domain.exceptions import (
     ConflictError,
@@ -43,8 +43,23 @@ class DeviceService:
     ) -> tuple[int, Sequence[Device]]:
         return self.devices.list_for_customer(context.customer_id, filters)
 
+    def list_devices_multi_tenant(
+        self,
+        filters: DeviceFilters,
+        context: MultiTenantContext,
+    ) -> tuple[int, Sequence[Device]]:
+        """List devices across all customers the user has access to."""
+        return self.devices.list_for_customers(context.customer_ids, filters)
+
     def get_device(self, device_id: int, context: TenantRequestContext) -> Device:
         device = self.devices.get_by_id(device_id, context.customer_id)
+        if not device:
+            raise NotFoundError("Device not found")
+        return device
+
+    def get_device_multi_tenant(self, device_id: int, context: MultiTenantContext) -> Device:
+        """Get a device by ID from any of the user's accessible customers."""
+        device = self.devices.get_by_id_for_customers(device_id, context.customer_ids)
         if not device:
             raise NotFoundError("Device not found")
         return device
@@ -90,22 +105,29 @@ class DeviceService:
         self,
         device_id: int,
         payload,
-        context: TenantRequestContext,
+        context: Union[TenantRequestContext, MultiTenantContext],
     ) -> Device:
-        device = self.get_device(device_id, context)
+        # Get the device first to determine its customer
+        if isinstance(context, MultiTenantContext):
+            device = self.get_device_multi_tenant(device_id, context)
+            customer_id = device.customer_id
+        else:
+            device = self.get_device(device_id, context)
+            customer_id = context.customer_id
+
         update_data = payload.model_dump(exclude_unset=True)
 
         if "hostname" in update_data:
             self._ensure_hostname_unique(
                 hostname=update_data["hostname"],
-                customer_id=context.customer_id,
+                customer_id=customer_id,
                 exclude_id=device_id,
             )
 
         if "credentials_ref" in update_data:
             self._get_credential_for_customer(
                 credential_id=update_data["credentials_ref"],
-                customer_id=context.customer_id,
+                customer_id=customer_id,
             )
 
         for key, value in update_data.items():
@@ -115,8 +137,13 @@ class DeviceService:
         self.session.refresh(device)
         return device
 
-    def disable_device(self, device_id: int, context: TenantRequestContext) -> None:
-        device = self.get_device(device_id, context)
+    def disable_device(
+        self, device_id: int, context: Union[TenantRequestContext, MultiTenantContext]
+    ) -> None:
+        if isinstance(context, MultiTenantContext):
+            device = self.get_device_multi_tenant(device_id, context)
+        else:
+            device = self.get_device(device_id, context)
         device.enabled = False
         self.session.commit()
 

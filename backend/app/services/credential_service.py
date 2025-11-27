@@ -7,7 +7,7 @@ from typing import Sequence
 from sqlalchemy.orm import Session
 
 from app.db import Credential
-from app.domain.context import TenantRequestContext
+from app.domain.context import MultiTenantContext, TenantRequestContext
 from app.domain.exceptions import ConflictError, NotFoundError
 from app.repositories import CredentialRepository
 
@@ -22,6 +22,10 @@ class CredentialService:
     def list_credentials(self, context: TenantRequestContext) -> Sequence[Credential]:
         return self.credentials.list_for_customer(context.customer_id)
 
+    def list_credentials_multi_tenant(self, context: MultiTenantContext) -> Sequence[Credential]:
+        """List credentials across all accessible customers."""
+        return self.credentials.list_for_customers(context.customer_ids)
+
     def get_credential(
         self,
         credential_id: int,
@@ -31,6 +35,17 @@ class CredentialService:
             credential_id,
             context.customer_id,
         )
+        if not credential:
+            raise NotFoundError("Credential not found")
+        return credential
+
+    def get_credential_multi_tenant(
+        self,
+        credential_id: int,
+        context: MultiTenantContext,
+    ) -> Credential:
+        """Get credential if it belongs to any accessible customer."""
+        credential = self.credentials.get_by_id_for_customers(credential_id, context.customer_ids)
         if not credential:
             raise NotFoundError("Credential not found")
         return credential

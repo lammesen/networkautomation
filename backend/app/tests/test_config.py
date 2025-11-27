@@ -14,7 +14,7 @@ class TestConfigBackup:
             "/api/v1/config/backup",
             json={"targets": {"hostnames": ["router1"]}, "source_label": "manual"},
         )
-        assert response.status_code == 403
+        assert response.status_code == 401
 
     def test_backup_config_viewer_forbidden(self, client, viewer_headers):
         """Test that viewers cannot trigger backup."""
@@ -73,7 +73,7 @@ class TestConfigSnapshots:
     def test_get_snapshot_requires_auth(self, client):
         """Test that getting snapshot requires authentication."""
         response = client.get("/api/v1/config/snapshots/1")
-        assert response.status_code == 403
+        assert response.status_code == 401
 
     def test_get_snapshot_success(
         self, client, auth_headers, db_session, test_device, test_customer
@@ -141,7 +141,7 @@ class TestDeviceSnapshots:
     def test_list_device_snapshots_requires_auth(self, client):
         """Test that listing snapshots requires authentication."""
         response = client.get("/api/v1/config/devices/1/snapshots")
-        assert response.status_code == 403
+        assert response.status_code == 401
 
     def test_list_device_snapshots_success(self, client, auth_headers, db_session, test_device):
         """Test listing snapshots for a device."""
@@ -202,7 +202,7 @@ class TestConfigDiff:
     def test_config_diff_requires_auth(self, client):
         """Test that diff requires authentication."""
         response = client.get("/api/v1/config/devices/1/diff?from=1&to=2")
-        assert response.status_code == 403
+        assert response.status_code == 401
 
     def test_config_diff_success(self, client, auth_headers, db_session, test_device):
         """Test getting diff between two snapshots."""
@@ -254,7 +254,7 @@ class TestConfigDeploy:
                 "snippet": "hostname newname",
             },
         )
-        assert response.status_code == 403
+        assert response.status_code == 401
 
     def test_deploy_preview_viewer_forbidden(self, client, viewer_headers):
         """Test that viewers cannot preview deploy."""
@@ -295,7 +295,7 @@ class TestConfigDeploy:
         response = client.post(
             "/api/v1/config/deploy/commit", json={"previous_job_id": 1, "confirm": True}
         )
-        assert response.status_code == 403
+        assert response.status_code == 401
 
     def test_deploy_commit_viewer_forbidden(self, client, viewer_headers):
         """Test that viewers cannot commit deploy."""
@@ -399,7 +399,7 @@ class TestConfigRollback:
     def test_rollback_preview_requires_auth(self, client):
         """Test that rollback preview requires authentication."""
         response = client.post("/api/v1/config/rollback/preview", json={"snapshot_id": 1})
-        assert response.status_code == 403
+        assert response.status_code == 401
 
     def test_rollback_preview_viewer_forbidden(self, client, viewer_headers):
         """Test that viewers cannot trigger rollback preview."""
@@ -454,7 +454,7 @@ class TestConfigRollback:
         response = client.post(
             "/api/v1/config/rollback/commit", json={"previous_job_id": 1, "confirm": True}
         )
-        assert response.status_code == 403
+        assert response.status_code == 401
 
     def test_rollback_commit_viewer_forbidden(self, client, viewer_headers):
         """Test that viewers cannot commit rollback."""

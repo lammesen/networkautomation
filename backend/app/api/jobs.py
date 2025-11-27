@@ -4,8 +4,8 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 
-from app.dependencies import get_admin_user, get_job_service, get_tenant_context
-from app.domain.context import TenantRequestContext
+from app.dependencies import get_admin_user, get_job_service, get_multi_tenant_context
+from app.domain.context import MultiTenantContext
 from app.domain.jobs import JobFilters
 from app.schemas.job import JobLogResponse, JobResponse
 from app.services.job_service import JobService
@@ -21,11 +21,11 @@ def list_jobs(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     service: JobService = Depends(get_job_service),
-    context: TenantRequestContext = Depends(get_tenant_context),
+    context: MultiTenantContext = Depends(get_multi_tenant_context),
 ) -> list[JobResponse]:
-    """List jobs for the active customer with optional filters."""
+    """List jobs for accessible customers with optional filters."""
     filters = JobFilters(job_type=job_type, status=status, skip=skip, limit=limit)
-    jobs = service.list_jobs(filters, context)
+    jobs = service.list_jobs_multi_tenant(filters, context)
     return [JobResponse.model_validate(job) for job in jobs]
 
 
@@ -33,10 +33,10 @@ def list_jobs(
 def get_job(
     job_id: int,
     service: JobService = Depends(get_job_service),
-    context: TenantRequestContext = Depends(get_tenant_context),
+    context: MultiTenantContext = Depends(get_multi_tenant_context),
 ) -> JobResponse:
     """Get job details."""
-    job = service.get_job(job_id, context)
+    job = service.get_job_multi_tenant(job_id, context)
     return JobResponse.model_validate(job)
 
 
@@ -45,10 +45,10 @@ def get_job_logs_endpoint(
     job_id: int,
     limit: int = Query(1000, ge=1, le=10000),
     service: JobService = Depends(get_job_service),
-    context: TenantRequestContext = Depends(get_tenant_context),
+    context: MultiTenantContext = Depends(get_multi_tenant_context),
 ) -> list[JobLogResponse]:
     """Get job logs."""
-    logs = service.get_job_logs(job_id, limit=limit, context=context)
+    logs = service.get_job_logs_multi_tenant(job_id, limit=limit, context=context)
     return [JobLogResponse.model_validate(log) for log in logs]
 
 
@@ -56,10 +56,10 @@ def get_job_logs_endpoint(
 def get_job_results(
     job_id: int,
     service: JobService = Depends(get_job_service),
-    context: TenantRequestContext = Depends(get_tenant_context),
+    context: MultiTenantContext = Depends(get_multi_tenant_context),
 ) -> dict:
     """Get job results from result_summary_json."""
-    job = service.get_job(job_id, context)
+    job = service.get_job_multi_tenant(job_id, context)
     return {
         "job_id": job.id,
         "status": job.status,
@@ -71,10 +71,10 @@ def get_job_results(
 def retry_job(
     job_id: int,
     service: JobService = Depends(get_job_service),
-    context: TenantRequestContext = Depends(get_tenant_context),
+    context: MultiTenantContext = Depends(get_multi_tenant_context),
 ) -> dict:
     """Retry a failed or stuck job by creating a new job with the same payload."""
-    job = service.get_job(job_id, context)
+    job = service.get_job_multi_tenant(job_id, context)
     new_job = service.retry_job(job, context.user)
     return {"job_id": new_job.id, "status": new_job.status}
 
@@ -83,10 +83,10 @@ def retry_job(
 def cancel_job(
     job_id: int,
     service: JobService = Depends(get_job_service),
-    context: TenantRequestContext = Depends(get_tenant_context),
+    context: MultiTenantContext = Depends(get_multi_tenant_context),
 ) -> dict:
     """Cancel a scheduled or queued job."""
-    job = service.cancel_job(job_id, context)
+    job = service.cancel_job_multi_tenant(job_id, context)
     return {"job_id": job.id, "status": job.status}
 
 

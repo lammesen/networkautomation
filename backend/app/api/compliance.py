@@ -11,10 +11,10 @@ from app.db import User
 from app.dependencies import (
     get_compliance_service,
     get_job_service,
+    get_multi_tenant_context,
     get_operator_context,
-    get_tenant_context,
 )
-from app.domain.context import TenantRequestContext
+from app.domain.context import MultiTenantContext, TenantRequestContext
 from app.schemas.compliance import (
     ComplianceOverviewResponse,
     ComplianceResultResponse,
@@ -38,10 +38,10 @@ def list_policies(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     service: ComplianceService = Depends(get_compliance_service),
-    context: TenantRequestContext = Depends(get_tenant_context),
+    context: MultiTenantContext = Depends(get_multi_tenant_context),
 ) -> list[PolicyListResponse]:
-    """List compliance policies for the active customer."""
-    policies = service.list_policies(context, skip=skip, limit=limit)
+    """List compliance policies for accessible customers."""
+    policies = service.list_policies_multi_tenant(context, skip=skip, limit=limit)
     return [PolicyListResponse.model_validate(p) for p in policies]
 
 
@@ -49,10 +49,10 @@ def list_policies(
 def get_policy(
     policy_id: int,
     service: ComplianceService = Depends(get_compliance_service),
-    context: TenantRequestContext = Depends(get_tenant_context),
+    context: MultiTenantContext = Depends(get_multi_tenant_context),
 ) -> PolicyResponse:
     """Get compliance policy."""
-    policy = service.get_policy(policy_id, context)
+    policy = service.get_policy_multi_tenant(policy_id, context)
     return PolicyResponse.model_validate(policy)
 
 
@@ -144,10 +144,10 @@ def list_compliance_results(
     start: Optional[datetime] = Query(None, description="Start timestamp (UTC)"),
     end: Optional[datetime] = Query(None, description="End timestamp (UTC)"),
     service: ComplianceService = Depends(get_compliance_service),
-    context: TenantRequestContext = Depends(get_tenant_context),
+    context: MultiTenantContext = Depends(get_multi_tenant_context),
 ) -> list[ComplianceResultResponse]:
     """List compliance results with filters."""
-    results = service.list_results(
+    results = service.list_results_multi_tenant(
         context,
         policy_id=policy_id,
         device_id=device_id,
@@ -164,10 +164,10 @@ def list_compliance_results(
 def compliance_overview(
     recent_limit: int = Query(20, ge=1, le=200),
     service: ComplianceService = Depends(get_compliance_service),
-    context: TenantRequestContext = Depends(get_tenant_context),
+    context: MultiTenantContext = Depends(get_multi_tenant_context),
 ) -> ComplianceOverviewResponse:
     """Return aggregated compliance stats and recent results for dashboards."""
-    overview = service.get_overview(context, recent_limit=recent_limit)
+    overview = service.get_overview_multi_tenant(context, recent_limit=recent_limit)
     return ComplianceOverviewResponse(
         policies=[PolicyStatsResponse.model_validate(p) for p in overview["policies"]],
         recent_results=[
@@ -183,10 +183,10 @@ def compliance_overview(
 def get_compliance_result(
     result_id: int,
     service: ComplianceService = Depends(get_compliance_service),
-    context: TenantRequestContext = Depends(get_tenant_context),
+    context: MultiTenantContext = Depends(get_multi_tenant_context),
 ) -> ComplianceResultResponse:
-    """Get a specific compliance result (scoped to tenant)."""
-    result = service.get_result(result_id, context)
+    """Get a specific compliance result (scoped to accessible customers)."""
+    result = service.get_result_multi_tenant(result_id, context)
     return ComplianceResultResponse.model_validate(result)
 
 
@@ -194,8 +194,8 @@ def get_compliance_result(
 def get_device_compliance(
     device_id: int,
     service: ComplianceService = Depends(get_compliance_service),
-    context: TenantRequestContext = Depends(get_tenant_context),
+    context: MultiTenantContext = Depends(get_multi_tenant_context),
 ) -> DeviceComplianceSummary:
     """Get compliance summary for a device across all policies."""
-    summary = service.get_device_compliance_summary(device_id, context)
+    summary = service.get_device_compliance_summary_multi_tenant(device_id, context)
     return DeviceComplianceSummary(**summary)

@@ -98,6 +98,33 @@ class User(Base):
     customers: Mapped[list["Customer"]] = relationship(
         "Customer", secondary=user_customers, back_populates="users"
     )
+    api_keys: Mapped[list["APIKey"]] = relationship("APIKey", back_populates="user")
+
+
+class APIKey(Base):
+    """API Key model for automation scripts and programmatic access."""
+
+    __tablename__ = "api_keys"
+    __table_args__ = (
+        Index("ix_api_keys_user_id", "user_id"),
+        Index("ix_api_keys_key_hash", "key_hash"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    key_prefix: Mapped[str] = mapped_column(String(8), nullable=False)  # First 8 chars for display
+    key_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)  # SHA-256 hash
+    scopes: Mapped[Optional[dict]] = mapped_column(
+        JSON, nullable=True
+    )  # Optional scope restrictions
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # Relationships
+    user: Mapped["User"] = relationship("User", back_populates="api_keys")
 
 
 class Credential(Base):

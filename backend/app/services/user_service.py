@@ -25,6 +25,23 @@ class UserService:
             query = query.filter(User.is_active == active)
         return query.order_by(User.username.asc()).all()
 
+    def get_user_by_id(self, user_id: int) -> User:
+        """Get a user by ID.
+
+        Args:
+            user_id: The user's ID.
+
+        Returns:
+            The user.
+
+        Raises:
+            NotFoundError: If user not found.
+        """
+        user = self.users.get_by_id(user_id)
+        if not user:
+            raise NotFoundError("User not found")
+        return user
+
     def create_user(self, payload) -> User:
         """Register a new user with default viewer role, inactive by default."""
         if self.users.get_by_username(payload.username):

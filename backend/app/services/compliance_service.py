@@ -8,7 +8,7 @@ from typing import Optional, Sequence
 from sqlalchemy.orm import Session
 
 from app.db import CompliancePolicy, ComplianceResult, User
-from app.domain.context import TenantRequestContext
+from app.domain.context import MultiTenantContext, TenantRequestContext
 from app.domain.exceptions import ConflictError, NotFoundError
 from app.repositories import CompliancePolicyRepository, ComplianceResultRepository
 
@@ -33,6 +33,15 @@ class ComplianceService:
         """List compliance policies for the active customer."""
         return self.policies.list_for_customer(context.customer_id, skip=skip, limit=limit)
 
+    def list_policies_multi_tenant(
+        self,
+        context: MultiTenantContext,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> Sequence[CompliancePolicy]:
+        """List compliance policies for all accessible customers."""
+        return self.policies.list_for_customers(context.customer_ids, skip=skip, limit=limit)
+
     def get_policy(
         self,
         policy_id: int,
@@ -40,6 +49,17 @@ class ComplianceService:
     ) -> CompliancePolicy:
         """Get a compliance policy by ID."""
         policy = self.policies.get_by_id_for_customer(policy_id, context.customer_id)
+        if not policy:
+            raise NotFoundError("Policy not found")
+        return policy
+
+    def get_policy_multi_tenant(
+        self,
+        policy_id: int,
+        context: MultiTenantContext,
+    ) -> CompliancePolicy:
+        """Get a compliance policy if accessible by any of the user's customers."""
+        policy = self.policies.get_by_id_for_customers(policy_id, context.customer_ids)
         if not policy:
             raise NotFoundError("Policy not found")
         return policy
@@ -139,6 +159,30 @@ class ComplianceService:
             end_ts=end_ts,
         )
 
+    def list_results_multi_tenant(
+        self,
+        context: MultiTenantContext,
+        *,
+        policy_id: Optional[int] = None,
+        device_id: Optional[int] = None,
+        status_filter: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 100,
+        start_ts: Optional[datetime] = None,
+        end_ts: Optional[datetime] = None,
+    ) -> Sequence[ComplianceResult]:
+        """List compliance results across all accessible customers."""
+        return self.results.list_for_customers(
+            context.customer_ids,
+            policy_id=policy_id,
+            device_id=device_id,
+            status_filter=status_filter,
+            skip=skip,
+            limit=limit,
+            start_ts=start_ts,
+            end_ts=end_ts,
+        )
+
     def get_overview(self, context: TenantRequestContext, recent_limit: int = 20) -> dict:
         """Provide per-policy stats and recent results for dashboards."""
         policies = self.policies.list_for_customer(context.customer_id)
@@ -169,9 +213,50 @@ class ComplianceService:
             "latest_by_policy": latest_by_policy,
         }
 
+    def get_overview_multi_tenant(
+        self, context: MultiTenantContext, recent_limit: int = 20
+    ) -> dict:
+        """Provide per-policy stats and recent results across all accessible customers."""
+        policies = self.policies.list_for_customers(context.customer_ids)
+        stats_rows = self.results.policy_stats_for_customers(context.customer_ids)
+        stats_map = {row["policy_id"]: row for row in stats_rows}
+
+        policy_stats: list[dict] = []
+        for policy in policies:
+            stat = stats_map.get(policy.id, {})
+            policy_stats.append(
+                {
+                    "policy_id": policy.id,
+                    "name": policy.name,
+                    "description": policy.description,
+                    "total": int(stat.get("total", 0) or 0),
+                    "pass_count": int(stat.get("pass_count", 0) or 0),
+                    "fail_count": int(stat.get("fail_count", 0) or 0),
+                    "error_count": int(stat.get("error_count", 0) or 0),
+                    "last_run": stat.get("last_run"),
+                }
+            )
+
+        recent = self.results.list_recent_with_meta_multi(context.customer_ids, limit=recent_limit)
+        latest_by_policy = self.results.latest_by_policy_multi(context.customer_ids)
+        return {
+            "policies": policy_stats,
+            "recent_results": recent,
+            "latest_by_policy": latest_by_policy,
+        }
+
     def get_result(self, result_id: int, context: TenantRequestContext) -> ComplianceResult:
         """Fetch a specific compliance result scoped to the active customer."""
         result = self.results.get_by_id_for_customer(result_id, context.customer_id)
+        if not result:
+            raise NotFoundError("Result not found")
+        return result
+
+    def get_result_multi_tenant(
+        self, result_id: int, context: MultiTenantContext
+    ) -> ComplianceResult:
+        """Fetch a specific compliance result for any accessible customer."""
+        result = self.results.get_by_id_for_customers(result_id, context.customer_ids)
         if not result:
             raise NotFoundError("Result not found")
         return result
@@ -189,6 +274,34 @@ class ComplianceService:
 
         # Get latest result for each policy
         results = self.results.get_latest_results_for_device(device_id, context.customer_id)
+
+        summary = {"device_id": device_id, "policies": []}
+
+        for result in results:
+            policy = self.policies.get_by_id(result.policy_id)
+            summary["policies"].append(
+                {
+                    "policy_id": result.policy_id,
+                    "policy_name": policy.name if policy else "Unknown",
+                    "status": result.status,
+                    "last_check": result.ts,
+                    "details": result.details_json,
+                }
+            )
+
+        return summary
+
+    def get_device_compliance_summary_multi_tenant(
+        self,
+        device_id: int,
+        context: MultiTenantContext,
+    ) -> dict:
+        """Get compliance summary for a device across all policies (multi-tenant)."""
+        device = self.results.get_device_with_customers_check(device_id, context.customer_ids)
+        if not device:
+            raise NotFoundError("Device not found")
+
+        results = self.results.get_latest_results_for_device_multi(device_id, context.customer_ids)
 
         summary = {"device_id": device_id, "policies": []}
 

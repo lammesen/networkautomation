@@ -13,6 +13,7 @@ export function useLogin() {
       return { ...response, user }
     },
     onSuccess: (data) => {
+      // Set auth with no active customer - will show all accessible customers by default
       setAuth(data.access_token, data.refresh_token, data.user)
     },
   })

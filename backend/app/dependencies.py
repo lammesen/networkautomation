@@ -1,16 +1,19 @@
 """Shared FastAPI dependency factories."""
 
+from typing import Optional
+
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from app.core.auth import (
     get_current_active_customer,
     get_current_user,
+    get_optional_active_customer,
     require_admin,
     require_operator,
 )
 from app.db import Customer, User, get_db
-from app.domain import TenantRequestContext
+from app.domain import MultiTenantContext, TenantRequestContext
 from app.services import (
     ComplianceService,
     ConfigService,
@@ -22,6 +25,7 @@ from app.services import (
     UserService,
     get_ssh_session_manager,
 )
+from app.services.api_key_service import APIKeyService
 
 
 def get_session(db: Session = Depends(get_db)) -> Session:
@@ -34,6 +38,18 @@ def get_tenant_context(
     active_customer: Customer = Depends(get_current_active_customer),
 ) -> TenantRequestContext:
     return TenantRequestContext(user=current_user, customer=active_customer)
+
+
+def get_multi_tenant_context(
+    current_user: User = Depends(get_current_user),
+    active_customer: Optional[Customer] = Depends(get_optional_active_customer),
+) -> MultiTenantContext:
+    """Get a context that supports optional customer filtering.
+
+    When no X-Customer-ID header is provided, returns a context that allows
+    access to all customers the user has access to.
+    """
+    return MultiTenantContext(user=current_user, customer=active_customer)
 
 
 def get_operator_context(
@@ -78,3 +94,7 @@ def get_config_service(session: Session = Depends(get_session)) -> ConfigService
 
 def get_compliance_service(session: Session = Depends(get_session)) -> ComplianceService:
     return ComplianceService(session)
+
+
+def get_api_key_service(session: Session = Depends(get_session)) -> APIKeyService:
+    return APIKeyService(session)

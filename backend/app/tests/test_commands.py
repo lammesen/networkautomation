@@ -10,7 +10,7 @@ class TestCommandSuggestions:
     def test_suggestions_requires_auth(self, client):
         """Test that suggestions require authentication."""
         response = client.get("/api/v1/commands/suggestions?platform=ios")
-        assert response.status_code == 403
+        assert response.status_code == 401
 
     def test_suggestions_viewer_forbidden(self, client, viewer_headers):
         """Test that viewers cannot access suggestions (operator-only)."""
@@ -98,7 +98,7 @@ class TestRunCommands:
                 "commands": ["show version"],
             },
         )
-        assert response.status_code == 403
+        assert response.status_code == 401
 
     def test_run_commands_viewer_forbidden(self, client, viewer_headers):
         """Test that viewers cannot run commands."""

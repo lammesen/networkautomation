@@ -42,6 +42,7 @@ import {
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { useAuthStore } from '@/store/authStore'
 import { useUIStore } from '@/store/uiStore'
+import { CustomerSelector } from './CustomerSelector'
 
 const navSections = [
   {
@@ -111,6 +112,9 @@ export function AppSidebar({ onLogout }: AppSidebarProps) {
                 </div>
               </Link>
             </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <CustomerSelector />
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>

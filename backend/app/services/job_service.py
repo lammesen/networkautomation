@@ -9,7 +9,7 @@ from typing import Optional, Sequence
 from sqlalchemy.orm import Session
 
 from app.db import Job, JobLog, User
-from app.domain.context import TenantRequestContext
+from app.domain.context import MultiTenantContext, TenantRequestContext
 from app.domain.exceptions import NotFoundError
 from app.domain.jobs import JobFilters
 from app.repositories import JobLogRepository, JobRepository
@@ -121,6 +121,20 @@ class JobService:
             limit=filters.limit,
         )
 
+    def list_jobs_multi_tenant(
+        self,
+        filters: JobFilters,
+        context: MultiTenantContext,
+    ) -> Sequence[Job]:
+        """List jobs across all accessible customers."""
+        return self.jobs.list_for_customers(
+            context.customer_ids,
+            job_type=filters.job_type,
+            status=filters.status,
+            skip=filters.skip,
+            limit=filters.limit,
+        )
+
     def list_jobs_for_device(
         self,
         hostname: str,
@@ -137,9 +151,32 @@ class JobService:
             limit=filters.limit,
         )
 
+    def list_jobs_for_device_multi_tenant(
+        self,
+        hostname: str,
+        filters: JobFilters,
+        context: MultiTenantContext,
+    ) -> Sequence[Job]:
+        """List jobs that targeted a specific device across accessible customers."""
+        return self.jobs.list_for_device_multi_customer(
+            context.customer_ids,
+            hostname,
+            job_type=filters.job_type,
+            status=filters.status,
+            skip=filters.skip,
+            limit=filters.limit,
+        )
+
     def get_job(self, job_id: int, context: TenantRequestContext) -> Job:
         job = self.jobs.get_by_id(job_id)
         if not job or job.customer_id != context.customer_id:
+            raise NotFoundError("Job not found")
+        return job
+
+    def get_job_multi_tenant(self, job_id: int, context: MultiTenantContext) -> Job:
+        """Get a job if it belongs to any accessible customer."""
+        job = self.jobs.get_by_id_for_customers(job_id, context.customer_ids)
+        if not job:
             raise NotFoundError("Job not found")
         return job
 
@@ -152,6 +189,41 @@ class JobService:
     ) -> Sequence[JobLog]:
         job = self.get_job(job_id, context)
         return self.logs.list_for_job(job.id, limit=limit)
+
+    def get_job_logs_multi_tenant(
+        self,
+        job_id: int,
+        *,
+        limit: int,
+        context: MultiTenantContext,
+    ) -> Sequence[JobLog]:
+        """Get job logs if job belongs to any accessible customer."""
+        job = self.get_job_multi_tenant(job_id, context)
+        return self.logs.list_for_job(job.id, limit=limit)
+
+    def cancel_job_multi_tenant(self, job_id: int, context: MultiTenantContext) -> Job:
+        """Cancel a scheduled or queued job (multi-tenant version)."""
+        from app.domain.exceptions import ValidationError
+
+        job = self.get_job_multi_tenant(job_id, context)
+
+        if job.status not in ("scheduled", "queued"):
+            raise ValidationError(
+                f"Cannot cancel job with status '{job.status}'. "
+                "Only 'scheduled' or 'queued' jobs can be cancelled."
+            )
+
+        job.status = "cancelled"
+        job.finished_at = datetime.utcnow()
+        self.session.commit()
+
+        self.append_log(
+            job_id,
+            level="INFO",
+            message=f"Job cancelled by user {context.user.id}",
+        )
+
+        return job
 
     def retry_job(self, job: Job, user: User) -> Job:
         """Create a new job based on an existing one (for retry)."""

@@ -45,6 +45,7 @@ class Settings(BaseSettings):
 
     # Logging
     log_level: str = "INFO"
+    log_format: str | None = None  # "json", "console", or None (auto-detect based on environment)
 
     # CORS
     cors_origins: list[str] | str = [
@@ -85,11 +86,46 @@ class Settings(BaseSettings):
 
     @field_validator("cors_origins", mode="after")
     @classmethod
-    def restrict_cors_in_production(cls, value):
-        """Disallow wildcard CORS in production deployments."""
+    def validate_cors_origins(cls, value: list[str]) -> list[str]:
+        """Validate CORS origins for security.
+
+        In production:
+        - Rejects empty CORS origins list
+        - Rejects wildcard "*" origins
+        - Requires all origins to be valid URLs (http:// or https://)
+        """
         env = os.getenv("ENVIRONMENT", "development").lower()
-        if env == "production" and value == ["*"]:
-            raise ValueError("CORS origins must be configured for production deployments")
+        is_production = env == "production"
+
+        # Check for empty origins in production
+        if is_production and not value:
+            raise ValueError(
+                "CORS_ORIGINS must be configured for production deployments. "
+                "Set CORS_ORIGINS to a comma-separated list of allowed origins."
+            )
+
+        # Validate each origin
+        for origin in value:
+            # Check for wildcard
+            if origin == "*":
+                if is_production:
+                    raise ValueError(
+                        "Wildcard '*' CORS origin is not allowed in production. "
+                        "Specify explicit origins instead."
+                    )
+                # Allow wildcard in development but log a warning
+                continue
+
+            # Validate origin format (must be http:// or https://)
+            if not origin.startswith(("http://", "https://")):
+                raise ValueError(
+                    f"Invalid CORS origin '{origin}': must start with http:// or https://"
+                )
+
+            # Basic URL validation - check for common mistakes
+            if " " in origin:
+                raise ValueError(f"Invalid CORS origin '{origin}': contains spaces")
+
         return value
 
     @field_validator("database_url")

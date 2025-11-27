@@ -2,10 +2,11 @@
 
 from datetime import datetime, timedelta
 from typing import Optional
+
+from fastapi import Depends, HTTPException, Request, status, Header
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status, Header
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -13,7 +14,7 @@ from app.db import get_db, User, Customer
 from app.schemas.auth import TokenData
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)  # auto_error=False to allow API key fallback
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -92,11 +93,55 @@ def verify_refresh_token(token: str) -> str:
         )
 
 
+def _validate_api_key(api_key: str, db: Session) -> Optional[User]:
+    """Validate an API key and return the associated user.
+
+    Args:
+        api_key: The API key string.
+        db: Database session.
+
+    Returns:
+        User if valid, None otherwise.
+    """
+    from app.services.api_key_service import APIKeyService
+
+    service = APIKeyService(db)
+    result = service.validate_api_key(api_key)
+
+    if result:
+        return result[1]  # Return the User
+    return None
+
+
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
     db: Session = Depends(get_db),
 ) -> User:
-    """Get current user from token."""
+    """Get current user from JWT token or API key.
+
+    Supports two authentication methods:
+    1. Bearer token (JWT): Authorization: Bearer <token>
+    2. API Key: X-API-Key: <api_key>
+    """
+    # First, try API key authentication
+    if x_api_key:
+        user = _validate_api_key(x_api_key, db)
+        if user:
+            return user
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired API key",
+        )
+
+    # Fall back to Bearer token authentication
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated. Provide Bearer token or X-API-Key header.",
+        )
+
     token = credentials.credentials
     token_data = decode_token(token)
 
@@ -131,6 +176,41 @@ async def get_current_active_customer(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="X-Customer-ID header required",
         )
+
+    # Check if customer exists
+    customer = db.query(Customer).filter(Customer.id == x_customer_id).first()
+    if not customer:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Customer not found",
+        )
+
+    # Check permission
+    if current_user.role == "admin":
+        return customer
+
+    if customer not in current_user.customers:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access to this customer denied",
+        )
+
+    return customer
+
+
+async def get_optional_active_customer(
+    x_customer_id: Optional[int] = Header(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Optional[Customer]:
+    """Get active customer from header if provided, otherwise return None.
+
+    When None is returned, the caller should allow access to all customers
+    the user has access to.
+    """
+    if not x_customer_id:
+        # No customer specified - caller should handle multi-customer access
+        return None
 
     # Check if customer exists
     customer = db.query(Customer).filter(Customer.id == x_customer_id).first()

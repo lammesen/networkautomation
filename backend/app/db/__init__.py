@@ -1,6 +1,7 @@
 """Database module initialization."""
 
 from .models import (
+    APIKey,
     Base,
     User,
     Credential,
@@ -18,6 +19,7 @@ from .session import get_db, engine, SessionLocal
 from .utils import seed_default_data
 
 __all__ = [
+    "APIKey",
     "Base",
     "User",
     "Credential",

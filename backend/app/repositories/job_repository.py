@@ -67,6 +67,63 @@ class JobRepository(SQLAlchemyRepository[Job]):
             query = query.filter(Job.status == status)
         return query.offset(skip).limit(min(limit, 1000)).all()
 
+    def list_for_device_multi_customer(
+        self,
+        customer_ids: Sequence[int],
+        hostname: str,
+        *,
+        job_type: Optional[str] = None,
+        status: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> Sequence[Job]:
+        """List jobs that targeted a specific device hostname across multiple customers."""
+        query = (
+            self.session.query(Job)
+            .filter(Job.customer_id.in_(customer_ids))
+            .filter(cast(Job.target_summary_json, String).contains(f'"{hostname}"'))
+            .order_by(Job.requested_at.desc())
+        )
+        if job_type:
+            query = query.filter(Job.type == job_type)
+        if status:
+            query = query.filter(Job.status == status)
+        return query.offset(skip).limit(min(limit, 1000)).all()
+
+    def list_for_customers(
+        self,
+        customer_ids: Sequence[int],
+        *,
+        job_type: Optional[str] = None,
+        status: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> Sequence[Job]:
+        """List jobs for multiple customers."""
+        query = (
+            self.session.query(Job)
+            .filter(Job.customer_id.in_(customer_ids))
+            .order_by(Job.requested_at.desc())
+        )
+        if job_type:
+            query = query.filter(Job.type == job_type)
+        if status:
+            query = query.filter(Job.status == status)
+        return query.offset(skip).limit(min(limit, 1000)).all()
+
+    def get_by_id_for_customers(
+        self,
+        job_id: int,
+        customer_ids: Sequence[int],
+    ) -> Optional[Job]:
+        """Get a job if it belongs to any of the specified customers."""
+        return (
+            self.session.query(Job)
+            .filter(Job.id == job_id)
+            .filter(Job.customer_id.in_(customer_ids))
+            .first()
+        )
+
     def list_all(
         self,
         *,
