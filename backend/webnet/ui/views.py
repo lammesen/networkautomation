@@ -2252,7 +2252,9 @@ class RemediationActionListView(TenantScopedView):
             "device",
             "compliance_result",
             "job",
-        ).order_by("-started_at")
+        ).order_by("-started_at")[
+            :100
+        ]  # Limit to recent 100
         qs = self.filter_by_customer(qs, "rule__policy__customer_id")
 
         actions_payload = [
@@ -2265,11 +2267,11 @@ class RemediationActionListView(TenantScopedView):
                 "started_at": timezone.localtime(a.started_at).strftime("%Y-%m-%d %H:%M:%S"),
                 "error_message": a.error_message,
             }
-            for a in qs[:100]  # Limit to recent 100
+            for a in qs
         ]
 
         context = {
-            "actions": qs[:100],
+            "actions": qs,
             "actions_table_props": json.dumps(
                 {
                     "rows": actions_payload,

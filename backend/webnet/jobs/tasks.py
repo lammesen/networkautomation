@@ -1240,6 +1240,9 @@ def trigger_auto_remediation(compliance_result_id: int) -> None:
         if rule.approval_required == "manual":
             logger.info(f"Rule {rule.id} requires manual approval, skipping auto-remediation")
             continue
+        # Note: 'auto' approval means auto-approve for non-critical policies
+        # 'none' approval means no approval needed at all
+        # Both allow auto-remediation to proceed
 
         # Check daily execution limit
         today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -1308,6 +1311,7 @@ def auto_remediation_job(rule_id: int, compliance_result_id: int) -> None:
         message=f"Starting auto-remediation: {rule.name} on {device.hostname}",
     )
 
+    inventory = None
     try:
         # Build inventory for this single device
         targets = {"device_ids": [device.id]}
@@ -1378,10 +1382,13 @@ def auto_remediation_job(rule_id: int, compliance_result_id: int) -> None:
         if rule.verify_after:
             js.append_log(job, level="INFO", message="Verifying compliance after remediation")
             # TODO: Re-run compliance check to verify
-            # For now, mark as success
-            action.verification_passed = True
-            action.save(update_fields=["verification_passed"])
-            js.append_log(job, level="INFO", message="Verification passed")
+            # For now, we cannot automatically verify, so we leave it as None
+            # The user should manually verify or implement actual compliance re-check
+            js.append_log(
+                job,
+                level="WARNING",
+                message="Automatic verification not yet implemented - manual check recommended",
+            )
 
         # Success
         action.status = "success"
@@ -1408,7 +1415,7 @@ def auto_remediation_job(rule_id: int, compliance_result_id: int) -> None:
         js.append_log(job, level="ERROR", message=f"Remediation failed: {str(e)}")
 
         # Rollback if configured and we have a before snapshot
-        if rule.rollback_on_failure and action.before_snapshot:
+        if rule.rollback_on_failure and action.before_snapshot and inventory:
             try:
                 js.append_log(job, level="INFO", message="Attempting rollback")
                 nr = _nr_from_inventory(inventory)
@@ -1436,6 +1443,10 @@ def auto_remediation_job(rule_id: int, compliance_result_id: int) -> None:
                 action.status = "failed"
         else:
             action.status = "failed"
+            if not inventory:
+                js.append_log(
+                    job, level="WARNING", message="Cannot rollback: inventory not available"
+                )
 
         action.error_message = str(e)
         action.finished_at = timezone.now()
