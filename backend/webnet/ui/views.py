@@ -2333,4 +2333,5 @@ class SSHHostKeyImportView(TenantScopedView):
             # Return the new row
             return render(request, "ssh/_host_key_row.html", {"key": host_key})
         except ValueError as e:
-            return HttpResponseBadRequest(str(e))
+            logger.error("SSHHostKey import failed for device_id=%s, known_hosts_line=%s: %s", device_id, known_hosts_line, repr(e))
+            return HttpResponseBadRequest("Could not import SSH host key. Please check your input.")
