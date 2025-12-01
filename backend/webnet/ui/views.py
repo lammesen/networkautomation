@@ -29,6 +29,7 @@ from webnet.devices.models import (
     DeviceGroup,
     NetBoxConfig,
     NetBoxSyncLog,
+    SSHHostKey,
 )
 from webnet.jobs.models import Job, JobLog
 from webnet.jobs.services import JobService
@@ -88,6 +89,15 @@ class TenantScopedView(LoginRequiredMixin, View):
         for field in fields:
             q |= Q(**{f"{field}__in": customer_ids})
         return qs.filter(q)
+
+    def get_accessible_customer_ids(self):
+        """Get list of customer IDs the current user has access to."""
+        user = self.request.user
+        if getattr(user, "role", "viewer") == "admin":
+            # Admin has access to all customers
+            return list(Customer.objects.values_list("id", flat=True))
+        customer_ids = list(user.customers.values_list("id", flat=True))
+        return customer_ids if customer_ids else []
 
     def ensure_can_write(self):
         if self.request.method == "GET":
@@ -2190,3 +2200,140 @@ class NetBoxSyncLogsView(TenantScopedView):
             return render(request, self.partial_name, {"config": config, "sync_logs": logs})
 
         return render(request, self.template_name, {"config": config, "sync_logs": logs})
+
+
+# SSH Host Key Management Views
+
+
+class SSHHostKeyListView(TenantScopedView):
+    """View for listing and managing SSH host keys."""
+
+    template_name = "ssh/host_keys_list.html"
+
+    def get(self, request):
+        # Get query parameters
+        device_filter = request.GET.get("device")
+        verified_filter = request.GET.get("verified")
+
+        # Base queryset
+        qs = SSHHostKey.objects.select_related(
+            "device", "device__customer", "verified_by"
+        ).order_by("-verified", "-first_seen_at")
+
+        # Apply customer filtering
+        customer_ids = self.get_accessible_customer_ids()
+        qs = qs.filter(device__customer_id__in=customer_ids)
+
+        # Apply device filter
+        if device_filter:
+            qs = qs.filter(device_id=device_filter)
+
+        # Apply verified filter
+        if verified_filter == "true":
+            qs = qs.filter(verified=True)
+        elif verified_filter == "false":
+            qs = qs.filter(verified=False)
+
+        # Get statistics
+        total = qs.count()
+        verified = qs.filter(verified=True).count()
+        unverified = qs.filter(verified=False).count()
+
+        # Get devices for filter dropdown
+        devices = (
+            Device.objects.filter(customer_id__in=customer_ids)
+            .order_by("hostname")
+            .values("id", "hostname")
+        )
+
+        context = {
+            "host_keys": qs,
+            "devices": devices,
+            "selected_device": device_filter,
+            "selected_verified": verified_filter,
+            "stats": {
+                "total": total,
+                "verified": verified,
+                "unverified": unverified,
+            },
+        }
+
+        if request.headers.get("HX-Request"):
+            return render(request, "ssh/_host_keys_table.html", context)
+
+        return render(request, self.template_name, context)
+
+
+class SSHHostKeyVerifyView(TenantScopedView):
+    """View for verifying/unverifying SSH host keys."""
+
+    def post(self, request, pk):
+        host_key = get_object_or_404(SSHHostKey.objects.select_related("device__customer"), pk=pk)
+        check = self.ensure_customer_access(host_key.device.customer_id)
+        if check:
+            return check
+
+        from webnet.core.ssh_host_keys import SSHHostKeyService
+
+        action = request.POST.get("action")
+        if action == "verify":
+            SSHHostKeyService.verify_key_manual(host_key, request.user)
+        elif action == "unverify":
+            SSHHostKeyService.unverify_key(host_key)
+
+        # Return updated row for HTMX swap
+        return render(request, "ssh/_host_key_row.html", {"key": host_key})
+
+
+class SSHHostKeyDeleteView(TenantScopedView):
+    """View for deleting SSH host keys."""
+
+    def delete(self, request, pk):
+        host_key = get_object_or_404(SSHHostKey.objects.select_related("device__customer"), pk=pk)
+        check = self.ensure_customer_access(host_key.device.customer_id)
+        if check:
+            return check
+
+        host_key.delete()
+        # Return empty response for HTMX to remove the row
+        from django.http import HttpResponse
+
+        return HttpResponse(status=200)
+
+
+class SSHHostKeyImportView(TenantScopedView):
+    """View for importing SSH host keys from known_hosts format."""
+
+    template_name = "ssh/_import_modal.html"
+
+    def get(self, request):
+        # Get devices for dropdown
+        customer_ids = self.get_accessible_customer_ids()
+        devices = (
+            Device.objects.filter(customer_id__in=customer_ids)
+            .order_by("hostname")
+            .values("id", "hostname")
+        )
+        return render(request, self.template_name, {"devices": devices})
+
+    def post(self, request):
+        device_id = request.POST.get("device_id")
+        known_hosts_line = request.POST.get("known_hosts_line")
+
+        try:
+            device = Device.objects.select_related("customer").get(id=device_id)
+        except Device.DoesNotExist:
+            return HttpResponseBadRequest("Device not found")
+
+        check = self.ensure_customer_access(device.customer_id)
+        if check:
+            return check
+
+        from webnet.core.ssh_host_keys import SSHHostKeyService
+
+        try:
+            host_key = SSHHostKeyService.import_from_openssh_known_hosts(device, known_hosts_line)
+            # Return the new row
+            return render(request, "ssh/_host_key_row.html", {"key": host_key})
+        except ValueError as e:
+            return HttpResponseBadRequest(str(e))

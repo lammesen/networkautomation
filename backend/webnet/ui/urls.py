@@ -61,6 +61,11 @@ from .views import (
     NetBoxSyncView,
     NetBoxTestConnectionView,
     NetBoxSyncLogsView,
+    # SSH Host Key Management
+    SSHHostKeyListView,
+    SSHHostKeyVerifyView,
+    SSHHostKeyDeleteView,
+    SSHHostKeyImportView,
 )
 
 urlpatterns = [
@@ -144,4 +149,13 @@ urlpatterns = [
         name="netbox-test-connection",
     ),
     path("settings/netbox/<int:pk>/logs", NetBoxSyncLogsView.as_view(), name="netbox-sync-logs"),
+    # SSH Host Key Management
+    path("ssh/host-keys/", SSHHostKeyListView.as_view(), name="ssh-host-keys"),
+    path(
+        "ssh/host-keys/<int:pk>/verify", SSHHostKeyVerifyView.as_view(), name="ssh-host-key-verify"
+    ),
+    path(
+        "ssh/host-keys/<int:pk>/delete", SSHHostKeyDeleteView.as_view(), name="ssh-host-key-delete"
+    ),
+    path("ssh/host-keys/import", SSHHostKeyImportView.as_view(), name="ssh-host-key-import"),
 ]

@@ -1,0 +1,30 @@
+<div class="overflow-x-auto">
+  <table class="w-full">
+    <thead class="border-b">
+      <tr class="text-sm text-muted-foreground">
+        <th class="px-6 py-4 text-left font-medium">Device</th>
+        <th class="px-6 py-4 text-left font-medium">Key Type</th>
+        <th class="px-6 py-4 text-left font-medium">Fingerprint</th>
+        <th class="px-6 py-4 text-left font-medium">First Seen</th>
+        <th class="px-6 py-4 text-left font-medium">Last Seen</th>
+        <th class="px-6 py-4 text-left font-medium">Status</th>
+        <th class="px-6 py-4 text-right font-medium">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y">
+      {% for key in host_keys %}
+      {% include "ssh/_host_key_row.html" %}
+      {% empty %}
+      <tr>
+        <td colspan="7" class="px-6 py-12 text-center text-muted-foreground">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+          </svg>
+          <p class="text-lg font-medium mb-2">No SSH host keys found</p>
+          <p class="text-sm">SSH host keys will be automatically stored when connecting to devices</p>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

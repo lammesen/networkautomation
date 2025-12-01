@@ -1,11 +1,9 @@
 """Tests for SSH host key verification and management."""
 
 import base64
-import hashlib
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-from django.utils import timezone
 
 from webnet.core.ssh_host_keys import (
     DatabaseKnownHostsCallback,
@@ -45,9 +43,7 @@ def credential(customer):
     """Create a test credential."""
     from webnet.devices.models import Credential
 
-    cred = Credential.objects.create(
-        customer=customer, name="test-cred", username="admin"
-    )
+    cred = Credential.objects.create(customer=customer, name="test-cred", username="admin")
     cred.password = "password123"
     cred.save()
     return cred
@@ -111,9 +107,7 @@ class TestSSHHostKeyService:
         """Test creating a new host key."""
         assert SSHHostKey.objects.count() == 0
 
-        host_key, created = SSHHostKeyService.get_or_create_host_key(
-            device, mock_ssh_key
-        )
+        host_key, created = SSHHostKeyService.get_or_create_host_key(device, mock_ssh_key)
 
         assert created
         assert host_key.device == device
@@ -125,16 +119,12 @@ class TestSSHHostKeyService:
     def test_get_or_create_host_key_gets_existing(self, device, mock_ssh_key):
         """Test getting an existing host key."""
         # Create first time
-        host_key1, created1 = SSHHostKeyService.get_or_create_host_key(
-            device, mock_ssh_key
-        )
+        host_key1, created1 = SSHHostKeyService.get_or_create_host_key(device, mock_ssh_key)
         assert created1
         first_seen = host_key1.first_seen_at
 
         # Get second time
-        host_key2, created2 = SSHHostKeyService.get_or_create_host_key(
-            device, mock_ssh_key
-        )
+        host_key2, created2 = SSHHostKeyService.get_or_create_host_key(device, mock_ssh_key)
         assert not created2
         assert host_key2.id == host_key1.id
         assert host_key2.first_seen_at == first_seen
@@ -151,9 +141,7 @@ class TestSSHHostKeyService:
         # No key should be stored with disabled policy
         assert SSHHostKey.objects.count() == 0
 
-    def test_verify_host_key_tofu_first_connection(
-        self, customer, device, mock_ssh_key
-    ):
+    def test_verify_host_key_tofu_first_connection(self, customer, device, mock_ssh_key):
         """Test TOFU policy on first connection stores key."""
         result = SSHHostKeyService.verify_host_key(device, mock_ssh_key)
         assert result is True
@@ -187,9 +175,7 @@ class TestSSHHostKeyService:
         # Both keys should be stored
         assert SSHHostKey.objects.count() == 2
 
-    def test_verify_host_key_strict_first_connection(
-        self, strict_customer, device, mock_ssh_key
-    ):
+    def test_verify_host_key_strict_first_connection(self, strict_customer, device, mock_ssh_key):
         """Test strict policy rejects unknown keys."""
         device.customer = strict_customer
         device.save()
@@ -200,9 +186,7 @@ class TestSSHHostKeyService:
         assert "strict mode" in str(exc_info.value).lower()
         assert SSHHostKey.objects.count() == 0
 
-    def test_verify_host_key_strict_matching_key(
-        self, strict_customer, device, mock_ssh_key
-    ):
+    def test_verify_host_key_strict_matching_key(self, strict_customer, device, mock_ssh_key):
         """Test strict policy accepts known keys."""
         device.customer = strict_customer
         device.save()
@@ -260,13 +244,10 @@ class TestSSHHostKeyService:
         """Test importing a key from known_hosts format."""
         # Valid base64-encoded RSA key (with proper padding)
         known_hosts_line = (
-            "192.168.1.1 ssh-rsa "
-            "AAAAB3NzaC1yc2EAAAADAQABAAABAQDexamplekeydata123456789=="
+            "192.168.1.1 ssh-rsa " "AAAAB3NzaC1yc2EAAAADAQABAAABAQDexamplekeydata123456789=="
         )
 
-        host_key = SSHHostKeyService.import_from_openssh_known_hosts(
-            device, known_hosts_line
-        )
+        host_key = SSHHostKeyService.import_from_openssh_known_hosts(device, known_hosts_line)
 
         assert host_key.device == device
         assert host_key.key_type == "ssh-rsa"
@@ -281,16 +262,11 @@ class TestSSHHostKeyService:
     def test_import_from_openssh_known_hosts_duplicate(self, device):
         """Test importing duplicate key returns existing."""
         known_hosts_line = (
-            "192.168.1.1 ssh-rsa "
-            "AAAAB3NzaC1yc2EAAAADAQABAAABAQDexamplekeydata123456789=="
+            "192.168.1.1 ssh-rsa " "AAAAB3NzaC1yc2EAAAADAQABAAABAQDexamplekeydata123456789=="
         )
 
-        host_key1 = SSHHostKeyService.import_from_openssh_known_hosts(
-            device, known_hosts_line
-        )
-        host_key2 = SSHHostKeyService.import_from_openssh_known_hosts(
-            device, known_hosts_line
-        )
+        host_key1 = SSHHostKeyService.import_from_openssh_known_hosts(device, known_hosts_line)
+        host_key2 = SSHHostKeyService.import_from_openssh_known_hosts(device, known_hosts_line)
 
         assert host_key1.id == host_key2.id
         assert SSHHostKey.objects.count() == 1
@@ -300,14 +276,10 @@ class TestSSHHostKeyService:
 class TestDatabaseKnownHostsCallback:
     """Tests for DatabaseKnownHostsCallback."""
 
-    def test_validate_host_public_key_accepts_valid(
-        self, customer, device, mock_ssh_key
-    ):
+    def test_validate_host_public_key_accepts_valid(self, customer, device, mock_ssh_key):
         """Test callback accepts valid key in TOFU mode."""
         callback = DatabaseKnownHostsCallback(device)
-        result = callback.validate_host_public_key(
-            "test-device", "192.168.1.1", 22, mock_ssh_key
-        )
+        result = callback.validate_host_public_key("test-device", "192.168.1.1", 22, mock_ssh_key)
         assert result is True
         assert SSHHostKey.objects.count() == 1
 
@@ -319,9 +291,7 @@ class TestDatabaseKnownHostsCallback:
         device.save()
 
         callback = DatabaseKnownHostsCallback(device)
-        result = callback.validate_host_public_key(
-            "test-device", "192.168.1.1", 22, mock_ssh_key
-        )
+        result = callback.validate_host_public_key("test-device", "192.168.1.1", 22, mock_ssh_key)
         assert result is False
         assert SSHHostKey.objects.count() == 0
 
@@ -333,9 +303,7 @@ class TestDatabaseKnownHostsCallback:
         invalid_key = MagicMock()
         invalid_key.export_public_key.side_effect = Exception("Test error")
 
-        result = callback.validate_host_public_key(
-            "test-device", "192.168.1.1", 22, invalid_key
-        )
+        result = callback.validate_host_public_key("test-device", "192.168.1.1", 22, invalid_key)
         assert result is False
 
 

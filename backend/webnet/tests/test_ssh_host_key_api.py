@@ -3,7 +3,6 @@
 import json
 
 import pytest
-from django.urls import reverse
 from rest_framework import status
 
 from webnet.customers.models import Customer
@@ -57,9 +56,7 @@ class TestSSHHostKeyAPIList:
         assert data["results"][0]["device_hostname"] == host_key.device.hostname
         assert data["results"][0]["key_type"] == SSHHostKey.KEY_TYPE_RSA
 
-    def test_list_host_keys_scoped_to_customer(
-        self, operator_client, customer, host_key
-    ):
+    def test_list_host_keys_scoped_to_customer(self, operator_client, customer, host_key):
         """Test host keys are scoped to customer."""
         # Create another customer and device
         other_customer = Customer.objects.create(name="Other Customer")
@@ -239,8 +236,7 @@ class TestSSHHostKeyAPIImport:
     def test_import_host_key(self, admin_client, device):
         """Test importing a host key from known_hosts format."""
         known_hosts_line = (
-            "192.168.1.1 ssh-rsa "
-            "AAAAB3NzaC1yc2EAAAADAQABAAABAQDexamplekeydata123456789=="
+            "192.168.1.1 ssh-rsa " "AAAAB3NzaC1yc2EAAAADAQABAAABAQDexamplekeydata123456789=="
         )
 
         response = admin_client.post(

@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}SSH Host Keys - webnet{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="mb-6">
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight">SSH Host Keys</h1>
+      <p class="text-muted-foreground mt-1">Manage SSH host keys for MITM attack prevention</p>
+    </div>
+    <button type="button" hx-get="{% url 'ssh-host-key-import' %}" hx-target="#modal-container" hx-swap="innerHTML"
+            class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 shadow-sm">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+      </svg>
+      Import Key
+    </button>
+  </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="grid gap-4 md:grid-cols-3 mb-6">
+  <div class="rounded-xl border bg-card p-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-sm font-medium text-muted-foreground">Total Keys</p>
+        <p class="text-2xl font-bold mt-1">{{ stats.total }}</p>
+      </div>
+      <div class="rounded-full bg-blue-100 p-3">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="rounded-xl border bg-card p-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-sm font-medium text-muted-foreground">Verified</p>
+        <p class="text-2xl font-bold mt-1">{{ stats.verified }}</p>
+      </div>
+      <div class="rounded-full bg-green-100 p-3">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="rounded-xl border bg-card p-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-sm font-medium text-muted-foreground">Unverified</p>
+        <p class="text-2xl font-bold mt-1">{{ stats.unverified }}</p>
+      </div>
+      <div class="rounded-full bg-yellow-100 p-3">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Filters Card -->
+<div class="rounded-xl border bg-card mb-6">
+  <div class="p-4">
+    <form hx-get="{% url 'ssh-host-keys' %}" hx-target="#host-keys-table" hx-push-url="true" class="flex flex-col gap-4 lg:flex-row lg:items-center">
+      <div class="flex flex-wrap gap-3 items-center flex-1">
+        <!-- Device Filter -->
+        <select name="device" class="flex h-10 rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <option value="">All Devices</option>
+          {% for device in devices %}
+          <option value="{{ device.id }}" {% if selected_device == device.id|stringformat:"s" %}selected{% endif %}>
+            {{ device.hostname }}
+          </option>
+          {% endfor %}
+        </select>
+
+        <!-- Verified Filter -->
+        <select name="verified" class="flex h-10 rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <option value="">All Keys</option>
+          <option value="true" {% if selected_verified == "true" %}selected{% endif %}>Verified Only</option>
+          <option value="false" {% if selected_verified == "false" %}selected{% endif %}>Unverified Only</option>
+        </select>
+
+        <button type="submit" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium h-10 px-4 bg-primary text-primary-foreground hover:bg-primary/90">
+          Apply Filters
+        </button>
+
+        {% if selected_device or selected_verified %}
+        <a href="{% url 'ssh-host-keys' %}" class="inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg text-sm font-medium h-9 px-3 text-muted-foreground hover:text-foreground hover:bg-muted">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+          Clear
+        </a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Host Keys Table -->
+<div class="rounded-xl border bg-card">
+  <div id="host-keys-table">
+    {% include "ssh/_host_keys_table.html" %}
+  </div>
+</div>
+
+<!-- Modal Container -->
+<div id="modal-container"></div>
+
+{% endblock %}
