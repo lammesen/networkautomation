@@ -96,12 +96,13 @@ class NetBoxService:
             result = self._get("/")
             version = result.get("x-ntc-nautobot-version") or result.get("version")
 
-            # If no version in root, try status endpoint
+            # If no version in root, try status endpoint (fallback for different NetBox versions)
             if not version:
                 try:
                     status = self._get("/status/")
                     version = status.get("netbox-version")
                 except Exception:
+                    # Status endpoint may not exist in all NetBox versions; version is optional
                     pass
 
             return ConnectionTestResult(

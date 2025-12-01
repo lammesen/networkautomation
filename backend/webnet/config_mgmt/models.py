@@ -1,4 +1,5 @@
 import hashlib
+import ipaddress as ip_module
 import json
 from typing import Any
 
@@ -142,8 +143,6 @@ class ConfigTemplate(models.Model):
                     errors.append(f"Variable '{var_name}' must be a boolean")
 
             elif var_type == "ipaddress":
-                import ipaddress as ip_module
-
                 try:
                     ip_module.ip_address(str(value))
                 except ValueError:

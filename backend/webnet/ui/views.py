@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from difflib import unified_diff
 import json
+import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q, Count
@@ -31,6 +32,8 @@ from webnet.devices.models import (
 )
 from webnet.jobs.models import Job, JobLog
 from webnet.jobs.services import JobService
+
+logger = logging.getLogger(__name__)
 
 
 class DeviceForm(forms.ModelForm):
@@ -1926,6 +1929,7 @@ class ConfigTemplateRenderView(TenantScopedView):
                 },
             )
         except Exception as e:
+            logger.exception("Template rendering failed for template %s", template.id)
             return render(
                 request,
                 self.partial_name,

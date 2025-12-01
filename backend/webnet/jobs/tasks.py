@@ -351,6 +351,10 @@ def scheduled_netbox_sync() -> None:
             should_sync = now - last_sync >= timedelta(weeks=1)
 
         if should_sync:
+            # Update last_sync_at immediately to prevent duplicate syncs if this task
+            # runs again before the sync job completes
+            config.last_sync_at = now
+            config.save(update_fields=["last_sync_at"])
             netbox_sync_job.delay(config.id, full_sync=False)
 
 

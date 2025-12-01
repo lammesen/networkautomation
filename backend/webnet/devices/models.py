@@ -34,7 +34,8 @@ class NetBoxConfig(models.Model):
     )
     _api_token = models.TextField(
         db_column="api_token",
-        help_text="Encrypted NetBox API token",
+        blank=False,
+        help_text="Encrypted NetBox API token (required)",
     )
     sync_frequency = models.CharField(
         max_length=20,

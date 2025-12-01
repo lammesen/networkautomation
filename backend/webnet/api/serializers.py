@@ -606,6 +606,28 @@ class NetBoxConfigSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("You do not have access to this customer.")
         return value
 
+    def validate(self, attrs):
+        """Validate the serializer data."""
+        # Require api_token on creation
+        if self.instance is None:  # Create operation
+            api_token = attrs.get("api_token")
+            if not api_token:
+                raise serializers.ValidationError(
+                    {"api_token": "API token is required when creating a NetBox configuration."}
+                )
+
+        # Validate default_credential belongs to the same customer
+        default_credential = attrs.get("default_credential")
+        customer = attrs.get("customer") or (self.instance.customer if self.instance else None)
+
+        if default_credential and customer:
+            if default_credential.customer_id != customer.id:
+                raise serializers.ValidationError(
+                    {"default_credential": "Credential must belong to the same customer."}
+                )
+
+        return attrs
+
     def create(self, validated_data):
         api_token = validated_data.pop("api_token", None)
         instance = NetBoxConfig(**validated_data)
