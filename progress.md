@@ -236,3 +236,12 @@
 - 2025-12-01 17:09Z – Added CI workflow (ruff/black/mypy/pytest) for backend and tightened mypy config exclusions.
 - 2025-12-01 17:10Z – Forced Make backend-test to use SQLite default for tests and reran full backend pytest suite (44 passed).
 - 2025-12-01 17:13Z – Added docker-compose stack (backend/worker/beat + Postgres + Redis), compose Make targets, backend JS typecheck script/target, updated .env.example defaults, and verified TypeScript lint (npm run lint).
+- 2025-12-01 18:01Z – Initiated new full codebase audit (/audit-codebase full): reviewed README and prior AUDIT_REPORT, confirmed instructions and orchestration rules, and drafted audit plan (security/performance/tenancy focus).
+- 2025-12-01 18:09Z – Ran quality gates: `make backend-lint` (ruff/black) and `make backend-test` (44 tests) using existing venv (Python 3.14.0); all checks passed.
+- 2025-12-01 18:13Z – Completed audit findings: documented tenant-scoping gaps (ConfigViewSet snapshots/diff, DeviceViewSet detail actions), topology discovery leak, SSH host verification risk, and perf/quality issues for job log queries and exception handling.
+- 2025-12-01 18:17Z – Started implementing approved audit fixes (tenant scoping, SSH verification, performance, quality, tests) per AUDIT_REPORT plan.
+- 2025-12-01 18:30Z – Implemented audit fixes: tenant scoping for topology discovery/config snapshots/device detail actions, SSH host verification controls with DEBUG fallback, performance tweaks for device detail and job logs, rollback tasks marked unimplemented, added dry-run for topology clear, improved exception handling, and added regression tests. Ran `make backend-lint` and `make backend-test` (52 passed).
+- 2025-12-01 19:30Z – Started Django admin shadcn restyle; inspecting current admin overrides and static assets.
+- 2025-12-01 19:50Z – Built shadcn-inspired Django admin theme (new admin-shadcn.css) and added admin base_site/login overrides with branding, gradient header, card layout, and modern form/buttons.
+- 2025-12-01 18:37Z – Refreshed Django admin with shadcn styling: dark gradient shell, pill branding, ghost nav button, tightened login card, accent buttons/inputs, tables/filters/inlines themed, and ensured lint checks remain clean.
+- 2025-12-01 18:44Z – Polished admin shadcn theme: improved search bar styling, checkbox/radio accent colors, inline add-row buttons, and retained lint cleanliness.

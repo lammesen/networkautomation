@@ -190,8 +190,16 @@ def config_rollback_preview_job(job_id: int, device_id: int, target_config: str)
     except Job.DoesNotExist:
         return
     js.set_status(job, "running")
-    js.append_log(job, level="INFO", message=f"Rollback preview for device {device_id}")
-    js.set_status(job, "success", result_summary={"device_id": device_id})
+    js.append_log(
+        job,
+        level="ERROR",
+        message="Rollback preview not implemented; configure rollback strategy",
+    )
+    js.set_status(
+        job,
+        "failed",
+        result_summary={"device_id": device_id, "error": "rollback preview not implemented"},
+    )
 
 
 @shared_task(name="config_rollback_commit_job")
@@ -202,8 +210,16 @@ def config_rollback_commit_job(job_id: int, device_id: int, target_config: str) 
     except Job.DoesNotExist:
         return
     js.set_status(job, "running")
-    js.append_log(job, level="INFO", message=f"Rollback commit for device {device_id}")
-    js.set_status(job, "success", result_summary={"device_id": device_id})
+    js.append_log(
+        job,
+        level="ERROR",
+        message="Rollback commit not implemented; configure rollback strategy",
+    )
+    js.set_status(
+        job,
+        "failed",
+        result_summary={"device_id": device_id, "error": "rollback commit not implemented"},
+    )
 
 
 @shared_task(name="compliance_check_job")
@@ -255,8 +271,8 @@ _def_cdp_intf_re = re.compile(
 )
 
 
-def _parse_cdp_neighbors(output: str):
-    neighbors = []
+def _parse_cdp_neighbors(output: str) -> list[dict[str, str]]:
+    neighbors: list[dict[str, str]] = []
     if not output:
         return neighbors
     blocks = output.split("\n\n")
@@ -293,7 +309,7 @@ def topology_discovery_job(job_id: int, targets: dict) -> None:
         res = nr.run(netmiko_send_command, command_string="show cdp neighbors detail")
         for host, r in res.items():
             _log_host_result(js, job, host, r)
-            device = Device.objects.filter(hostname=host).first()
+            device = Device.objects.filter(hostname=host, customer=job.customer).first()
             if not device or r.failed:
                 continue
             neighbors = _parse_cdp_neighbors(str(r.result))
@@ -323,5 +339,6 @@ def topology_discovery_job(job_id: int, targets: dict) -> None:
             result_summary={"targets": targets, "links_created": discovered_links},
         )
     except Exception as exc:  # pragma: no cover
+        logger.exception("topology_discovery_job failed for job %s", job_id)
         js.append_log(job, level="ERROR", message=str(exc))
         js.set_status(job, "failed", result_summary={"error": str(exc)})

@@ -80,7 +80,7 @@ class JobLogConsumer(AsyncJsonWebsocketConsumer):
             return
         try:
             job_id = int(self.scope["url_route"]["kwargs"]["job_id"])
-        except Exception:
+        except (KeyError, TypeError, ValueError):
             await self.close(code=4002)
             return
         self.job_id = job_id

@@ -1,5 +1,7 @@
 # Network Automation Application Architecture
 
+> Note: This document describes the legacy FastAPI/React architecture and is retained for historical reference. The current stack is Django + DRF + Channels with HTMX and React Islands. For up‑to‑date guidance, see [Developer Guide](./developer-guide.md).
+
 ## Overview
 
 This document describes the architecture of the Network Automation web application, a production-grade system for managing network devices, executing commands, backing up configurations, and running compliance checks.

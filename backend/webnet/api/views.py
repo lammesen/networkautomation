@@ -20,6 +20,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError
 
 from webnet.users.models import User, APIKey
 from webnet.customers.models import Customer, CustomerIPRange
@@ -98,7 +99,8 @@ class AuthViewSet(viewsets.ViewSet):
             refresh = RefreshToken(token)
             data = {"access": str(refresh.access_token), "refresh": str(refresh)}
             return Response(data)
-        except Exception:
+        except TokenError as exc:
+            logger.warning("Invalid refresh token: %s", exc)
             return Response(
                 {"detail": "invalid refresh token"}, status=status.HTTP_401_UNAUTHORIZED
             )
@@ -242,17 +244,32 @@ class DeviceViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
 
     @action(detail=True, methods=["get"])
     def jobs(self, request, pk=None):  # pragma: no cover
-        jobs = Job.objects.filter(target_summary_json__device_id=pk)
+        device = self.get_object()
+        jobs = (
+            Job.objects.filter(customer=device.customer, target_summary_json__device_id=device.id)
+            .select_related("customer", "user")
+            .order_by("-requested_at")
+        )
         return Response(JobSerializer(jobs, many=True).data)
 
     @action(detail=True, methods=["get"])
     def snapshots(self, request, pk=None):  # pragma: no cover
-        snaps = ConfigSnapshot.objects.filter(device_id=pk)
+        device = self.get_object()
+        snaps = (
+            ConfigSnapshot.objects.filter(device=device)
+            .select_related("device", "job")
+            .order_by("-created_at")
+        )
         return Response(ConfigSnapshotSerializer(snaps, many=True).data)
 
     @action(detail=True, methods=["get"])
     def topology(self, request, pk=None):  # pragma: no cover
-        links = TopologyLink.objects.filter(local_device_id=pk)
+        device = self.get_object()
+        links = (
+            TopologyLink.objects.filter(local_device=device)
+            .select_related("local_device", "remote_device")
+            .order_by("local_interface", "remote_hostname")
+        )
         return Response(TopologyLinkSerializer(links, many=True).data)
 
     @action(detail=False, methods=["post"], url_path="bulk-backup")
@@ -463,13 +480,13 @@ class JobLogsView(APIView):
     permission_classes = [IsAuthenticated, RolePermission]
 
     def get(self, request, pk):
-        job = Job.objects.filter(pk=pk).first()
+        job = Job.objects.select_related("customer", "user").filter(pk=pk).first()
         if not job:
             return Response(status=status.HTTP_404_NOT_FOUND)
         if not user_has_customer_access(request.user, job.customer_id):
             return Response(status=status.HTTP_404_NOT_FOUND)
         limit = int(request.query_params.get("limit", 500))
-        logs = JobLog.objects.filter(job_id=pk).order_by("-ts")[:limit]
+        logs = JobLog.objects.select_related("job").filter(job_id=pk).order_by("-ts")[:limit]
         return Response(JobLogSerializer(logs, many=True).data)
 
 
@@ -629,13 +646,16 @@ class ConfigViewSet(viewsets.ViewSet):
         return Response({"job_id": job.id, "status": job.status}, status=status.HTTP_202_ACCEPTED)
 
     def snapshot(self, request, pk=None):
-        snap = ConfigSnapshot.objects.filter(pk=pk).first()
-        if not snap:
+        snap = ConfigSnapshot.objects.select_related("device").filter(pk=pk).first()
+        if not snap or not user_has_customer_access(request.user, snap.device.customer_id):
             return Response(status=status.HTTP_404_NOT_FOUND)
         return Response(ConfigSnapshotSerializer(snap).data)
 
     def device_snapshots(self, request, device_id=None):
-        snaps = ConfigSnapshot.objects.filter(device_id=device_id)
+        device = Device.objects.select_related("customer").filter(pk=device_id).first()
+        if not device or not user_has_customer_access(request.user, device.customer_id):
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        snaps = ConfigSnapshot.objects.filter(device=device).select_related("device", "job")
         return Response(ConfigSnapshotSerializer(snaps, many=True).data)
 
     def diff(self, request, device_id=None):
@@ -645,9 +665,14 @@ class ConfigViewSet(viewsets.ViewSet):
             return Response(
                 {"detail": "from and to query params required"}, status=status.HTTP_400_BAD_REQUEST
             )
+        device = Device.objects.select_related("customer").filter(pk=device_id).first()
+        if not device or not user_has_customer_access(request.user, device.customer_id):
+            return Response(status=status.HTTP_404_NOT_FOUND)
         try:
-            snap_from = ConfigSnapshot.objects.get(pk=from_id, device_id=device_id)
-            snap_to = ConfigSnapshot.objects.get(pk=to_id, device_id=device_id)
+            snap_from = ConfigSnapshot.objects.select_related("device").get(
+                pk=from_id, device=device
+            )
+            snap_to = ConfigSnapshot.objects.select_related("device").get(pk=to_id, device=device)
         except ConfigSnapshot.DoesNotExist:
             return Response(
                 {"detail": "snapshot not found for device"}, status=status.HTTP_404_NOT_FOUND
@@ -699,6 +724,8 @@ class TopologyLinkViewSet(CustomerScopedQuerysetMixin, viewsets.ReadOnlyModelVie
     @action(detail=False, methods=["delete"], url_path="clear")
     def clear(self, request):
         qs = self.get_queryset()
+        if request.query_params.get("dry_run", "false").lower() == "true":
+            return Response({"deleted": 0, "would_delete": qs.count()})
         deleted, _ = qs.delete()
         return Response({"deleted": deleted})
 

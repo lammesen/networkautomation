@@ -1,5 +1,7 @@
 # Operations Guide
 
+> Note: Parts of this document contain legacy examples from a previous FastAPI/React stack. For the authoritative, current guidance, see [Maintainers Guide](./maintainers.md). The operational concepts (jobs, backups, compliance) are unchanged, but example commands and module paths may differ.
+
 This guide covers common operational tasks for the Network Automation application.
 
 ## Table of Contents

@@ -22,11 +22,11 @@ A production-grade web application for network automation using NAPALM, Netmiko,
 
 ### Frontend
 - **Django templates + HTMX + Tailwind** (primary UI)
-- Legacy React SPA remains in `frontend/` (deprecated)
+- **React Islands** for interactive widgets under `backend/static/src/components/islands` (no separate SPA)
 
 ## Quick Start
 
-See [`docs/getting-started.md`](docs/getting-started.md) for setup. Run `make backend-tailwind-build` to compile CSS before packaging. Set secrets in `k8s/secrets.yaml` (SECRET_KEY, ENCRYPTION_KEY, optional CORS/CSRF origins) before deploy.
+See [`docs/getting-started.md`](docs/getting-started.md) for setup. Run `make backend-build-static` to build CSS/JS and collectstatic before packaging. Set secrets in `k8s/secrets.yaml` (SECRET_KEY, ENCRYPTION_KEY, optional CORS/CSRF origins) before deploy.
 
 ### Prerequisites
 - Docker Desktop with Kubernetes enabled (or another local Kubernetes cluster)
@@ -85,22 +85,25 @@ make seed-admin   # createsuperuser --no-input; set credentials via env
 
 ```
 networkautomation/
-├── backend/                 # Django project `webnet`
-│   ├── webnet/              # Django apps (users, devices, jobs, compliance, etc.)
-│   ├── manage.py            # Django management entrypoint
-│   ├── templates/           # Django templates (HTMX)
-│   └── pyproject.toml       # Python dependencies
-├── frontend/                # Legacy React SPA (deprecated)
-├── deploy/                  # Container build assets
-│   ├── Dockerfile.backend   # Django/Channels/daphne
-│   ├── Dockerfile.frontend
-│   └── Dockerfile.linux-device
-├── k8s/                     # Kubernetes manifests
-│   ├── backend.yaml         # Django ASGI service
-│   ├── worker.yaml          # Celery worker
-│   ├── postgres.yaml, redis.yaml, pvc.yaml, services.yaml, linux-device.yaml
-└── docs/                    # Documentation
+├── backend/                         # Django project `webnet`
+│   ├── webnet/                      # Django apps (users, devices, jobs, compliance, etc.)
+│   ├── templates/                   # Django templates (HTMX)
+│   ├── static/src/components/       # React Islands + shadcn/ui components
+│   ├── static/src/islands.tsx       # Island registry
+│   ├── manage.py
+│   └── pyproject.toml               # Python dependencies
+├── deploy/                          # Container build assets
+│   ├── Dockerfile.backend           # Django/Channels/Daphne
+│   ├── Dockerfile.backend-bun       # Optional Bun toolchain image
+│   └── Dockerfile.linux-device      # Test/simulated device image
+├── k8s/                             # Kubernetes manifests
+│   ├── backend.yaml                 # Django ASGI service
+│   ├── worker.yaml                  # Celery worker
+│   ├── postgres.yaml, redis.yaml, pvc.yaml, services.yaml, linux-device.yaml, ingress.yaml
+└── docs/                            # Documentation (see docs/README.md)
 ```
+
+Documentation index: [`docs/README.md`](docs/README.md)
 
 ## Usage
 

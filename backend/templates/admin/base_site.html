@@ -1,0 +1,25 @@
+{% extends "admin/base.html" %}
+{% load i18n static %}
+
+{% block title %}{{ title }} | WebNet Admin{% endblock %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <link rel="stylesheet" href="{% static 'css/admin-shadcn.css' %}">
+{% endblock %}
+
+{% block branding %}
+  <div class="adm-brand">
+    <div class="adm-pill">Admin</div>
+    <div>
+      <div class="adm-brand__title">WebNet</div>
+      <div class="adm-brand__tagline">Network automation control plane</div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block nav-global %}
+  <div class="adm-nav-global">
+    <a href="/" class="adm-ghost-button">← Back to WebNet</a>
+  </div>
+{% endblock %}

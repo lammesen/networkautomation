@@ -15,8 +15,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
 
-def env(key: str, default: str | None = None) -> str | None:
-    return os.getenv(key, default)
+def env(key: str, default: str | None = None) -> str:
+    val = os.getenv(key, default)
+    return "" if val is None else str(val)
 
 
 # Core settings
@@ -174,6 +175,8 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = (
     env("SECURE_HSTS_INCLUDE_SUBDOMAINS", "true").lower() == "true" if not DEBUG else False
 )
 SECURE_HSTS_PRELOAD = env("SECURE_HSTS_PRELOAD", "true" if not DEBUG else "false").lower() == "true"
+SSH_STRICT_HOST_VERIFY = env("SSH_STRICT_HOST_VERIFY", "true").lower() == "true"
+SSH_KNOWN_HOSTS_PATH = env("SSH_KNOWN_HOSTS_PATH", "") or None
 
 LOGIN_URL = "/login/"
 LOGIN_REDIRECT_URL = "/"

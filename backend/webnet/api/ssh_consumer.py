@@ -8,7 +8,7 @@ import contextlib
 from typing import Optional
 
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
-from webnet.core.ssh import SSHSessionManager
+from webnet.core.ssh import SSHSessionError, SSHSessionManager
 from channels.db import database_sync_to_async
 from django.contrib.auth.models import AnonymousUser
 
@@ -26,7 +26,7 @@ class SSHConsumer(AsyncJsonWebsocketConsumer):
             return
         try:
             self.device_id = int(self.scope["url_route"]["kwargs"]["device_id"])
-        except Exception:
+        except (KeyError, TypeError, ValueError):
             await self.close(code=4002)
             return
         device = await self._get_device(self.device_id)
@@ -93,7 +93,9 @@ class SSHConsumer(AsyncJsonWebsocketConsumer):
                     "exit_status": result.exit_status,
                 }
             )
-        except Exception as exc:
+        except SSHSessionError as exc:
+            await self.send_json({"type": "error", "detail": str(exc)})
+        except Exception as exc:  # pragma: no cover - defensive
             await self.send_json({"type": "error", "detail": str(exc)})
 
     async def _keepalive(self):  # pragma: no cover - timer loop

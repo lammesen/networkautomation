@@ -1,0 +1,68 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}{% trans "Log in" %} | WebNet Admin{% endblock %}
+{% block bodyclass %}{{ block.super }} login{% endblock %}
+
+{% block content %}
+  <div class="adm-login-card">
+    <div class="adm-login-head">
+      <div class="adm-pill">Admin</div>
+      <div>
+        <h1>{% trans "Welcome back" %}</h1>
+        <p class="adm-login-subtitle">{% trans "Sign in to manage automation and inventory" %}</p>
+      </div>
+    </div>
+
+    {% if form.non_field_errors %}
+      <div class="adm-login-errors">
+        {% for error in form.non_field_errors %}
+          <p class="errornote">{{ error }}</p>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% if form.errors and not form.non_field_errors %}
+      <div class="adm-login-errors">
+        <p class="errornote">{% trans "Please check your username and password." %}</p>
+      </div>
+    {% endif %}
+
+    <form action="{{ app_path }}" method="post" class="adm-login-form" id="login-form">
+      {% csrf_token %}
+      <div class="adm-field">
+        <label for="{{ form.username.id_for_label }}">{% trans "Username" %}</label>
+        {{ form.username }}
+        {{ form.username.errors }}
+      </div>
+
+      <div class="adm-field">
+        <label for="{{ form.password.id_for_label }}">{% trans "Password" %}</label>
+        {{ form.password }}
+        {{ form.password.errors }}
+      </div>
+
+      {% if form.this_is_the_login_form %}
+        {{ form.this_is_the_login_form }}
+      {% else %}
+        <input type="hidden" name="this_is_the_login_form" value="1">
+      {% endif %}
+
+      {% if next %}
+        <input type="hidden" name="next" value="{{ next }}">
+      {% endif %}
+
+      <div class="submit-row">
+        <input type="submit" value="{% trans 'Sign in' %}">
+      </div>
+    </form>
+
+    <div class="adm-login-footer">
+      <span>{{ site_header|default:_('WebNet Admin') }}</span>
+      {% url 'admin_password_reset' as password_reset_url %}
+      {% if password_reset_url %}
+        <a href="{{ password_reset_url }}">{% trans "Forgot password?" %}</a>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}

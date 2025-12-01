@@ -334,3 +334,4 @@ The agent will then:
 3. Create/update `AGENTS.md` with structured content
 4. Log all progress to `progress.md`
 
+
