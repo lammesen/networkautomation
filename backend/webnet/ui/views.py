@@ -763,12 +763,17 @@ class ComplianceOverviewView(TenantScopedView):
 class TopologyListView(TenantScopedView):
     template_name = "topology/list.html"
     partial_name = "topology/_table.html"
+    map_partial_name = "topology/_map.html"
     customer_field = ("local_device__customer_id",)
 
     def get(self, request):
-        qs = TopologyLink.objects.select_related("local_device").order_by("local_device__hostname")
+        view = request.GET.get("view", "table")
+        qs = TopologyLink.objects.select_related("local_device", "remote_device").order_by(
+            "local_device__hostname"
+        )
         qs = self.filter_by_customer(qs)
 
+        # Table view data
         links_payload = [
             {
                 "id": link.id,
@@ -789,8 +794,97 @@ class TopologyListView(TenantScopedView):
             },
         }
 
-        context = {"links": qs, "topology_table_props": json.dumps(topology_table_props)}
+        context = {
+            "links": qs,
+            "topology_table_props": json.dumps(topology_table_props),
+            "view": view,
+        }
+
+        # If map view, also generate graph data
+        if view == "map":
+            nodes: dict[str, dict] = {}
+            edges = []
+            for link in qs:
+                local_id = str(link.local_device_id)
+                remote_id = str(link.remote_device_id or f"unknown-{link.remote_hostname}")
+                local_dev = link.local_device
+                nodes[local_id] = {
+                    "id": local_id,
+                    "label": local_dev.hostname,
+                    "data": {
+                        "hostname": local_dev.hostname,
+                        "mgmt_ip": local_dev.mgmt_ip,
+                        "vendor": local_dev.vendor,
+                        "platform": local_dev.platform,
+                        "site": local_dev.site,
+                        "role": local_dev.role,
+                        "enabled": local_dev.enabled,
+                        "reachability_status": local_dev.reachability_status,
+                        "detail_url": f"/devices/{local_dev.id}/",
+                    },
+                    "type": "device",
+                }
+                # Remote device node
+                if link.remote_device_id and link.remote_device:
+                    remote_dev = link.remote_device
+                    nodes[remote_id] = {
+                        "id": remote_id,
+                        "label": remote_dev.hostname,
+                        "data": {
+                            "hostname": remote_dev.hostname,
+                            "mgmt_ip": remote_dev.mgmt_ip,
+                            "vendor": remote_dev.vendor,
+                            "platform": remote_dev.platform,
+                            "site": remote_dev.site,
+                            "role": remote_dev.role,
+                            "enabled": remote_dev.enabled,
+                            "reachability_status": remote_dev.reachability_status,
+                            "detail_url": f"/devices/{remote_dev.id}/",
+                        },
+                        "type": "device",
+                    }
+                else:
+                    nodes[remote_id] = {
+                        "id": remote_id,
+                        "label": link.remote_hostname,
+                        "data": {
+                            "hostname": link.remote_hostname,
+                            "mgmt_ip": link.remote_ip,
+                            "vendor": link.remote_platform,
+                            "platform": link.remote_platform,
+                            "site": None,
+                            "role": None,
+                            "enabled": None,
+                            "reachability_status": None,
+                            "detail_url": None,
+                        },
+                        "type": "unknown",
+                    }
+                edges.append(
+                    {
+                        "id": f"{local_id}->{remote_id}:{link.local_interface}",
+                        "source": local_id,
+                        "target": remote_id,
+                        "data": {
+                            "local_interface": link.local_interface,
+                            "remote_interface": link.remote_interface,
+                            "protocol": link.protocol,
+                            "discovered_at": (
+                                link.discovered_at.isoformat() if link.discovered_at else None
+                            ),
+                        },
+                    }
+                )
+            topology_map_props = {
+                "nodes": list(nodes.values()),
+                "edges": edges,
+                "wsUrl": f"ws://{request.get_host()}/ws/updates/",
+            }
+            context["topology_map_props"] = json.dumps(topology_map_props)
+
         if request.headers.get("HX-Request"):
+            if view == "map":
+                return render(request, self.map_partial_name, context)
             return render(request, self.partial_name, context)
         return render(request, self.template_name, context)
 
