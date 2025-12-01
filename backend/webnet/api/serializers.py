@@ -198,6 +198,7 @@ class GitRepositorySerializer(serializers.ModelSerializer):
     """Serializer for Git repository configuration.
 
     Write-only fields for sensitive auth credentials.
+    Validates customer access on create to prevent tenant isolation bypass.
     """
 
     auth_token = serializers.CharField(
@@ -246,6 +247,19 @@ class GitRepositorySerializer(serializers.ModelSerializer):
         """Check if SSH key is configured (without exposing it)."""
         return bool(obj._ssh_private_key)
 
+    def validate_customer(self, value: Customer) -> Customer:
+        """Validate that the user has access to the specified customer.
+
+        This prevents tenant isolation bypass where a user could create
+        a GitRepository for a customer they don't have access to.
+        """
+        from webnet.api.permissions import user_has_customer_access
+
+        request = self.context.get("request")
+        if request and not user_has_customer_access(request.user, value.id):
+            raise serializers.ValidationError("You do not have access to this customer.")
+        return value
+
     def create(self, validated_data: dict) -> GitRepository:
         auth_token = validated_data.pop("auth_token", None)
         ssh_private_key = validated_data.pop("ssh_private_key", None)
@@ -266,9 +280,10 @@ class GitRepositorySerializer(serializers.ModelSerializer):
             setattr(instance, key, value)
 
         # Only update credentials if provided (allows partial updates)
-        if auth_token:
+        # Use 'is not None' to allow clearing with empty strings
+        if auth_token is not None:
             instance.auth_token = auth_token
-        if ssh_private_key:
+        if ssh_private_key is not None:
             instance.ssh_private_key = ssh_private_key
 
         instance.save()

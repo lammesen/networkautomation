@@ -6,13 +6,14 @@ It supports both HTTPS (token-based) and SSH authentication methods.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -23,6 +24,31 @@ if TYPE_CHECKING:
     from webnet.jobs.models import Job
 
 logger = logging.getLogger(__name__)
+
+# Pattern to match tokens/credentials in URLs (handles various URL patterns)
+_CREDENTIAL_PATTERN = re.compile(
+    r"(https?://)([^:@]+:[^@]+@)",  # Match https://user:token@ or similar
+    re.IGNORECASE,
+)
+
+
+def _sanitize_git_error(error_msg: str) -> str:
+    """Sanitize git error messages to remove embedded credentials.
+
+    Git stderr may contain remote URLs with embedded tokens. This function
+    removes any credentials from URLs before the message is stored or returned.
+
+    Args:
+        error_msg: Raw error message from git command
+
+    Returns:
+        Sanitized error message with credentials redacted
+    """
+    if not error_msg:
+        return error_msg
+    # Replace credential patterns with [REDACTED]
+    sanitized = _CREDENTIAL_PATTERN.sub(r"\1[REDACTED]@", error_msg)
+    return sanitized
 
 
 @dataclass
@@ -59,6 +85,7 @@ class GitService:
         """
         self.repository = repository
         self._temp_dir: Path | None = None
+        self._base_temp_dir: Path | None = None  # Track original temp dir for cleanup
         self._ssh_key_file: Path | None = None
 
     def sync_snapshots(
@@ -155,7 +182,8 @@ class GitService:
             )
 
         except Exception as e:
-            error_msg = str(e)
+            # Sanitize error message to prevent credential leakage
+            error_msg = _sanitize_git_error(str(e))
             logger.exception("Git sync failed for repository %s", self.repository.id)
 
             # Update sync log
@@ -200,9 +228,11 @@ class GitService:
             )
 
             if result.returncode != 0:
+                # Sanitize stderr to remove any embedded credentials
+                sanitized_error = _sanitize_git_error(result.stderr.strip())
                 return SyncResult(
                     success=False,
-                    error=f"Connection failed: {result.stderr.strip()}",
+                    error=f"Connection failed: {sanitized_error}",
                 )
 
             return SyncResult(success=True, message="Connection successful")
@@ -210,7 +240,7 @@ class GitService:
         except subprocess.TimeoutExpired:
             return SyncResult(success=False, error="Connection timed out")
         except Exception as e:
-            return SyncResult(success=False, error=str(e))
+            return SyncResult(success=False, error=_sanitize_git_error(str(e)))
         finally:
             self._cleanup_workspace()
 
@@ -267,19 +297,28 @@ class GitService:
 
     def _setup_workspace(self) -> None:
         """Set up temporary workspace for Git operations."""
-        self._temp_dir = Path(tempfile.mkdtemp(prefix="webnet_git_"))
+        self._base_temp_dir = Path(tempfile.mkdtemp(prefix="webnet_git_"))
+        self._temp_dir = self._base_temp_dir
 
         # Set up SSH key if using SSH auth
         if self.repository.auth_type == "ssh_key" and self.repository.ssh_private_key:
-            self._ssh_key_file = self._temp_dir / "id_rsa"
+            self._ssh_key_file = self._base_temp_dir / "id_rsa"
             self._ssh_key_file.write_text(self.repository.ssh_private_key)
             os.chmod(self._ssh_key_file, 0o600)
 
     def _cleanup_workspace(self) -> None:
-        """Clean up temporary workspace."""
-        if self._temp_dir and self._temp_dir.exists():
-            shutil.rmtree(self._temp_dir, ignore_errors=True)
+        """Clean up temporary workspace including SSH key material."""
+        # Clean up the cloned repo directory if different from base
+        if self._temp_dir and self._temp_dir != self._base_temp_dir:
+            if self._temp_dir.exists():
+                shutil.rmtree(self._temp_dir, ignore_errors=True)
+
+        # Clean up the base temp directory (contains SSH key if used)
+        if self._base_temp_dir and self._base_temp_dir.exists():
+            shutil.rmtree(self._base_temp_dir, ignore_errors=True)
+
         self._temp_dir = None
+        self._base_temp_dir = None
         self._ssh_key_file = None
 
     def _get_git_env(self) -> dict:
@@ -308,7 +347,9 @@ class GitService:
                 token = self.repository.auth_token
 
                 # GitHub uses x-access-token as username
-                if "github.com" in parsed.netloc:
+                # Use parsed.hostname for secure comparison (excludes port, username, etc.)
+                hostname = parsed.hostname.lower() if parsed.hostname else ""
+                if hostname == "github.com" or hostname == "www.github.com":
                     netloc = f"x-access-token:{token}@{parsed.netloc}"
                 else:
                     # GitLab and others typically use oauth2 or the token directly
@@ -337,7 +378,8 @@ class GitService:
         )
 
         if result.returncode != 0:
-            raise RuntimeError(f"Git clone failed: {result.stderr.strip()}")
+            sanitized_error = _sanitize_git_error(result.stderr.strip())
+            raise RuntimeError(f"Git clone failed: {sanitized_error}")
 
         # Update temp_dir to point to the cloned repo
         self._temp_dir = repo_dir
@@ -362,14 +404,26 @@ class GitService:
 
         Returns:
             Number of files written
+
+        Raises:
+            RuntimeError: If workspace not set up or path traversal detected
         """
         if not self._temp_dir:
             raise RuntimeError("Workspace not set up")
 
         files_written = 0
+        base_dir = self._temp_dir.resolve()
 
         for snapshot in snapshots:
-            file_path = self._temp_dir / self.repository.get_config_path(snapshot.device)
+            relative_path = self.repository.get_config_path(snapshot.device)
+            file_path = self._temp_dir / relative_path
+
+            # Prevent path traversal: ensure resolved path is within base directory
+            resolved_path = file_path.resolve()
+            try:
+                resolved_path.relative_to(base_dir)
+            except ValueError:
+                raise RuntimeError(f"Path traversal detected: {resolved_path} escapes {base_dir}")
 
             # Create parent directories
             file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -380,7 +434,6 @@ class GitService:
 
             # Add metadata file with snapshot info
             metadata_path = file_path.with_suffix(".meta.json")
-            import json
 
             metadata = {
                 "snapshot_id": snapshot.id,
@@ -464,7 +517,8 @@ class GitService:
         )
 
         if result.returncode != 0:
-            raise RuntimeError(f"Git push failed: {result.stderr.strip()}")
+            sanitized_error = _sanitize_git_error(result.stderr.strip())
+            raise RuntimeError(f"Git push failed: {sanitized_error}")
 
     def _generate_commit_message(
         self, snapshots: list["ConfigSnapshot"], job: "Job | None" = None
@@ -479,7 +533,7 @@ class GitService:
             Commit message string
         """
         device_count = len(set(s.device_id for s in snapshots))
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        timestamp = timezone.now().strftime("%Y-%m-%d %H:%M:%S")
 
         msg_parts = [f"Config backup: {device_count} device(s)"]
 
