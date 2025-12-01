@@ -165,6 +165,28 @@ class JobService:
                     (j.target_summary_json or {}).get("filters", {}),
                 ),
             ),
+            # Issue #40 - Bulk Device Onboarding job types
+            "ip_range_scan": (
+                "ip_range_scan_job",
+                lambda j: (
+                    j.id,
+                    (j.payload_json or {}).get("ip_ranges", []),
+                    (j.payload_json or {}).get("credential_ids", []),
+                    (j.payload_json or {}).get("use_snmp", True),
+                    (j.payload_json or {}).get("snmp_community", "public"),
+                    (j.payload_json or {}).get("snmp_version", "2c"),
+                    (j.payload_json or {}).get("test_ssh", True),
+                    (j.payload_json or {}).get("ports", [22]),
+                ),
+            ),
+            "credential_test": (
+                "credential_test_job",
+                lambda j: (
+                    j.id,
+                    (j.payload_json or {}).get("discovered_device_ids", []),
+                    (j.payload_json or {}).get("credential_ids", []),
+                ),
+            ),
         }
         entry = task_map.get(job.type)
         if not entry:

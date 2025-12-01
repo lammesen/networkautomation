@@ -801,12 +801,13 @@ def _test_ssh_credential(
                     "device_type": conn.device_type,
                 }
 
-                # Try to get hostname
+                # Try to get hostname - best effort, not critical for auth success
                 try:
                     prompt = conn.find_prompt()
                     hostname = prompt.strip("#>$").strip()
                     device_info["hostname"] = hostname
                 except Exception:
+                    # Hostname extraction is optional; proceed without it if it fails
                     pass
 
                 conn.disconnect()
@@ -823,8 +824,9 @@ def _test_ssh_credential(
 
         return False, None, "Could not establish SSH connection with any device type"
 
-    except Exception as e:
-        return False, None, f"SSH connection error: {str(e)}"
+    except Exception:
+        logger.exception("Unexpected error during SSH credential test for %s", ip)
+        return False, None, "An internal error occurred while testing SSH credentials."
 
 
 def _snmp_get_device_info(

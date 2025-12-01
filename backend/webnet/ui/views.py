@@ -1410,7 +1410,8 @@ class DiscoveryQueueActionView(TenantScopedView):
                     platform=platform,
                 )
             except ValueError as e:
-                return HttpResponseBadRequest(str(e))
+                logger.error("Device approval failed: %s", e, exc_info=True)
+                return HttpResponseBadRequest("Invalid device approval request.")
 
         elif action == "reject":
             notes = request.POST.get("notes", "")
