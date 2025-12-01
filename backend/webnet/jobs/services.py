@@ -151,7 +151,12 @@ class JobService:
             ),
             "topology_discovery": (
                 "topology_discovery_job",
-                lambda j: (j.id, (j.target_summary_json or {}).get("filters", {})),
+                lambda j: (
+                    j.id,
+                    (j.target_summary_json or {}).get("filters", {}),
+                    (j.payload_json or {}).get("protocol", "both"),
+                    (j.payload_json or {}).get("auto_create_devices", False),
+                ),
             ),
             "check_reachability": (
                 "check_reachability_job",

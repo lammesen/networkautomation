@@ -313,15 +313,52 @@ def check_reachability_job(job_id: int, targets: dict | None = None) -> None:
         js.set_status(job, "failed", result_summary={"error": str(exc)})
 
 
+# CDP parsing regexes
 _def_cdp_device_re = re.compile(r"Device ID\s*:\s*(?P<hostname>\S+)", re.IGNORECASE)
 _def_cdp_intf_re = re.compile(
     r"Interface:\s*(?P<local_intf>[^,]+),\s*Port ID \(outgoing port\):\s*(?P<remote_intf>.+)",
     re.IGNORECASE,
 )
+_def_cdp_ip_re = re.compile(
+    r"(?:IP address|Management address(?:es)?)\s*:\s*(?P<ip>[\d.]+)", re.IGNORECASE
+)
+_def_cdp_platform_re = re.compile(r"Platform\s*:\s*(?P<platform>[^,\n]+)", re.IGNORECASE)
+
+# LLDP parsing regexes (multi-vendor support)
+# Note: Chassis ID may contain MAC address; we prefer System Name for hostname
+_def_lldp_chassis_re = re.compile(r"Chassis id\s*:\s*(?P<chassis>\S+)", re.IGNORECASE)
+_def_lldp_sysname_re = re.compile(r"System Name\s*:\s*(?P<sysname>\S+)", re.IGNORECASE)
+# Local interface - don't include "Port id" as that refers to remote port
+_def_lldp_local_intf_re = re.compile(
+    r"(?:Local Intf|Local Interface)\s*:\s*(?P<local_intf>\S+)", re.IGNORECASE
+)
+_def_lldp_port_id_re = re.compile(r"Port id\s*:\s*(?P<port_id>\S+)", re.IGNORECASE)
+_def_lldp_port_desc_re = re.compile(
+    r"(?:Port Description|Port-description)\s*:\s*(?P<port_desc>.+)", re.IGNORECASE
+)
+# Match management IP in formats like:
+# "Management Addresses:\n    IP: 10.1.1.2" or "Mgmt-address: 10.1.1.1"
+_def_lldp_mgmt_ip_re = re.compile(
+    r"(?:Management Address(?:es)?|Mgmt-address)[:\s\n]+(?:IP:\s*)?(?P<ip>[\d.]+)",
+    re.IGNORECASE | re.MULTILINE,
+)
+# Non-greedy match to avoid capturing across multiple blocks
+_def_lldp_sysdesc_re = re.compile(
+    r"System Description\s*:\s*(?P<sysdesc>.+?)\n\n", re.IGNORECASE | re.DOTALL
+)
 
 
-def _parse_cdp_neighbors(output: str) -> list[dict[str, str]]:
-    neighbors: list[dict[str, str]] = []
+def _parse_cdp_neighbors(output: str) -> list[dict[str, str | None]]:
+    """Parse CDP neighbors detail output.
+
+    Returns list of dicts with keys:
+    - remote_hostname: Device ID
+    - local_interface: Local interface name
+    - remote_interface: Remote port ID
+    - remote_ip: Management IP (optional)
+    - remote_platform: Platform info (optional)
+    """
+    neighbors: list[dict[str, str | None]] = []
     if not output:
         return neighbors
     blocks = output.split("\n\n")
@@ -329,64 +366,241 @@ def _parse_cdp_neighbors(output: str) -> list[dict[str, str]]:
         host_match = _def_cdp_device_re.search(block)
         intf_match = _def_cdp_intf_re.search(block)
         if host_match and intf_match:
+            ip_match = _def_cdp_ip_re.search(block)
+            platform_match = _def_cdp_platform_re.search(block)
             neighbors.append(
                 {
                     "remote_hostname": host_match.group("hostname").strip(),
                     "local_interface": intf_match.group("local_intf").strip(),
                     "remote_interface": intf_match.group("remote_intf").strip(),
+                    "remote_ip": ip_match.group("ip").strip() if ip_match else None,
+                    "remote_platform": (
+                        platform_match.group("platform").strip() if platform_match else None
+                    ),
                 }
             )
     return neighbors
 
 
+def _parse_lldp_neighbors(output: str) -> list[dict[str, str | None]]:
+    """Parse LLDP neighbors detail output (multi-vendor support).
+
+    Supports output formats from:
+    - Cisco IOS/IOS-XE (show lldp neighbors detail)
+    - Juniper (show lldp neighbors)
+    - Arista EOS (show lldp neighbors detail)
+
+    Returns list of dicts with keys:
+    - remote_hostname: System name or chassis ID
+    - local_interface: Local interface name
+    - remote_interface: Port ID or port description
+    - remote_ip: Management IP (optional)
+    - remote_platform: System description (optional)
+    """
+    neighbors: list[dict[str, str | None]] = []
+    if not output:
+        return neighbors
+
+    # First try to split on dashed line separators (Cisco format)
+    if "---" in output or re.search(r"-{10,}", output):
+        blocks = re.split(r"-{10,}", output)
+    else:
+        # For formats without dashes (Juniper), split on "Local Interface" lines
+        # Each neighbor entry starts with "Local Interface"
+        blocks = re.split(r"(?=Local Interface\s*:)", output, flags=re.IGNORECASE)
+        blocks = [b for b in blocks if b.strip()]
+
+    for block in blocks:
+        if not block.strip():
+            continue
+
+        # Try to extract hostname (prefer System Name over Chassis ID)
+        # Note: Chassis ID often contains MAC address, so System Name is preferred
+        hostname = None
+        sysname_match = _def_lldp_sysname_re.search(block)
+        if sysname_match:
+            hostname = sysname_match.group("sysname").strip()
+        else:
+            chassis_match = _def_lldp_chassis_re.search(block)
+            if chassis_match:
+                hostname = chassis_match.group("chassis").strip()
+
+        # Extract local interface
+        local_intf = None
+        local_match = _def_lldp_local_intf_re.search(block)
+        if local_match:
+            local_intf = local_match.group("local_intf").strip()
+
+        # Extract remote interface (prefer port description over port ID)
+        remote_intf = None
+        port_desc_match = _def_lldp_port_desc_re.search(block)
+        if port_desc_match:
+            desc = port_desc_match.group("port_desc").strip()
+            if desc and desc.lower() != "not advertised":
+                remote_intf = desc
+        if not remote_intf:
+            port_id_match = _def_lldp_port_id_re.search(block)
+            if port_id_match:
+                remote_intf = port_id_match.group("port_id").strip()
+
+        # Skip blocks without essential info
+        if not hostname or not local_intf or not remote_intf:
+            continue
+
+        # Extract optional fields
+        mgmt_ip = None
+        ip_match = _def_lldp_mgmt_ip_re.search(block)
+        if ip_match:
+            mgmt_ip = ip_match.group("ip").strip()
+
+        platform = None
+        sysdesc_match = _def_lldp_sysdesc_re.search(block)
+        if sysdesc_match:
+            # Take first line of system description as platform
+            sysdesc = sysdesc_match.group("sysdesc").strip()
+            platform = sysdesc.split("\n")[0].strip()[:100]  # Limit length
+
+        neighbors.append(
+            {
+                "remote_hostname": hostname,
+                "local_interface": local_intf,
+                "remote_interface": remote_intf,
+                "remote_ip": mgmt_ip,
+                "remote_platform": platform,
+            }
+        )
+
+    return neighbors
+
+
 @shared_task(name="topology_discovery_job")
-def topology_discovery_job(job_id: int, targets: dict) -> None:
+def topology_discovery_job(
+    job_id: int,
+    targets: dict,
+    protocol: str = "both",
+    auto_create_devices: bool = False,
+) -> None:
+    """Run topology discovery using CDP and/or LLDP.
+
+    Args:
+        job_id: Job ID to track progress
+        targets: Device filter targets
+        protocol: 'cdp', 'lldp', or 'both' (default: 'both')
+        auto_create_devices: If True, create DiscoveredDevice entries for unknown neighbors
+    """
     js = JobService()
     try:
         job = Job.objects.get(pk=job_id)
     except Job.DoesNotExist:
         return
+
     js.set_status(job, "running")
     inventory = build_inventory(targets, customer_id=job.customer_id)
     if not inventory.hosts:
         js.append_log(job, level="ERROR", message="No devices matched targets")
         js.set_status(job, "failed", result_summary={"error": "no devices"})
         return
+
     nr = _nr_from_inventory(inventory)
     discovered_links = 0
+    discovered_devices_count = 0
+
+    # Prefetch all customer devices to avoid N+1 queries
+    customer_devices = {d.hostname: d for d in Device.objects.filter(customer=job.customer)}
+
     try:
-        res = nr.run(netmiko_send_command, command_string="show cdp neighbors detail")
-        for host, r in res.items():
-            _log_host_result(js, job, host, r)
-            device = Device.objects.filter(hostname=host, customer=job.customer).first()
-            if not device or r.failed:
-                continue
-            neighbors = _parse_cdp_neighbors(str(r.result))
-            for n in neighbors:
-                remote_dev = Device.objects.filter(
-                    customer=device.customer, hostname=n["remote_hostname"]
-                ).first()
-                _, created = TopologyLink.objects.get_or_create(
-                    customer=device.customer,
-                    local_device=device,
-                    local_interface=n["local_interface"],
-                    remote_hostname=n["remote_hostname"],
-                    remote_interface=n["remote_interface"],
-                    defaults={
-                        "remote_device": remote_dev,
-                        "remote_ip": None,
-                        "remote_platform": remote_dev.platform if remote_dev else None,
-                        "protocol": "cdp",
-                        "job_id": job.id,
-                    },
+        # Run discovery command(s) based on protocol preference
+        protocols_to_run = []
+        if protocol == "both":
+            protocols_to_run = [
+                ("cdp", "show cdp neighbors detail", _parse_cdp_neighbors),
+                ("lldp", "show lldp neighbors detail", _parse_lldp_neighbors),
+            ]
+        elif protocol == "lldp":
+            protocols_to_run = [("lldp", "show lldp neighbors detail", _parse_lldp_neighbors)]
+        else:  # cdp or default
+            protocols_to_run = [("cdp", "show cdp neighbors detail", _parse_cdp_neighbors)]
+
+        for proto_name, cmd, parser in protocols_to_run:
+            js.append_log(
+                job,
+                level="INFO",
+                message=f"Running {proto_name.upper()} discovery: {cmd}",
+            )
+            res = nr.run(netmiko_send_command, command_string=cmd)
+
+            for host, r in res.items():
+                _log_host_result(js, job, host, r)
+                device = customer_devices.get(host)
+                if not device or r.failed:
+                    continue
+
+                neighbors = parser(str(r.result))
+                js.append_log(
+                    job,
+                    level="INFO",
+                    host=host,
+                    message=f"Found {len(neighbors)} {proto_name.upper()} neighbors",
                 )
-                if created:
-                    discovered_links += 1
-        js.set_status(
-            job,
-            "success",
-            result_summary={"targets": targets, "links_created": discovered_links},
-        )
+
+                for n in neighbors:
+                    remote_hostname = n["remote_hostname"]
+                    remote_dev = customer_devices.get(remote_hostname)
+
+                    # Create or update topology link
+                    _, created = TopologyLink.objects.update_or_create(
+                        customer=device.customer,
+                        local_device=device,
+                        local_interface=n["local_interface"],
+                        remote_hostname=remote_hostname,
+                        remote_interface=n["remote_interface"],
+                        defaults={
+                            "remote_device": remote_dev,
+                            "remote_ip": n.get("remote_ip"),
+                            "remote_platform": (
+                                n.get("remote_platform")
+                                or (remote_dev.platform if remote_dev else None)
+                            ),
+                            "protocol": proto_name,
+                            "job_id": job.id,
+                        },
+                    )
+                    if created:
+                        discovered_links += 1
+
+                    # Auto-create discovered device entry if enabled and device unknown
+                    if auto_create_devices and not remote_dev:
+                        from webnet.devices.models import DiscoveredDevice
+
+                        disc_dev, disc_created = DiscoveredDevice.objects.update_or_create(
+                            customer=device.customer,
+                            hostname=remote_hostname,
+                            defaults={
+                                "mgmt_ip": n.get("remote_ip"),
+                                "platform": n.get("remote_platform"),
+                                "discovered_via_device": device,
+                                "discovered_via_protocol": proto_name,
+                                "job_id": job.id,
+                            },
+                        )
+                        if disc_created:
+                            discovered_devices_count += 1
+                            js.append_log(
+                                job,
+                                level="INFO",
+                                host=host,
+                                message=f"Queued new device for review: {remote_hostname}",
+                            )
+
+        result_summary = {
+            "targets": targets,
+            "protocol": protocol,
+            "links_created": discovered_links,
+        }
+        if auto_create_devices:
+            result_summary["devices_discovered"] = discovered_devices_count
+
+        js.set_status(job, "success", result_summary=result_summary)
     except Exception as exc:  # pragma: no cover
         logger.exception("topology_discovery_job failed for job %s", job_id)
         js.append_log(job, level="ERROR", message=str(exc))
