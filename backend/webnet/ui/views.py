@@ -811,14 +811,18 @@ class DriftAlertsView(TenantScopedView):
             "drift__device__customer",
             "drift__device",
             "acknowledged_by",
-        ).order_by("-detected_at")[:100]
+        ).order_by("-detected_at")
 
+        # Apply filters before slicing
         if status_filter:
             qs = qs.filter(status=status_filter)
         if severity_filter:
             qs = qs.filter(severity=severity_filter)
 
         qs = self.filter_by_customer(qs)
+        
+        # Slice after filtering
+        qs = qs[:100]
 
         alerts_payload = [
             {
