@@ -133,14 +133,24 @@ class GitRepository(models.Model):
         Returns:
             Relative path within the repository for this device's config
         """
-        hostname = device.hostname.replace("/", "_").replace("\\", "_")
+
+        def sanitize_path_component(name: str) -> str:
+            """Sanitize a path component to prevent traversal attacks."""
+            # Remove path separators and parent directory references
+            sanitized = name.replace("/", "_").replace("\\", "_")
+            # Remove any ".." sequences that could cause path traversal
+            sanitized = sanitized.replace("..", "__")
+            # Remove leading/trailing dots and spaces
+            sanitized = sanitized.strip(". ")
+            return sanitized or "unknown"
+
+        hostname = sanitize_path_component(device.hostname)
 
         if self.path_structure == "by_customer":
-            customer = customer_name or device.customer.name
-            customer = customer.replace("/", "_").replace("\\", "_")
+            customer = sanitize_path_component(customer_name or device.customer.name)
             return f"{customer}/{hostname}/config.txt"
         elif self.path_structure == "by_site":
-            site = (device.site or "unknown").replace("/", "_").replace("\\", "_")
+            site = sanitize_path_component(device.site or "unknown")
             return f"{site}/{hostname}/config.txt"
         else:  # flat
             return f"{hostname}.txt"

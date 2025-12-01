@@ -198,11 +198,12 @@ class TopologyLinkSerializer(serializers.ModelSerializer):
 class DiscoveredDeviceSerializer(serializers.ModelSerializer):
     """Serializer for discovered devices in the discovery queue."""
 
-    discovered_via_device_hostname = serializers.CharField(
-        source="discovered_via_device.hostname", read_only=True
-    )
-    reviewed_by_username = serializers.CharField(
-        source="reviewed_by.username", read_only=True, allow_null=True
+    Write-only fields for sensitive auth credentials.
+    Validates customer access on create to prevent tenant isolation bypass.
+    """
+
+    auth_token = serializers.CharField(
+        write_only=True, allow_null=True, required=False, allow_blank=True
     )
     created_device_hostname = serializers.CharField(
         source="created_device.hostname", read_only=True, allow_null=True
@@ -240,8 +241,22 @@ class DiscoveredDeviceSerializer(serializers.ModelSerializer):
         ]
 
 
-class DiscoveredDeviceApproveSerializer(serializers.Serializer):
-    """Serializer for approving a discovered device."""
+    def validate_customer(self, value: Customer) -> Customer:
+        """Validate that the user has access to the specified customer.
+
+        This prevents tenant isolation bypass where a user could create
+        a GitRepository for a customer they don't have access to.
+        """
+        from webnet.api.permissions import user_has_customer_access
+
+        request = self.context.get("request")
+        if request and not user_has_customer_access(request.user, value.id):
+            raise serializers.ValidationError("You do not have access to this customer.")
+        return value
+
+    def create(self, validated_data: dict) -> GitRepository:
+        auth_token = validated_data.pop("auth_token", None)
+        ssh_private_key = validated_data.pop("ssh_private_key", None)
 
     credential_id = serializers.IntegerField(help_text="ID of credential to assign")
     vendor = serializers.CharField(
@@ -252,8 +267,12 @@ class DiscoveredDeviceApproveSerializer(serializers.Serializer):
     site = serializers.CharField(required=False, allow_blank=True, help_text="Device site")
 
 
-class DiscoveredDeviceRejectSerializer(serializers.Serializer):
-    """Serializer for rejecting/ignoring a discovered device."""
+        # Only update credentials if provided (allows partial updates)
+        # Use 'is not None' to allow clearing with empty strings
+        if auth_token is not None:
+            instance.auth_token = auth_token
+        if ssh_private_key is not None:
+            instance.ssh_private_key = ssh_private_key
 
     notes = serializers.CharField(required=False, allow_blank=True, help_text="Rejection reason")
 

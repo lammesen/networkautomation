@@ -130,10 +130,13 @@ def config_backup_job(
                 snapshot_ids.append(snapshot.id)
         js.set_status(job, "success", result_summary={"targets": targets})
 
-        # Auto-sync to Git if enabled
+        # Auto-sync to Git if enabled and a Git repository is configured
         if auto_git_sync and snapshot_ids:
-            git_sync_job.delay(job.customer_id, snapshot_ids, job_id)
-            js.append_log(job, level="INFO", message="Queued Git sync for backed up configs")
+            from webnet.config_mgmt.models import GitRepository
+
+            if GitRepository.objects.filter(customer_id=job.customer_id, enabled=True).exists():
+                git_sync_job.delay(job.customer_id, snapshot_ids, job_id)
+                js.append_log(job, level="INFO", message="Queued Git sync for backed up configs")
 
     except Exception as exc:  # pragma: no cover
         js.append_log(job, level="ERROR", message=str(exc))
