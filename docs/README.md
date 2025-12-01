@@ -8,6 +8,12 @@ Welcome to the documentation for the Network Automation platform. This index is 
 - Common workflows: [Workflows](./workflows.md)
 - Troubleshooting: [Troubleshooting](./troubleshooting.md)
 
+### Feature Guides
+- Bulk Device Onboarding: [Scan, SNMP discovery, credential testing](./features/bulk-device-onboarding.md)
+- Device Tags and Groups: [Organize and target automation](./features/device-groups-tags.md)
+- NetBox Integration: [Sync inventory from NetBox](../docs/integrations/netbox.md)
+- Configuration Templates: [Jinja2 templates with variables](./config-templates.md)
+
 ## Developers
 - Start here: [Developer Guide](./developer-guide.md)
 - Architecture overview: [Architecture](./architecture.md) (legacy; see Developer Guide for the current Django/HTMX stack)
