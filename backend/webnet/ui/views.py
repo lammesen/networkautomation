@@ -6,14 +6,13 @@ import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q, Count
-from django.http import HttpResponseForbidden
+from django.http import HttpResponseForbidden, HttpResponseBadRequest, HttpResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.utils import timezone
 from django.views import View
 
 from django import forms
 from django.contrib.auth import logout
-from django.http import HttpResponseBadRequest
 from django.urls import reverse
 
 from webnet.api.permissions import user_has_customer_access
@@ -2296,8 +2295,6 @@ class SSHHostKeyDeleteView(TenantScopedView):
 
         host_key.delete()
         # Return empty response for HTMX to remove the row
-        from django.http import HttpResponse
-
         return HttpResponse(status=200)
 
 

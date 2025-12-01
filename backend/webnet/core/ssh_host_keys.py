@@ -15,8 +15,9 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 from django.utils import timezone
 
+from webnet.customers.models import Customer
+
 if TYPE_CHECKING:
-    from webnet.customers.models import Customer
     from webnet.devices.models import Device, SSHHostKey
     from webnet.users.models import User
 
@@ -102,15 +103,12 @@ class SSHHostKeyService:
         return host_key, True
 
     @staticmethod
-    def verify_host_key(
-        device: Device, key: asyncssh.SSHKey, customer: Customer | None = None
-    ) -> bool:
+    def verify_host_key(device: Device, key: asyncssh.SSHKey) -> bool:
         """Verify SSH host key according to customer policy.
 
         Args:
             device: Device being connected to
             key: SSH public key received from host
-            customer: Customer instance (defaults to device.customer)
 
         Returns:
             True if key is trusted/accepted, False otherwise
@@ -120,9 +118,7 @@ class SSHHostKeyService:
         """
         from webnet.devices.models import SSHHostKey
 
-        if customer is None:
-            customer = device.customer
-
+        customer = device.customer
         policy = customer.ssh_host_key_policy
         key_type = SSHHostKeyService.get_key_type(key)
         fingerprint = SSHHostKeyService.compute_fingerprint(key)
@@ -135,7 +131,7 @@ class SSHHostKeyService:
         )
 
         # Policy: disabled - always accept
-        if policy == "disabled":
+        if policy == Customer.SSH_POLICY_DISABLED:
             logger.warning(
                 "SSH host key verification disabled for customer %s - accepting key",
                 customer.name,
@@ -151,7 +147,7 @@ class SSHHostKeyService:
             # No existing keys - TOFU (Trust On First Use)
             logger.info("No existing keys for device %s - applying TOFU policy", device.hostname)
 
-            if policy == "strict":
+            if policy == Customer.SSH_POLICY_STRICT:
                 # Strict mode: reject unknown keys
                 raise HostKeyVerificationError(
                     f"No known host key for {device.hostname}. "
@@ -187,7 +183,7 @@ class SSHHostKeyService:
             fingerprint,
         )
 
-        if policy == "strict":
+        if policy == Customer.SSH_POLICY_STRICT:
             # Strict mode: reject changed keys
             raise HostKeyVerificationError(
                 f"Host key verification failed for {device.hostname}. "
@@ -291,15 +287,13 @@ class SSHHostKeyService:
 class DatabaseKnownHostsCallback:
     """AsyncSSH callback for database-backed host key verification."""
 
-    def __init__(self, device: Device, customer: Customer | None = None):
+    def __init__(self, device: Device):
         """Initialize callback with device context.
 
         Args:
             device: Device being connected to
-            customer: Customer instance (defaults to device.customer)
         """
         self.device = device
-        self.customer = customer or device.customer
 
     def validate_host_public_key(
         self, host: str, addr: str, port: int, key: asyncssh.SSHKey
@@ -316,7 +310,7 @@ class DatabaseKnownHostsCallback:
             True if key should be accepted, False otherwise
         """
         try:
-            return SSHHostKeyService.verify_host_key(self.device, key, self.customer)
+            return SSHHostKeyService.verify_host_key(self.device, key)
         except HostKeyVerificationError as e:
             logger.error("Host key verification failed: %s", e)
             return False
