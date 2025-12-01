@@ -93,7 +93,9 @@ def run_commands_job(job_id: int, targets: dict, commands: list[str], timeout: i
 
 
 @shared_task(name="config_backup_job")
-def config_backup_job(job_id: int, targets: dict, source_label: str = "manual") -> None:
+def config_backup_job(
+    job_id: int, targets: dict, source_label: str = "manual", auto_git_sync: bool = True
+) -> None:
     js = JobService()
     try:
         job = Job.objects.get(pk=job_id)
@@ -106,6 +108,7 @@ def config_backup_job(job_id: int, targets: dict, source_label: str = "manual") 
         js.set_status(job, "failed", result_summary={"error": "no devices"})
         return
     nr = _nr_from_inventory(inventory)
+    snapshot_ids: list[int] = []
     try:
         res = nr.run(napalm_get, getters=["config"])
         for host, r in res.items():
@@ -118,16 +121,59 @@ def config_backup_job(job_id: int, targets: dict, source_label: str = "manual") 
             )
             device = Device.objects.filter(hostname=host, customer=job.customer).first()
             if device:
-                ConfigSnapshot.objects.create(
+                snapshot = ConfigSnapshot.objects.create(
                     device=device,
                     job=job,
                     source=source_label,
                     config_text=cfg,
                 )
+                snapshot_ids.append(snapshot.id)
         js.set_status(job, "success", result_summary={"targets": targets})
+
+        # Auto-sync to Git if enabled
+        if auto_git_sync and snapshot_ids:
+            git_sync_job.delay(job.customer_id, snapshot_ids, job_id)
+            js.append_log(job, level="INFO", message="Queued Git sync for backed up configs")
+
     except Exception as exc:  # pragma: no cover
         js.append_log(job, level="ERROR", message=str(exc))
         js.set_status(job, "failed", result_summary={"error": str(exc)})
+
+
+@shared_task(name="git_sync_job")
+def git_sync_job(
+    customer_id: int, snapshot_ids: list[int] | None = None, triggering_job_id: int | None = None
+) -> dict:
+    """Sync config snapshots to the configured Git repository.
+
+    Args:
+        customer_id: Customer ID to sync configs for
+        snapshot_ids: Optional list of specific snapshot IDs to sync.
+                      If None, syncs all unsynced snapshots for the customer.
+        triggering_job_id: Optional job ID that triggered this sync (for audit trail)
+
+    Returns:
+        Dict with sync result details
+    """
+    from webnet.config_mgmt.git_service import sync_configs_to_git
+
+    job = None
+    if triggering_job_id:
+        job = Job.objects.filter(pk=triggering_job_id).first()
+
+    result = sync_configs_to_git(
+        customer_id=customer_id,
+        snapshot_ids=snapshot_ids,
+        job=job,
+    )
+
+    return {
+        "success": result.success,
+        "commit_hash": result.commit_hash,
+        "files_synced": result.files_synced,
+        "message": result.message,
+        "error": result.error,
+    }
 
 
 @shared_task(name="config_deploy_preview_job")

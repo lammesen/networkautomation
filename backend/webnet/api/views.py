@@ -27,7 +27,7 @@ from webnet.customers.models import Customer, CustomerIPRange
 from webnet.devices.models import Device, Credential, TopologyLink, DiscoveredDevice
 from webnet.jobs.models import Job, JobLog
 from webnet.jobs.services import JobService
-from webnet.config_mgmt.models import ConfigSnapshot
+from webnet.config_mgmt.models import ConfigSnapshot, GitRepository, GitSyncLog
 from webnet.compliance.models import CompliancePolicy, ComplianceResult
 
 from .serializers import (
@@ -753,34 +753,64 @@ class TopologyLinkViewSet(CustomerScopedQuerysetMixin, viewsets.ReadOnlyModelVie
     @action(detail=False, methods=["get"], url_path="graph")
     def graph(self, request):
         links = self.get_queryset()
-        nodes = {}
+        nodes: dict[str, dict] = {}
         edges = []
         for link in links:
             local_id = str(link.local_device_id)
             remote_id = str(link.remote_device_id or f"unknown-{link.remote_hostname}")
+            local_dev = link.local_device
             nodes[local_id] = {
                 "id": local_id,
-                "label": link.local_device.hostname,
+                "label": local_dev.hostname,
                 "data": {
-                    "hostname": link.local_device.hostname,
-                    "mgmt_ip": link.local_device.mgmt_ip,
-                    "vendor": link.local_device.vendor,
-                    "platform": link.local_device.platform,
-                    "site": link.local_device.site,
+                    "hostname": local_dev.hostname,
+                    "mgmt_ip": local_dev.mgmt_ip,
+                    "vendor": local_dev.vendor,
+                    "platform": local_dev.platform,
+                    "site": local_dev.site,
+                    "role": local_dev.role,
+                    "enabled": local_dev.enabled,
+                    "reachability_status": local_dev.reachability_status,
+                    "detail_url": f"/devices/{local_dev.id}/",
                 },
                 "type": "device",
             }
-            nodes[remote_id] = {
-                "id": remote_id,
-                "label": link.remote_hostname,
-                "data": {
-                    "hostname": link.remote_hostname,
-                    "mgmt_ip": link.remote_ip,
-                    "vendor": link.remote_platform,
-                    "platform": link.remote_platform,
-                },
-                "type": "device" if link.remote_device_id else "unknown",
-            }
+            # Remote device node
+            if link.remote_device_id and link.remote_device:
+                remote_dev = link.remote_device
+                nodes[remote_id] = {
+                    "id": remote_id,
+                    "label": remote_dev.hostname,
+                    "data": {
+                        "hostname": remote_dev.hostname,
+                        "mgmt_ip": remote_dev.mgmt_ip,
+                        "vendor": remote_dev.vendor,
+                        "platform": remote_dev.platform,
+                        "site": remote_dev.site,
+                        "role": remote_dev.role,
+                        "enabled": remote_dev.enabled,
+                        "reachability_status": remote_dev.reachability_status,
+                        "detail_url": f"/devices/{remote_dev.id}/",
+                    },
+                    "type": "device",
+                }
+            else:
+                nodes[remote_id] = {
+                    "id": remote_id,
+                    "label": link.remote_hostname,
+                    "data": {
+                        "hostname": link.remote_hostname,
+                        "mgmt_ip": link.remote_ip,
+                        "vendor": link.remote_platform,
+                        "platform": link.remote_platform,
+                        "site": None,
+                        "role": None,
+                        "enabled": None,
+                        "reachability_status": None,
+                        "detail_url": None,
+                    },
+                    "type": "unknown",
+                }
             edges.append(
                 {
                     "id": f"{local_id}->{remote_id}:{link.local_interface}",

@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Git Integration Settings{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight">Git Integration</h1>
+      <p class="text-muted-foreground">Configure Git repositories for config backup export</p>
+    </div>
+    <a href="{% url 'git-settings-create' %}" 
+       class="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+      <svg class="mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+      </svg>
+      Add Repository
+    </a>
+  </div>
+
+  {% if repositories %}
+  <div class="rounded-lg border bg-card">
+    <table class="w-full">
+      <thead>
+        <tr class="border-b bg-muted/50">
+          <th class="px-4 py-3 text-left text-sm font-medium">Customer</th>
+          <th class="px-4 py-3 text-left text-sm font-medium">Name</th>
+          <th class="px-4 py-3 text-left text-sm font-medium">Remote URL</th>
+          <th class="px-4 py-3 text-left text-sm font-medium">Branch</th>
+          <th class="px-4 py-3 text-left text-sm font-medium">Status</th>
+          <th class="px-4 py-3 text-left text-sm font-medium">Last Sync</th>
+          <th class="px-4 py-3 text-right text-sm font-medium">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y">
+        {% for repo in repositories %}
+        <tr class="hover:bg-muted/50">
+          <td class="px-4 py-3 text-sm">{{ repo.customer.name }}</td>
+          <td class="px-4 py-3 text-sm font-medium">
+            <a href="{% url 'git-settings-detail' repo.pk %}" class="text-primary hover:underline">
+              {{ repo.name }}
+            </a>
+          </td>
+          <td class="px-4 py-3 text-sm font-mono text-xs">{{ repo.remote_url|truncatechars:50 }}</td>
+          <td class="px-4 py-3 text-sm">{{ repo.branch }}</td>
+          <td class="px-4 py-3 text-sm">
+            {% if repo.enabled %}
+              <span class="inline-flex items-center rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-700 dark:bg-green-900 dark:text-green-300">
+                Enabled
+              </span>
+            {% else %}
+              <span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                Disabled
+              </span>
+            {% endif %}
+          </td>
+          <td class="px-4 py-3 text-sm">
+            {% if repo.last_sync_at %}
+              <span title="{{ repo.last_sync_at }}">{{ repo.last_sync_at|timesince }} ago</span>
+              {% if repo.last_sync_status == 'success' %}
+                <span class="ml-1 text-green-600">✓</span>
+              {% elif repo.last_sync_status == 'failed' %}
+                <span class="ml-1 text-red-600">✗</span>
+              {% endif %}
+            {% else %}
+              <span class="text-muted-foreground">Never</span>
+            {% endif %}
+          </td>
+          <td class="px-4 py-3 text-right">
+            <a href="{% url 'git-settings-detail' repo.pk %}" 
+               class="inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-medium hover:bg-muted">
+              Configure
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="rounded-lg border bg-card p-12 text-center">
+    <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+      <svg class="h-6 w-6 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+      </svg>
+    </div>
+    <h3 class="mt-4 text-lg font-medium">No Git repositories configured</h3>
+    <p class="mt-2 text-sm text-muted-foreground">
+      Configure a Git repository to automatically export config backups.
+    </p>
+    <div class="mt-6">
+      <a href="{% url 'git-settings-create' %}"
+         class="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+        Add Repository
+      </a>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="rounded-lg border bg-card p-6">
+    <h3 class="text-lg font-medium">About Git Integration</h3>
+    <div class="mt-4 space-y-3 text-sm text-muted-foreground">
+      <p>
+        Git integration enables automatic export of device configurations to a Git repository after each backup job.
+        This provides version-controlled config backup with full change history.
+      </p>
+      <ul class="ml-4 list-disc space-y-1">
+        <li>Configurations are pushed automatically after backup jobs complete</li>
+        <li>Each commit includes job ID, timestamp, and user information</li>
+        <li>Supports GitHub, GitLab, and Bitbucket via HTTPS or SSH</li>
+        <li>Choose from multiple directory structures (by customer, by site, or flat)</li>
+      </ul>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -5,7 +5,7 @@ from webnet.users.models import User, APIKey
 from webnet.customers.models import Customer, CustomerIPRange
 from webnet.devices.models import Device, Credential, TopologyLink, DiscoveredDevice
 from webnet.jobs.models import Job, JobLog
-from webnet.config_mgmt.models import ConfigSnapshot
+from webnet.config_mgmt.models import ConfigSnapshot, GitRepository, GitSyncLog
 from webnet.compliance.models import CompliancePolicy, ComplianceResult
 
 
