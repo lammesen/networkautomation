@@ -2207,6 +2207,9 @@ class RemediationRuleListView(TenantScopedView):
         qs = RemediationRule.objects.select_related("policy", "policy__customer", "created_by")
         qs = self.filter_by_customer(qs, "policy__customer_id")
 
+        # Convert to list to avoid duplicate query execution
+        rules = list(qs)
+
         rules_payload = [
             {
                 "id": r.id,
@@ -2217,11 +2220,11 @@ class RemediationRuleListView(TenantScopedView):
                 "max_daily": r.max_daily_executions,
                 "updated_at": timezone.localtime(r.updated_at).strftime("%Y-%m-%d %H:%M:%S"),
             }
-            for r in qs
+            for r in rules
         ]
 
         context = {
-            "rules": qs,
+            "rules": rules,
             "rules_table_props": json.dumps(
                 {
                     "rows": rules_payload,
@@ -2257,6 +2260,9 @@ class RemediationActionListView(TenantScopedView):
         ]  # Limit to recent 100
         qs = self.filter_by_customer(qs, "rule__policy__customer_id")
 
+        # Convert to list to avoid duplicate query execution
+        actions = list(qs)
+
         actions_payload = [
             {
                 "id": a.id,
@@ -2267,11 +2273,11 @@ class RemediationActionListView(TenantScopedView):
                 "started_at": timezone.localtime(a.started_at).strftime("%Y-%m-%d %H:%M:%S"),
                 "error_message": a.error_message,
             }
-            for a in qs
+            for a in actions
         ]
 
         context = {
-            "actions": qs,
+            "actions": actions,
             "actions_table_props": json.dumps(
                 {
                     "rows": actions_payload,

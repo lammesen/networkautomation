@@ -82,7 +82,7 @@ class RemediationRule(models.Model):
         default=True, help_text="Re-run compliance check after applying remediation"
     )
     rollback_on_failure = models.BooleanField(
-        default=True, help_text="Rollback changes if verification fails"
+        default=True, help_text="Rollback changes if remediation fails"
     )
     created_by = models.ForeignKey(
         "users.User", on_delete=models.SET_NULL, null=True, related_name="remediation_rules"

@@ -281,12 +281,15 @@ def compliance_check_job(job_id: int, policy_id: int) -> None:
     js.set_status(job, "running")
     js.append_log(job, level="INFO", message=f"Compliance policy {policy_id} check started")
 
-    # After compliance check, trigger auto-remediation if violations found
-    # For now, this is a placeholder - real compliance check would populate results
+    # TODO: Actual compliance check logic should go here to populate ComplianceResult records
+    # Currently this is a placeholder that assumes results are already created elsewhere
+
+    # After compliance check completes and results are populated, trigger auto-remediation
     try:
         from webnet.compliance.models import ComplianceResult
 
-        # Get recent violations for this policy
+        # Get violations for this policy that were created by this job
+        # This ensures we only remediate violations from the current compliance check
         violations = ComplianceResult.objects.filter(
             policy_id=policy_id, job=job, status__in=["failed", "violation", "non-compliant"]
         ).select_related("device", "policy")
@@ -1245,18 +1248,37 @@ def trigger_auto_remediation(compliance_result_id: int) -> None:
         # Both allow auto-remediation to proceed
 
         # Check daily execution limit
+        # TODO: Consider using customer timezone instead of UTC for daily limit calculation
+        # Currently uses UTC midnight which may not align with customer business hours
         today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        executions_today = RemediationAction.objects.filter(
-            rule=rule, started_at__gte=today_start
-        ).count()
 
-        if executions_today >= rule.max_daily_executions:
-            logger.warning(f"Rule {rule.id} has reached daily limit ({rule.max_daily_executions})")
+        # Use atomic operations to prevent race condition where multiple concurrent
+        # tasks could exceed the daily limit
+        from django.db import transaction
+
+        try:
+            with transaction.atomic():
+                # Lock the rule to prevent concurrent modification
+                locked_rule = RemediationRule.objects.select_for_update().get(pk=rule.id)
+
+                executions_today = RemediationAction.objects.filter(
+                    rule=locked_rule, started_at__gte=today_start
+                ).count()
+
+                if executions_today >= locked_rule.max_daily_executions:
+                    logger.warning(
+                        f"Rule {locked_rule.id} has reached daily limit ({locked_rule.max_daily_executions})"
+                    )
+                    continue
+
+                # Queue the auto-remediation job
+                logger.info(
+                    f"Triggering auto-remediation for rule {locked_rule.id} on device {result.device_id}"
+                )
+                auto_remediation_job.delay(locked_rule.id, result.id)
+        except RemediationRule.DoesNotExist:
+            logger.warning(f"Rule {rule.id} no longer exists")
             continue
-
-        # Queue the auto-remediation job
-        logger.info(f"Triggering auto-remediation for rule {rule.id} on device {result.device_id}")
-        auto_remediation_job.delay(rule.id, result.id)
 
 
 @shared_task(name="auto_remediation_job")
@@ -1426,8 +1448,10 @@ def auto_remediation_job(rule_id: int, compliance_result_id: int) -> None:
                     replace=True,
                 )
 
+                rollback_failed = False
                 for host, task_result in rollback_result.items():
                     if task_result.failed:
+                        rollback_failed = True
                         js.append_log(
                             job,
                             level="ERROR",
@@ -1436,7 +1460,7 @@ def auto_remediation_job(rule_id: int, compliance_result_id: int) -> None:
                     else:
                         js.append_log(job, level="INFO", message=f"Rollback successful for {host}")
 
-                action.status = "rolled_back"
+                action.status = "failed" if rollback_failed else "rolled_back"
             except Exception as rollback_error:
                 logger.error(f"Rollback failed: {rollback_error}", exc_info=True)
                 js.append_log(job, level="ERROR", message=f"Rollback failed: {str(rollback_error)}")

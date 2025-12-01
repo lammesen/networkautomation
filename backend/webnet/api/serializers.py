@@ -220,6 +220,9 @@ class RemediationActionSerializer(serializers.ModelSerializer):
             "started_at",
             "finished_at",
         ]
+        # Note: read_only_fields specification is technically redundant since
+        # RemediationActionViewSet is ReadOnlyModelViewSet, but kept for documentation
+        # to clearly indicate which fields are system-managed
         read_only_fields = [
             "status",
             "before_snapshot",
