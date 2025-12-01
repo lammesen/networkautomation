@@ -34,6 +34,14 @@
  
  ### Device details
  - View recent jobs, configuration snapshots, and quick actions (backup, run commands, SSH)
+
+### Bulk Device Onboarding
+- Devices → Bulk Onboarding: scan IP ranges, run SNMP discovery, and test SSH credentials across ranges. Results go to the Discovery Queue for review and approval.
+- See: Features → [Bulk Device Onboarding](./features/bulk-device-onboarding.md)
+
+### Discovery Queue
+- Review discovered items, approve with credential assignment, reject with notes, or ignore.
+- Approved entries create Device records and link to the Device detail page.
  
  ## Running Commands
  1. Go to Commands → Run
@@ -120,4 +128,18 @@
  - Keep credentials updated and rotate regularly
  
  Happy automating! 🚀
+
+## Tags & Groups
+- Devices → Tags: create colored tags with optional category; device counts per tag are shown. Use tags for targeting commands, config, and compliance.
+- Devices → Groups: create Static (manual) or Dynamic (rule‑based) groups. Dynamic groups compute membership from rules like vendor/platform/site/role.
+- See: Features → [Device Tags and Groups](./features/device-groups-tags.md)
+
+## NetBox Sync
+- Settings → NetBox Integration: configure API URL/token per customer, test connection, run manual syncs, and view sync logs.
+- Assign a default credential for newly synced devices and limit scope with filters (site/tenant/role/status).
+- See: Integrations → [NetBox Integration](./integrations/netbox.md)
+
+## Configuration Templates
+- Templates: manage Jinja2 templates with variables schema and platform tags. Render previews by providing variable inputs.
+- See: [Configuration Templates](./config-templates.md)
  

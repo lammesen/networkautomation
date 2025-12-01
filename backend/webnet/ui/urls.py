@@ -34,6 +34,33 @@ from .views import (
     GitSyncView,
     GitTestConnectionView,
     GitSyncLogsView,
+    # Issue #40 - Bulk Device Onboarding
+    BulkOnboardingView,
+    DiscoveryQueueView,
+    DiscoveryQueueActionView,
+    ScanIPRangeView,
+    # Issue #24 - Device Tags and Groups
+    TagListView,
+    TagCreateView,
+    TagDeleteView,
+    DeviceGroupListView,
+    DeviceGroupCreateView,
+    DeviceGroupDetailView,
+    DeviceGroupDeleteView,
+    # Configuration Template Views (Issue #16)
+    ConfigTemplateListView,
+    ConfigTemplateDetailView,
+    ConfigTemplateCreateView,
+    ConfigTemplateDeleteView,
+    ConfigTemplateRenderView,
+    # NetBox Integration Views (Issue #9)
+    NetBoxSettingsListView,
+    NetBoxSettingsDetailView,
+    NetBoxSettingsCreateView,
+    NetBoxSettingsDeleteView,
+    NetBoxSyncView,
+    NetBoxTestConnectionView,
+    NetBoxSyncLogsView,
 )
 
 urlpatterns = [
@@ -74,4 +101,47 @@ urlpatterns = [
     path("settings/git/<int:pk>/sync", GitSyncView.as_view(), name="git-sync"),
     path("settings/git/<int:pk>/test", GitTestConnectionView.as_view(), name="git-test-connection"),
     path("settings/git/<int:pk>/logs", GitSyncLogsView.as_view(), name="git-sync-logs"),
+    # Issue #40 - Bulk Device Onboarding
+    path("devices/bulk-onboarding/", BulkOnboardingView.as_view(), name="bulk-onboarding"),
+    path("devices/discovery-queue/", DiscoveryQueueView.as_view(), name="discovery-queue"),
+    path(
+        "devices/discovery/<int:pk>/<str:action>",
+        DiscoveryQueueActionView.as_view(),
+        name="discovery-action",
+    ),
+    path("devices/scan-ip-range/", ScanIPRangeView.as_view(), name="scan-ip-range"),
+    # Issue #24 - Device Tags and Groups
+    path("devices/tags/", TagListView.as_view(), name="tags-list"),
+    path("devices/tags/new", TagCreateView.as_view(), name="tags-create"),
+    path("devices/tags/<int:pk>/delete", TagDeleteView.as_view(), name="tags-delete"),
+    path("devices/groups/", DeviceGroupListView.as_view(), name="groups-list"),
+    path("devices/groups/new", DeviceGroupCreateView.as_view(), name="groups-create"),
+    path("devices/groups/<int:pk>/", DeviceGroupDetailView.as_view(), name="groups-detail"),
+    path("devices/groups/<int:pk>/delete", DeviceGroupDeleteView.as_view(), name="groups-delete"),
+    # Configuration Template Library (Issue #16)
+    path("templates/", ConfigTemplateListView.as_view(), name="templates-list"),
+    path("templates/new", ConfigTemplateCreateView.as_view(), name="templates-create"),
+    path("templates/<int:pk>/", ConfigTemplateDetailView.as_view(), name="templates-detail"),
+    path("templates/<int:pk>/delete", ConfigTemplateDeleteView.as_view(), name="templates-delete"),
+    path("templates/<int:pk>/render", ConfigTemplateRenderView.as_view(), name="templates-render"),
+    # NetBox Integration (Issue #9)
+    path("settings/netbox/", NetBoxSettingsListView.as_view(), name="netbox-settings"),
+    path("settings/netbox/new", NetBoxSettingsCreateView.as_view(), name="netbox-settings-create"),
+    path(
+        "settings/netbox/<int:pk>/",
+        NetBoxSettingsDetailView.as_view(),
+        name="netbox-settings-detail",
+    ),
+    path(
+        "settings/netbox/<int:pk>/delete",
+        NetBoxSettingsDeleteView.as_view(),
+        name="netbox-settings-delete",
+    ),
+    path("settings/netbox/<int:pk>/sync", NetBoxSyncView.as_view(), name="netbox-sync"),
+    path(
+        "settings/netbox/<int:pk>/test",
+        NetBoxTestConnectionView.as_view(),
+        name="netbox-test-connection",
+    ),
+    path("settings/netbox/<int:pk>/logs", NetBoxSyncLogsView.as_view(), name="netbox-sync-logs"),
 ]

@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Optional
 
 from django.contrib.auth import authenticate
+from django.db.models import Count
 from django.utils import timezone
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -24,10 +25,19 @@ from rest_framework_simplejwt.exceptions import TokenError
 
 from webnet.users.models import User, APIKey
 from webnet.customers.models import Customer, CustomerIPRange
-from webnet.devices.models import Device, Credential, TopologyLink, DiscoveredDevice
+from webnet.devices.models import (
+    Device,
+    Credential,
+    TopologyLink,
+    DiscoveredDevice,
+    Tag,
+    DeviceGroup,
+    NetBoxConfig,
+    NetBoxSyncLog,
+)
 from webnet.jobs.models import Job, JobLog
 from webnet.jobs.services import JobService
-from webnet.config_mgmt.models import ConfigSnapshot, GitRepository, GitSyncLog
+from webnet.config_mgmt.models import ConfigSnapshot, ConfigTemplate
 from webnet.compliance.models import CompliancePolicy, ComplianceResult
 
 from .serializers import (
@@ -48,6 +58,21 @@ from .serializers import (
     DiscoveredDeviceApproveSerializer,
     DiscoveredDeviceRejectSerializer,
     TopologyDiscoverRequestSerializer,
+    # Issue #40 - Bulk Device Onboarding
+    IPRangeScanRequestSerializer,
+    CredentialTestRequestSerializer,
+    # Issue #24 - Device Tags and Groups
+    TagSerializer,
+    DeviceGroupSerializer,
+    DeviceTagAssignmentSerializer,
+    # Issue #16 - Configuration Templates
+    ConfigTemplateSerializer,
+    ConfigTemplateRenderSerializer,
+    ConfigTemplateDeploySerializer,
+    # Issue #9 - NetBox Integration
+    NetBoxConfigSerializer,
+    NetBoxSyncLogSerializer,
+    NetBoxSyncRequestSerializer,
 )
 from .permissions import (
     RolePermission,
@@ -353,7 +378,7 @@ class DeviceImportView(APIView):
         if upload.size > self.MAX_UPLOAD_SIZE:
             return Response(
                 {
-                    "detail": f"File too large. Maximum size is {self.MAX_UPLOAD_SIZE // (1024*1024)}MB"
+                    "detail": f"File too large. Maximum size is {self.MAX_UPLOAD_SIZE // (1024 * 1024)}MB"
                 },
                 status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             )
@@ -1027,3 +1052,735 @@ class DiscoveredDeviceViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet
                 "total": qs.count(),
             }
         )
+
+
+# =============================================================================
+# Issue #40 - Bulk Device Onboarding ViewSets
+# =============================================================================
+
+
+class BulkOnboardingViewSet(viewsets.ViewSet):
+    """ViewSet for bulk device onboarding operations.
+
+    Provides endpoints for:
+    - IP range scanning
+    - SNMP-based discovery
+    - Credential testing
+    """
+
+    permission_classes = [IsAuthenticated, RolePermission]
+
+    @action(detail=False, methods=["post"], url_path="scan")
+    def scan_ip_range(self, request) -> Response:
+        """Start an IP range scan job for device discovery.
+
+        Request body:
+        - ip_ranges: List of CIDR notation IP ranges (e.g., ["192.168.1.0/24"])
+        - credential_ids: List of credential IDs to test
+        - use_snmp: Use SNMP for discovery (default: true)
+        - snmp_community: SNMP community string (default: "public")
+        - snmp_version: SNMP version "2c" or "3" (default: "2c")
+        - test_ssh: Test SSH connectivity (default: true)
+        - ports: SSH ports to test (default: [22])
+        """
+        customer = resolve_customer_for_request(request)
+        if not customer:
+            return Response(
+                {"detail": "customer_id required or no access"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = IPRangeScanRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        # Validate credentials belong to customer
+        credential_ids = serializer.validated_data["credential_ids"]
+        valid_creds = Credential.objects.filter(
+            id__in=credential_ids, customer=customer
+        ).values_list("id", flat=True)
+        if not valid_creds:
+            return Response(
+                {"detail": "No valid credentials found for customer"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        js = JobService()
+        job = js.create_job(
+            job_type="ip_range_scan",
+            user=request.user,
+            customer=customer,
+            target_summary={"ip_ranges": serializer.validated_data["ip_ranges"]},
+            payload={
+                "ip_ranges": serializer.validated_data["ip_ranges"],
+                "credential_ids": list(valid_creds),
+                "use_snmp": serializer.validated_data.get("use_snmp", True),
+                "snmp_community": serializer.validated_data.get("snmp_community", "public"),
+                "snmp_version": serializer.validated_data.get("snmp_version", "2c"),
+                "test_ssh": serializer.validated_data.get("test_ssh", True),
+                "ports": serializer.validated_data.get("ports", [22]),
+            },
+        )
+        return Response(
+            {"job_id": job.id, "status": job.status},
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+    @action(detail=False, methods=["post"], url_path="test-credential")
+    def test_credential(self, request) -> Response:
+        """Test a credential against a specific IP address.
+
+        Request body:
+        - ip_address: IP address to test
+        - credential_id: Credential ID to test
+        - port: SSH port (default: 22)
+        - timeout: Connection timeout in seconds (default: 10)
+        """
+        customer = resolve_customer_for_request(request)
+        if not customer:
+            return Response(
+                {"detail": "customer_id required or no access"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = CredentialTestRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        # Validate credential belongs to customer
+        try:
+            credential = Credential.objects.get(
+                id=serializer.validated_data["credential_id"],
+                customer=customer,
+            )
+        except Credential.DoesNotExist:
+            return Response(
+                {"detail": "Credential not found or not accessible"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Import the test function
+        from webnet.jobs.tasks import _test_ssh_credential
+
+        success, device_info, message = _test_ssh_credential(
+            serializer.validated_data["ip_address"],
+            credential.username,
+            credential.password or "",
+            serializer.validated_data.get("port", 22),
+            serializer.validated_data.get("timeout", 10),
+        )
+
+        return Response(
+            {
+                "success": success,
+                "credential_id": credential.id,
+                "ip_address": serializer.validated_data["ip_address"],
+                "message": message,
+                "device_info": device_info,
+            }
+        )
+
+    @action(detail=False, methods=["post"], url_path="test-credentials-bulk")
+    def test_credentials_bulk(self, request) -> Response:
+        """Queue a job to test credentials against multiple discovered devices.
+
+        Request body:
+        - discovered_device_ids: List of DiscoveredDevice IDs to test
+        - credential_ids: List of Credential IDs to try
+        """
+        customer = resolve_customer_for_request(request)
+        if not customer:
+            return Response(
+                {"detail": "customer_id required or no access"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        device_ids = request.data.get("discovered_device_ids", [])
+        credential_ids = request.data.get("credential_ids", [])
+
+        if not device_ids or not credential_ids:
+            return Response(
+                {"detail": "discovered_device_ids and credential_ids are required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Validate devices and credentials belong to customer
+        valid_devices = DiscoveredDevice.objects.filter(
+            id__in=device_ids, customer=customer
+        ).values_list("id", flat=True)
+        valid_creds = Credential.objects.filter(
+            id__in=credential_ids, customer=customer
+        ).values_list("id", flat=True)
+
+        if not valid_devices or not valid_creds:
+            return Response(
+                {"detail": "No valid devices or credentials found"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        js = JobService()
+        job = js.create_job(
+            job_type="credential_test",
+            user=request.user,
+            customer=customer,
+            target_summary={"device_count": len(valid_devices)},
+            payload={
+                "discovered_device_ids": list(valid_devices),
+                "credential_ids": list(valid_creds),
+            },
+        )
+        return Response(
+            {"job_id": job.id, "status": job.status},
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+
+# =============================================================================
+# Issue #24 - Device Tags and Groups ViewSets
+# =============================================================================
+
+
+class TagViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
+    """ViewSet for managing device tags.
+
+    Tags allow flexible grouping of devices for automation targeting,
+    compliance scoping, and organization.
+    """
+
+    queryset = Tag.objects.all()
+    serializer_class = TagSerializer
+    permission_classes = [IsAuthenticated, RolePermission, ObjectCustomerPermission]
+    customer_field = "customer_id"
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        # Annotate with device count
+
+        return qs.annotate(device_count=Count("devices")).order_by("category", "name")
+
+    @action(detail=False, methods=["post"], url_path="bulk-assign")
+    def bulk_assign(self, request) -> Response:
+        """Bulk assign or remove tags from devices.
+
+        Request body:
+        - device_ids: List of device IDs
+        - tag_ids: List of tag IDs
+        - action: "add", "remove", or "set" (replace all tags)
+        """
+        serializer = DeviceTagAssignmentSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        device_ids = serializer.validated_data["device_ids"]
+        tag_ids = serializer.validated_data["tag_ids"]
+        action_type = serializer.validated_data.get("action", "add")
+
+        # Get devices and tags (customer-scoped)
+        devices = Device.objects.filter(id__in=device_ids)
+        devices = self._filter_by_customer(devices)
+        tags = Tag.objects.filter(id__in=tag_ids)
+        tags = self._filter_by_customer(tags)
+
+        if not devices.exists():
+            return Response(
+                {"detail": "No valid devices found"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        updated_count = 0
+        for device in devices:
+            if action_type == "add":
+                device.device_tags.add(*tags)
+            elif action_type == "remove":
+                device.device_tags.remove(*tags)
+            elif action_type == "set":
+                device.device_tags.set(tags)
+            updated_count += 1
+
+        return Response(
+            {
+                "updated_count": updated_count,
+                "action": action_type,
+            }
+        )
+
+    def _filter_by_customer(self, qs):
+        """Filter queryset by customer access."""
+        user = self.request.user
+        if getattr(user, "role", "viewer") == "admin":
+            return qs
+        customer_ids = list(user.customers.values_list("id", flat=True))
+        return qs.filter(customer_id__in=customer_ids)
+
+
+class DeviceGroupViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
+    """ViewSet for managing device groups.
+
+    Device groups support both static (explicit device list) and
+    dynamic (filter-based) membership.
+    """
+
+    queryset = DeviceGroup.objects.all()
+    serializer_class = DeviceGroupSerializer
+    permission_classes = [IsAuthenticated, RolePermission, ObjectCustomerPermission]
+    customer_field = "customer_id"
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        return qs.select_related("customer", "parent").order_by("name")
+
+    @action(detail=True, methods=["get"])
+    def devices(self, request, pk=None) -> Response:
+        """Get all devices in this group (evaluates dynamic rules)."""
+        group = self.get_object()
+        devices = group.get_devices()
+        return Response(DeviceSerializer(devices, many=True).data)
+
+    @action(detail=True, methods=["post"], url_path="add-devices")
+    def add_devices(self, request, pk=None) -> Response:
+        """Add devices to a static group.
+
+        Request body:
+        - device_ids: List of device IDs to add
+        """
+        group = self.get_object()
+        if group.group_type != DeviceGroup.TYPE_STATIC:
+            return Response(
+                {"detail": "Cannot manually add devices to dynamic groups"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        device_ids = request.data.get("device_ids", [])
+        devices = Device.objects.filter(id__in=device_ids, customer=group.customer)
+        group.devices.add(*devices)
+
+        return Response({"added_count": devices.count()})
+
+    @action(detail=True, methods=["post"], url_path="remove-devices")
+    def remove_devices(self, request, pk=None) -> Response:
+        """Remove devices from a static group.
+
+        Request body:
+        - device_ids: List of device IDs to remove
+        """
+        group = self.get_object()
+        if group.group_type != DeviceGroup.TYPE_STATIC:
+            return Response(
+                {"detail": "Cannot manually remove devices from dynamic groups"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        device_ids = request.data.get("device_ids", [])
+        devices = Device.objects.filter(id__in=device_ids)
+        group.devices.remove(*devices)
+
+        return Response({"removed_count": len(device_ids)})
+
+    @action(detail=True, methods=["post"], url_path="run-job")
+    def run_job(self, request, pk=None) -> Response:
+        """Run an automation job targeting this group's devices.
+
+        Request body:
+        - job_type: Type of job (e.g., "config_backup", "run_commands")
+        - payload: Job-specific payload
+        """
+        group = self.get_object()
+        job_type = request.data.get("job_type")
+        payload = request.data.get("payload", {})
+
+        if not job_type:
+            return Response(
+                {"detail": "job_type is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Get device IDs from group
+        device_ids = list(group.get_devices().values_list("id", flat=True))
+        if not device_ids:
+            return Response(
+                {"detail": "Group has no devices"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        js = JobService()
+        job = js.create_job(
+            job_type=job_type,
+            user=request.user,
+            customer=group.customer,
+            target_summary={"group_id": group.id, "group_name": group.name},
+            payload={**payload, "device_ids": device_ids},
+        )
+
+        return Response(
+            {"job_id": job.id, "status": job.status, "device_count": len(device_ids)},
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+    @action(detail=False, methods=["post"], url_path="from-filter")
+    def create_from_filter(self, request) -> Response:
+        """Create a dynamic group from current filter criteria.
+
+        Request body:
+        - name: Group name
+        - description: Optional description
+        - filter_rules: Filter rules dict (vendor, platform, site, role, tags, etc.)
+        """
+        customer = resolve_customer_for_request(request)
+        if not customer:
+            return Response(
+                {"detail": "customer_id required or no access"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        name = request.data.get("name")
+        if not name:
+            return Response(
+                {"detail": "name is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        filter_rules = request.data.get("filter_rules", {})
+
+        group = DeviceGroup.objects.create(
+            customer=customer,
+            name=name,
+            description=request.data.get("description", ""),
+            group_type=DeviceGroup.TYPE_DYNAMIC,
+            filter_rules=filter_rules,
+        )
+
+        return Response(
+            DeviceGroupSerializer(group).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+# ==============================================================================
+# Configuration Template ViewSet (Issue #16)
+# ==============================================================================
+
+
+class ConfigTemplateViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
+    """ViewSet for managing configuration templates.
+
+    Provides CRUD operations for Jinja2 configuration templates,
+    plus rendering and deployment capabilities.
+    """
+
+    queryset = ConfigTemplate.objects.select_related("customer", "created_by")
+    serializer_class = ConfigTemplateSerializer
+    permission_classes = [IsAuthenticated, RolePermission, ObjectCustomerPermission]
+    customer_field = "customer_id"
+    filterset_fields = ["category", "is_active"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        # Filter by category if provided
+        category = self.request.query_params.get("category")
+        if category:
+            qs = qs.filter(category=category)
+        # Filter by platform tag if provided
+        platform = self.request.query_params.get("platform")
+        if platform:
+            qs = qs.filter(platform_tags__contains=[platform])
+        return qs.order_by("category", "name")
+
+    @action(detail=True, methods=["post"])
+    def render(self, request, pk=None) -> Response:
+        """Render a template with provided variables.
+
+        Request body:
+        - variables: Dictionary of variable values
+        - device_id: Optional device ID for context
+
+        Returns:
+        - rendered_config: The rendered configuration text
+        - errors: Any validation or rendering errors
+        """
+        template = self.get_object()
+        serializer = ConfigTemplateRenderSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        variables = serializer.validated_data.get("variables", {})
+        device_id = serializer.validated_data.get("device_id")
+
+        # Add device context if provided
+        if device_id:
+            try:
+                device = Device.objects.get(pk=device_id, customer=template.customer)
+                variables.setdefault("hostname", device.hostname)
+                variables.setdefault("mgmt_ip", device.mgmt_ip)
+                variables.setdefault("vendor", device.vendor)
+                variables.setdefault("platform", device.platform)
+                variables.setdefault("site", device.site or "")
+                variables.setdefault("role", device.role or "")
+            except Device.DoesNotExist:
+                return Response(
+                    {"detail": "Device not found or not accessible"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        try:
+            rendered = template.render(variables)
+            return Response(
+                {
+                    "rendered_config": rendered,
+                    "template_id": template.id,
+                    "template_name": template.name,
+                    "variables_used": variables,
+                }
+            )
+        except ValueError as e:
+            # ValueError from template validation contains user-facing messages
+            logger.warning("Template validation error for template %s: %s", template.id, e)
+            return Response(
+                {
+                    "detail": "Template rendering failed due to invalid input.",
+                    "errors": ["Invalid template or variable values."],
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except Exception:
+            logger.exception("Template rendering failed for template %s", template.id)
+            return Response(
+                {"detail": "Template rendering failed due to an internal error."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    @action(detail=True, methods=["post"])
+    def deploy(self, request, pk=None) -> Response:
+        """Deploy a rendered template to devices.
+
+        Request body:
+        - variables: Dictionary of variable values
+        - device_ids: List of device IDs to deploy to
+        - mode: 'merge' or 'replace' (default: merge)
+        - dry_run: If true, preview only (default: true)
+
+        Returns:
+        - job_id: ID of the created deployment job
+        """
+        template = self.get_object()
+        serializer = ConfigTemplateDeploySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        variables = serializer.validated_data.get("variables", {})
+        device_ids = serializer.validated_data["device_ids"]
+        mode = serializer.validated_data.get("mode", "merge")
+        dry_run = serializer.validated_data.get("dry_run", True)
+
+        # Validate devices exist and belong to the same customer
+        devices = Device.objects.filter(pk__in=device_ids, customer=template.customer)
+        if devices.count() != len(device_ids):
+            return Response(
+                {"detail": "Some devices not found or not accessible"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Render the template
+        try:
+            rendered = template.render(variables)
+        except ValueError as e:
+            logger.warning("Template rendering value error: %s", e)
+            return Response(
+                {"detail": "Invalid input for template rendering."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except Exception:
+            logger.exception("Template rendering failed for template %s", template.id)
+            return Response(
+                {"detail": "Template rendering failed due to an internal error."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Create the deployment job
+        job_type = "config_deploy_preview" if dry_run else "config_deploy_commit"
+        js = JobService()
+        job = js.create_job(
+            job_type=job_type,
+            user=request.user,
+            customer=template.customer,
+            target_summary={"filters": {"device_ids": device_ids}},
+            payload={
+                "mode": mode,
+                "snippet": rendered,
+                "template_id": template.id,
+                "template_name": template.name,
+            },
+        )
+
+        return Response(
+            {"job_id": job.id, "status": job.status, "dry_run": dry_run},
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+    @action(detail=True, methods=["get"])
+    def validate(self, request, pk=None) -> Response:
+        """Validate template syntax without rendering.
+
+        Returns:
+        - valid: Whether the template is syntactically valid
+        - errors: List of syntax errors if any
+        """
+        template = self.get_object()
+
+        from jinja2 import Environment, BaseLoader, TemplateSyntaxError
+
+        env = Environment(loader=BaseLoader())
+        try:
+            env.parse(template.template_content)
+            return Response({"valid": True, "errors": []})
+        except TemplateSyntaxError as e:
+            return Response(
+                {
+                    "valid": False,
+                    "errors": [{"line": e.lineno, "message": str(e.message)}],
+                }
+            )
+
+    @action(detail=False, methods=["get"])
+    def categories(self, request) -> Response:
+        """Get available template categories with counts."""
+
+        qs = self.get_queryset()
+        categories = qs.values("category").annotate(count=Count("id")).order_by("category")
+        return Response(
+            {
+                "categories": list(categories),
+                "choices": ConfigTemplate.CATEGORY_CHOICES,
+            }
+        )
+
+
+# ==============================================================================
+# NetBox Integration ViewSet (Issue #9)
+# ==============================================================================
+
+
+class NetBoxConfigViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
+    """ViewSet for managing NetBox configurations.
+
+    Each customer can have one NetBox configuration for syncing devices.
+    """
+
+    queryset = NetBoxConfig.objects.select_related("customer", "default_credential")
+    serializer_class = NetBoxConfigSerializer
+    permission_classes = [IsAuthenticated, RolePermission, ObjectCustomerPermission]
+    customer_field = "customer_id"
+
+    @action(detail=True, methods=["post"])
+    def sync(self, request, pk=None) -> Response:
+        """Trigger a manual sync from NetBox.
+
+        Request body:
+        - full_sync: If true, sync all devices (default: false for delta sync)
+
+        Returns:
+        - job_id: ID of the created sync job (if async)
+        - or direct sync results (if sync is quick)
+        """
+        config = self.get_object()
+
+        if not config.enabled:
+            return Response(
+                {"detail": "NetBox sync is disabled for this configuration"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not config.has_api_token():
+            return Response(
+                {"detail": "NetBox API token is not configured"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = NetBoxSyncRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        full_sync = serializer.validated_data.get("full_sync", False)
+
+        # Queue the sync task
+        from webnet.jobs.tasks import netbox_sync_job
+
+        netbox_sync_job.delay(config.id, full_sync=full_sync)
+
+        return Response(
+            {
+                "detail": "NetBox sync queued",
+                "config_id": config.id,
+                "full_sync": full_sync,
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+    @action(detail=True, methods=["post"], url_path="test-connection")
+    def test_connection(self, request, pk=None) -> Response:
+        """Test the NetBox API connection.
+
+        Returns:
+        - success: Whether the connection was successful
+        - message: Success or error message
+        - netbox_version: NetBox version if successful
+        """
+        config = self.get_object()
+
+        if not config.has_api_token():
+            return Response(
+                {
+                    "success": False,
+                    "message": "API token is not configured",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from webnet.devices.netbox_service import NetBoxService
+
+        service = NetBoxService(config)
+        result = service.test_connection()
+
+        return Response(
+            {
+                "success": result.success,
+                "message": result.message,
+                "netbox_version": getattr(result, "netbox_version", None),
+            },
+            status=status.HTTP_200_OK if result.success else status.HTTP_400_BAD_REQUEST,
+        )
+
+    @action(detail=True, methods=["get"])
+    def logs(self, request, pk=None) -> Response:
+        """Get sync logs for this configuration."""
+        config = self.get_object()
+        logs = NetBoxSyncLog.objects.filter(config=config).order_by("-started_at")[:50]
+        return Response(NetBoxSyncLogSerializer(logs, many=True).data)
+
+    @action(detail=True, methods=["get"])
+    def preview(self, request, pk=None) -> Response:
+        """Preview what devices would be synced without actually syncing.
+
+        Returns:
+        - devices: List of devices that would be created/updated
+        - total: Total count of devices
+        """
+        config = self.get_object()
+
+        if not config.has_api_token():
+            return Response(
+                {"detail": "API token is not configured"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from webnet.devices.netbox_service import NetBoxService
+
+        service = NetBoxService(config)
+        try:
+            preview = service.preview_sync()
+            return Response(
+                {
+                    "devices": preview.devices[:100],  # Limit preview
+                    "total": preview.total,
+                    "would_create": preview.would_create,
+                    "would_update": preview.would_update,
+                }
+            )
+        except Exception:
+            logger.exception("NetBox preview failed for config %s", config.id)
+            return Response(
+                {"detail": "Preview failed due to an internal error."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )

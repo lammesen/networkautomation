@@ -289,6 +289,75 @@ def scheduled_config_backup() -> None:
     return
 
 
+@shared_task(name="netbox_sync_job")
+def netbox_sync_job(config_id: int, full_sync: bool = False) -> dict:
+    """Sync devices from NetBox.
+
+    Args:
+        config_id: NetBoxConfig ID
+        full_sync: If True, update all devices. If False, only create new ones.
+
+    Returns:
+        Dict with sync result details
+    """
+    from webnet.devices.models import NetBoxConfig
+    from webnet.devices.netbox_service import NetBoxService
+
+    try:
+        config = NetBoxConfig.objects.get(pk=config_id)
+    except NetBoxConfig.DoesNotExist:
+        logger.warning("NetBoxConfig %s not found", config_id)
+        return {"success": False, "error": "Config not found"}
+
+    service = NetBoxService(config)
+    result = service.sync_devices(full_sync=full_sync)
+
+    return {
+        "success": result.success,
+        "message": result.message,
+        "created": result.created,
+        "updated": result.updated,
+        "skipped": result.skipped,
+        "failed": result.failed,
+        "errors": result.errors,
+    }
+
+
+@shared_task(name="scheduled_netbox_sync")
+def scheduled_netbox_sync() -> None:
+    """Scheduled task to sync from NetBox for all enabled configurations.
+
+    This task runs periodically and triggers syncs based on each config's
+    sync_frequency setting.
+    """
+    from webnet.devices.models import NetBoxConfig
+    from django.utils import timezone
+    from datetime import timedelta
+
+    now = timezone.now()
+
+    for config in NetBoxConfig.objects.filter(enabled=True).exclude(sync_frequency="manual"):
+        # Determine if sync is due based on frequency
+        last_sync = config.last_sync_at
+        should_sync = False
+
+        if not last_sync:
+            should_sync = True
+        elif config.sync_frequency == "hourly":
+            should_sync = now - last_sync >= timedelta(hours=1)
+        elif config.sync_frequency == "daily":
+            should_sync = now - last_sync >= timedelta(days=1)
+        elif config.sync_frequency == "weekly":
+            should_sync = now - last_sync >= timedelta(weeks=1)
+
+        if should_sync:
+            # Update last_sync_at immediately to prevent duplicate syncs if this task
+            # runs again before the sync job completes
+            config.last_sync_at = now
+            config.save(update_fields=["last_sync_at"])
+            netbox_sync_job.delay(config.id, full_sync=False)
+
+
 @shared_task(name="check_reachability_job")
 def check_reachability_job(job_id: int, targets: dict | None = None) -> None:
     js = JobService()
@@ -603,5 +672,516 @@ def topology_discovery_job(
         js.set_status(job, "success", result_summary=result_summary)
     except Exception as exc:  # pragma: no cover
         logger.exception("topology_discovery_job failed for job %s", job_id)
+        js.append_log(job, level="ERROR", message=str(exc))
+        js.set_status(job, "failed", result_summary={"error": str(exc)})
+
+
+# =============================================================================
+# Bulk Device Onboarding Tasks (Issue #40)
+# =============================================================================
+
+
+def _parse_snmp_sysdescr(sysdescr: str) -> dict[str, str | None]:
+    """Parse SNMP sysDescr to extract vendor, platform, and software version.
+
+    Example sysDescrs:
+    - Cisco IOS: "Cisco IOS Software, 3800 Software (C3800-ADVIPSERVICESK9-M), Version 15.1"
+    - Juniper: "Juniper Networks, Inc. ex2200-24t-4g..."
+    - Arista: "Arista Networks EOS version 4.27.3M running on an Arista ..."
+    """
+    vendor = None
+    platform = None
+    software_version = None
+
+    sysdescr_lower = sysdescr.lower()
+
+    # Detect vendor
+    if "cisco" in sysdescr_lower:
+        vendor = "cisco"
+        # Try to extract platform and version
+        if "ios" in sysdescr_lower or "nx-os" in sysdescr_lower:
+            # Extract version
+            version_match = re.search(r"Version\s+([\d.()a-zA-Z]+)", sysdescr, re.IGNORECASE)
+            if version_match:
+                software_version = version_match.group(1)
+            # Extract platform
+            platform_match = re.search(r"(\d{4}|C\d{4}|Nexus\s+\d+)", sysdescr, re.IGNORECASE)
+            if platform_match:
+                platform = platform_match.group(1)
+            else:
+                platform = "ios" if "ios" in sysdescr_lower else "nxos"
+    elif "juniper" in sysdescr_lower:
+        vendor = "juniper"
+        platform_match = re.search(r"(ex\d+|mx\d+|srx\d+|qfx\d+)", sysdescr_lower)
+        if platform_match:
+            platform = platform_match.group(1).upper()
+        else:
+            platform = "junos"
+        version_match = re.search(r"JUNOS\s+(\S+)", sysdescr, re.IGNORECASE)
+        if version_match:
+            software_version = version_match.group(1)
+    elif "arista" in sysdescr_lower:
+        vendor = "arista"
+        platform = "eos"
+        version_match = re.search(r"version\s+([\d.]+[a-zA-Z]*)", sysdescr, re.IGNORECASE)
+        if version_match:
+            software_version = version_match.group(1)
+    elif "huawei" in sysdescr_lower:
+        vendor = "huawei"
+        platform = "vrp"
+    elif "linux" in sysdescr_lower:
+        vendor = "linux"
+        platform = "linux"
+    else:
+        # Try to extract first word as vendor hint
+        parts = sysdescr.split()
+        if parts:
+            vendor = parts[0].lower()[:50]
+
+    return {
+        "vendor": vendor,
+        "platform": platform,
+        "software_version": software_version,
+    }
+
+
+def _scan_ip_for_ssh(
+    ip: str,
+    port: int = 22,
+    timeout: float = 3.0,
+) -> bool:
+    """Check if SSH port is open on the given IP address."""
+    import socket
+
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        result = sock.connect_ex((ip, port))
+        sock.close()
+        return result == 0
+    except Exception:
+        return False
+
+
+def _test_ssh_credential(
+    ip: str,
+    username: str,
+    password: str,
+    port: int = 22,
+    timeout: int = 10,
+) -> tuple[bool, dict | None, str]:
+    """Test SSH credential against a device.
+
+    Returns:
+        Tuple of (success, device_info_dict, message)
+    """
+    try:
+        from netmiko import ConnectHandler
+        from netmiko.exceptions import NetmikoAuthenticationException, NetmikoTimeoutException
+
+        # Try common device types
+        device_types = ["autodetect", "linux", "cisco_ios", "juniper_junos", "arista_eos"]
+
+        for device_type in device_types:
+            try:
+                device = {
+                    "device_type": device_type,
+                    "host": ip,
+                    "username": username,
+                    "password": password,
+                    "port": port,
+                    "timeout": timeout,
+                    "auth_timeout": timeout,
+                    "banner_timeout": timeout,
+                }
+                conn = ConnectHandler(**device)
+
+                # Try to get device info
+                device_info = {
+                    "device_type": conn.device_type,
+                }
+
+                # Try to get hostname - best effort, not critical for auth success
+                try:
+                    prompt = conn.find_prompt()
+                    hostname = prompt.strip("#>$").strip()
+                    device_info["hostname"] = hostname
+                except Exception:
+                    # Hostname extraction is optional; proceed without it if it fails
+                    pass
+
+                conn.disconnect()
+                return True, device_info, f"SSH authentication successful ({device_type})"
+
+            except NetmikoAuthenticationException:
+                return False, None, "Authentication failed - invalid credentials"
+            except NetmikoTimeoutException:
+                continue
+            except Exception as e:
+                if "authentication" in str(e).lower():
+                    return False, None, "Authentication failed - invalid credentials"
+                continue
+
+        return False, None, "Could not establish SSH connection with any device type"
+
+    except Exception:
+        logger.exception("Unexpected error during SSH credential test for %s", ip)
+        return False, None, "An internal error occurred while testing SSH credentials."
+
+
+def _snmp_get_device_info(
+    ip: str,
+    community: str = "public",
+    version: str = "2c",
+    timeout: int = 5,
+) -> dict[str, str | None] | None:
+    """Get device information via SNMP.
+
+    Returns dict with keys: hostname, vendor, platform, software_version, serial_number
+    """
+    try:
+        from pysnmp.hlapi import (
+            getCmd,
+            SnmpEngine,
+            CommunityData,
+            UdpTransportTarget,
+            ContextData,
+            ObjectType,
+            ObjectIdentity,
+        )
+
+        # Standard SNMP OIDs
+        oid_sysdescr = "1.3.6.1.2.1.1.1.0"  # sysDescr
+        oid_sysname = "1.3.6.1.2.1.1.5.0"  # sysName
+
+        result: dict[str, str | None] = {
+            "hostname": None,
+            "vendor": None,
+            "platform": None,
+            "software_version": None,
+            "serial_number": None,
+        }
+
+        snmp_version = 1 if version == "2c" else 0  # SNMPv2c = 1, SNMPv1 = 0
+
+        # Get sysDescr and sysName
+        errorIndication, errorStatus, errorIndex, varBinds = next(
+            getCmd(
+                SnmpEngine(),
+                CommunityData(community, mpModel=snmp_version),
+                UdpTransportTarget((ip, 161), timeout=timeout, retries=1),
+                ContextData(),
+                ObjectType(ObjectIdentity(oid_sysdescr)),
+                ObjectType(ObjectIdentity(oid_sysname)),
+            )
+        )
+
+        if errorIndication or errorStatus:
+            return None
+
+        sysdescr = ""
+        for varBind in varBinds:
+            oid_str = str(varBind[0])
+            value = str(varBind[1])
+            if oid_sysdescr in oid_str:
+                sysdescr = value
+            elif oid_sysname in oid_str:
+                result["hostname"] = value
+
+        # Parse sysDescr to extract vendor/platform/version
+        if sysdescr:
+            parsed = _parse_snmp_sysdescr(sysdescr)
+            result.update(parsed)
+
+        return result
+
+    except ImportError:
+        logger.warning("pysnmp not available for SNMP discovery")
+        return None
+    except Exception as e:
+        logger.debug("SNMP query failed for %s: %s", ip, e)
+        return None
+
+
+def _expand_ip_range(cidr: str) -> list[str]:
+    """Expand a CIDR notation to list of IP addresses.
+
+    Limits to /24 network (256 IPs) max to prevent excessive scanning.
+    """
+    import ipaddress
+
+    try:
+        network = ipaddress.ip_network(cidr, strict=False)
+        # Limit to /24 to prevent excessive scanning
+        if network.prefixlen < 24:
+            logger.warning("Limiting IP range scan to first /24 of %s", cidr)
+            network = ipaddress.ip_network(f"{network.network_address}/24", strict=False)
+        return [str(ip) for ip in network.hosts()]
+    except ValueError as e:
+        logger.error("Invalid CIDR notation: %s - %s", cidr, e)
+        return []
+
+
+@shared_task(name="ip_range_scan_job")
+def ip_range_scan_job(
+    job_id: int,
+    ip_ranges: list[str],
+    credential_ids: list[int],
+    use_snmp: bool = True,
+    snmp_community: str = "public",
+    snmp_version: str = "2c",
+    test_ssh: bool = True,
+    ports: list[int] | None = None,
+) -> None:
+    """Scan IP ranges to discover network devices.
+
+    Args:
+        job_id: Job ID to track progress
+        ip_ranges: List of CIDR notation IP ranges to scan
+        credential_ids: List of credential IDs to test
+        use_snmp: Use SNMP for device discovery
+        snmp_community: SNMP community string
+        snmp_version: SNMP version (2c or 3)
+        test_ssh: Test SSH connectivity with credentials
+        ports: SSH ports to test (default: [22])
+    """
+    from webnet.devices.models import Credential, DiscoveredDevice
+
+    js = JobService()
+    try:
+        job = Job.objects.get(pk=job_id)
+    except Job.DoesNotExist:
+        return
+
+    js.set_status(job, "running")
+
+    if not ports:
+        ports = [22]
+
+    # Get credentials
+    credentials = list(
+        Credential.objects.filter(id__in=credential_ids, customer_id=job.customer_id)
+    )
+    if not credentials:
+        js.append_log(job, level="ERROR", message="No valid credentials found")
+        js.set_status(job, "failed", result_summary={"error": "no credentials"})
+        return
+
+    discovered_count = 0
+    reachable_count = 0
+    duplicate_count = 0
+    total_ips = 0
+
+    try:
+        for cidr in ip_ranges:
+            js.append_log(job, level="INFO", message=f"Scanning IP range: {cidr}")
+            ips = _expand_ip_range(cidr)
+            total_ips += len(ips)
+
+            for ip in ips:
+                device_info: dict[str, str | None] = {
+                    "hostname": None,
+                    "vendor": None,
+                    "platform": None,
+                    "software_version": None,
+                    "serial_number": None,
+                }
+                discovery_source = DiscoveredDevice.SOURCE_IP_SCAN
+                tested_credential = None
+                credential_status = "untested"
+
+                # Step 1: Check if SSH port is open
+                ssh_reachable = False
+                for port in ports:
+                    if _scan_ip_for_ssh(ip, port):
+                        ssh_reachable = True
+                        break
+
+                if not ssh_reachable and not use_snmp:
+                    continue  # Skip unreachable hosts
+
+                # Step 2: Try SNMP discovery if enabled
+                if use_snmp:
+                    snmp_info = _snmp_get_device_info(ip, snmp_community, snmp_version)
+                    if snmp_info:
+                        device_info.update(snmp_info)
+                        discovery_source = DiscoveredDevice.SOURCE_SNMP
+                        reachable_count += 1
+
+                # Step 3: Test SSH credentials if enabled
+                if test_ssh and ssh_reachable:
+                    for cred in credentials:
+                        success, ssh_info, msg = _test_ssh_credential(
+                            ip, cred.username, cred.password or "", ports[0]
+                        )
+                        if success:
+                            tested_credential = cred
+                            credential_status = "success"
+                            if ssh_info:
+                                if ssh_info.get("hostname") and not device_info.get("hostname"):
+                                    device_info["hostname"] = ssh_info["hostname"]
+                            if not device_info.get("vendor"):
+                                reachable_count += 1
+                            js.append_log(
+                                job,
+                                level="INFO",
+                                message=f"SSH auth success for {ip} with credential '{cred.name}'",
+                            )
+                            break
+                        else:
+                            credential_status = "failed"
+
+                # Skip if no device info was gathered
+                if not device_info.get("hostname") and not ssh_reachable:
+                    continue
+
+                # Generate hostname if not discovered
+                hostname = device_info.get("hostname") or ip.replace(".", "-")
+
+                # Check for duplicates
+                if DiscoveredDevice.check_duplicate(job.customer_id, hostname, ip):
+                    duplicate_count += 1
+                    js.append_log(
+                        job,
+                        level="INFO",
+                        message=f"Skipping duplicate device: {hostname} ({ip})",
+                    )
+                    continue
+
+                # Create discovered device entry
+                DiscoveredDevice.objects.create(
+                    customer_id=job.customer_id,
+                    hostname=hostname,
+                    mgmt_ip=ip,
+                    vendor=device_info.get("vendor"),
+                    platform=device_info.get("platform"),
+                    software_version=device_info.get("software_version"),
+                    serial_number=device_info.get("serial_number"),
+                    discovery_source=discovery_source,
+                    credential_tested=tested_credential,
+                    credential_test_status=credential_status,
+                    job_id=job.id,
+                )
+                discovered_count += 1
+                js.append_log(
+                    job,
+                    level="INFO",
+                    message=f"Discovered device: {hostname} ({ip})",
+                )
+
+        result_summary = {
+            "ip_ranges": ip_ranges,
+            "total_ips_scanned": total_ips,
+            "discovered_count": discovered_count,
+            "reachable_count": reachable_count,
+            "duplicate_count": duplicate_count,
+        }
+        js.set_status(job, "success", result_summary=result_summary)
+
+    except Exception as exc:
+        logger.exception("ip_range_scan_job failed for job %s", job_id)
+        js.append_log(job, level="ERROR", message=str(exc))
+        js.set_status(job, "failed", result_summary={"error": str(exc)})
+
+
+@shared_task(name="credential_test_job")
+def credential_test_job(
+    job_id: int,
+    discovered_device_ids: list[int],
+    credential_ids: list[int],
+) -> None:
+    """Test credentials against discovered devices.
+
+    Args:
+        job_id: Job ID to track progress
+        discovered_device_ids: List of DiscoveredDevice IDs to test
+        credential_ids: List of Credential IDs to try
+    """
+    from webnet.devices.models import Credential, DiscoveredDevice
+
+    js = JobService()
+    try:
+        job = Job.objects.get(pk=job_id)
+    except Job.DoesNotExist:
+        return
+
+    js.set_status(job, "running")
+
+    # Get credentials
+    credentials = list(
+        Credential.objects.filter(id__in=credential_ids, customer_id=job.customer_id)
+    )
+    if not credentials:
+        js.append_log(job, level="ERROR", message="No valid credentials found")
+        js.set_status(job, "failed", result_summary={"error": "no credentials"})
+        return
+
+    # Get discovered devices
+    devices = DiscoveredDevice.objects.filter(
+        id__in=discovered_device_ids,
+        customer_id=job.customer_id,
+        status=DiscoveredDevice.STATUS_PENDING,
+    )
+
+    tested_count = 0
+    success_count = 0
+    failed_count = 0
+
+    try:
+        for device in devices:
+            if not device.mgmt_ip:
+                js.append_log(
+                    job,
+                    level="WARNING",
+                    message=f"Skipping {device.hostname} - no IP address",
+                )
+                continue
+
+            tested_count += 1
+            found_credential = None
+
+            for cred in credentials:
+                success, device_info, msg = _test_ssh_credential(
+                    device.mgmt_ip, cred.username, cred.password or ""
+                )
+                if success:
+                    found_credential = cred
+                    # Update device info if we got more details
+                    if device_info and device_info.get("hostname"):
+                        if not device.hostname or device.hostname == device.mgmt_ip.replace(
+                            ".", "-"
+                        ):
+                            device.hostname = device_info["hostname"]
+                    break
+
+            if found_credential:
+                device.credential_tested = found_credential
+                device.credential_test_status = "success"
+                device.save()
+                success_count += 1
+                js.append_log(
+                    job,
+                    level="INFO",
+                    message=f"Credential '{found_credential.name}' works for {device.hostname}",
+                )
+            else:
+                device.credential_test_status = "failed"
+                device.save()
+                failed_count += 1
+                js.append_log(
+                    job,
+                    level="WARNING",
+                    message=f"No working credential found for {device.hostname}",
+                )
+
+        result_summary = {
+            "tested_count": tested_count,
+            "success_count": success_count,
+            "failed_count": failed_count,
+        }
+        js.set_status(job, "success", result_summary=result_summary)
+
+    except Exception as exc:
+        logger.exception("credential_test_job failed for job %s", job_id)
         js.append_log(job, level="ERROR", message=str(exc))
         js.set_status(job, "failed", result_summary={"error": str(exc)})

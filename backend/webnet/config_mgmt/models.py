@@ -1,7 +1,199 @@
 import hashlib
+import ipaddress as ip_module
+import json
+from typing import Any
+
 from django.db import models
+from django.core.validators import MinLengthValidator
 
 from webnet.core.crypto import encrypt_text, decrypt_text
+
+
+class ConfigTemplate(models.Model):
+    """Jinja2 configuration template for device configs.
+
+    Templates can define variables with types and validation rules,
+    enabling standardized configuration generation with previews.
+    """
+
+    CATEGORY_CHOICES = [
+        ("base", "Base Config (hostname, logging, NTP)"),
+        ("interface", "Interface Templates"),
+        ("routing", "Routing Protocols"),
+        ("security", "Security Policies"),
+        ("custom", "Custom Templates"),
+    ]
+
+    VARIABLE_TYPES = [
+        ("string", "String"),
+        ("integer", "Integer"),
+        ("ipaddress", "IP Address"),
+        ("list", "List"),
+        ("boolean", "Boolean"),
+    ]
+
+    customer = models.ForeignKey(
+        "customers.Customer",
+        on_delete=models.CASCADE,
+        related_name="config_templates",
+        help_text="Customer this template belongs to",
+    )
+    name = models.CharField(
+        max_length=100,
+        validators=[MinLengthValidator(1)],
+        help_text="Template name",
+    )
+    description = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Template description and usage notes",
+    )
+    category = models.CharField(
+        max_length=20,
+        choices=CATEGORY_CHOICES,
+        default="custom",
+        help_text="Template category for organization",
+    )
+    template_content = models.TextField(
+        help_text="Jinja2 template content",
+    )
+    variables_schema = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Variable definitions: {name: {type, required, default, description, validation}}"
+        ),
+    )
+    platform_tags = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="List of compatible platform/vendor tags (e.g., ['cisco_ios', 'juniper'])",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Whether this template is available for use",
+    )
+    created_by = models.ForeignKey(
+        "users.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_templates",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("customer", "name")
+        ordering = ["category", "name"]
+        indexes = [
+            models.Index(fields=["customer"]),
+            models.Index(fields=["category"]),
+            models.Index(fields=["is_active"]),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover
+        return f"{self.name} ({self.category})"
+
+    def get_variables(self) -> dict[str, dict[str, Any]]:
+        """Return the variables schema as a dictionary."""
+        if isinstance(self.variables_schema, str):
+            return json.loads(self.variables_schema)
+        return self.variables_schema or {}
+
+    def validate_variables(self, values: dict[str, Any]) -> tuple[bool, list[str]]:
+        """Validate provided variable values against the schema.
+
+        Args:
+            values: Dictionary of variable name -> value
+
+        Returns:
+            Tuple of (is_valid, list of error messages)
+        """
+        errors: list[str] = []
+        schema = self.get_variables()
+
+        # Check required variables
+        for var_name, var_def in schema.items():
+            if var_def.get("required", False) and var_name not in values:
+                if "default" not in var_def:
+                    errors.append(f"Required variable '{var_name}' is missing")
+
+        # Validate types
+        for var_name, value in values.items():
+            if var_name not in schema:
+                continue  # Extra variables are allowed
+
+            var_def = schema[var_name]
+            var_type = var_def.get("type", "string")
+
+            if var_type == "integer":
+                if not isinstance(value, int) and not (isinstance(value, str) and value.isdigit()):
+                    errors.append(f"Variable '{var_name}' must be an integer")
+
+            elif var_type == "boolean":
+                if not isinstance(value, bool) and value not in (
+                    "true",
+                    "false",
+                    "True",
+                    "False",
+                    "1",
+                    "0",
+                ):
+                    errors.append(f"Variable '{var_name}' must be a boolean")
+
+            elif var_type == "ipaddress":
+                try:
+                    ip_module.ip_address(str(value))
+                except ValueError:
+                    errors.append(f"Variable '{var_name}' must be a valid IP address")
+
+            elif var_type == "list":
+                if not isinstance(value, list):
+                    if isinstance(value, str):
+                        # Try to parse as comma-separated
+                        pass  # Allow string that can be split
+                    else:
+                        errors.append(f"Variable '{var_name}' must be a list")
+
+        return (len(errors) == 0, errors)
+
+    def render(self, variables: dict[str, Any]) -> str:
+        """Render the template with provided variables.
+
+        Args:
+            variables: Dictionary of variable values
+
+        Returns:
+            Rendered configuration text
+
+        Raises:
+            ValueError: If variable validation fails
+            jinja2.TemplateError: If template rendering fails
+        """
+        from jinja2 import Environment, BaseLoader, StrictUndefined
+
+        is_valid, errors = self.validate_variables(variables)
+        if not is_valid:
+            raise ValueError(f"Variable validation failed: {'; '.join(errors)}")
+
+        # Merge with defaults
+        schema = self.get_variables()
+        merged_vars = {}
+        for var_name, var_def in schema.items():
+            if var_name in variables:
+                merged_vars[var_name] = variables[var_name]
+            elif "default" in var_def:
+                merged_vars[var_name] = var_def["default"]
+
+        # Add any extra variables not in schema
+        for var_name, value in variables.items():
+            if var_name not in merged_vars:
+                merged_vars[var_name] = value
+
+        env = Environment(loader=BaseLoader(), undefined=StrictUndefined)
+        template = env.from_string(self.template_content)
+        return template.render(**merged_vars)
 
 
 class GitRepository(models.Model):

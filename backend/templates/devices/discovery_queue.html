@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Discovery Queue - webnet{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight">Discovery Queue</h1>
+      <p class="text-muted-foreground mt-1">Review and approve discovered devices before adding to inventory</p>
+    </div>
+    <a href="{% url 'bulk-onboarding' %}" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 shadow-sm">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+      </svg>
+      Back to Bulk Onboarding
+    </a>
+  </div>
+</div>
+
+<!-- Stats -->
+<div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+  <a href="?status=pending" class="rounded-xl border bg-card p-4 {% if status_filter == 'pending' %}ring-2 ring-primary{% endif %} hover:bg-accent transition-colors">
+    <div class="text-center">
+      <span class="text-2xl font-bold text-yellow-500">{{ stats.pending }}</span>
+      <p class="text-sm text-muted-foreground">Pending</p>
+    </div>
+  </a>
+  <a href="?status=approved" class="rounded-xl border bg-card p-4 {% if status_filter == 'approved' %}ring-2 ring-primary{% endif %} hover:bg-accent transition-colors">
+    <div class="text-center">
+      <span class="text-2xl font-bold text-green-500">{{ stats.approved }}</span>
+      <p class="text-sm text-muted-foreground">Approved</p>
+    </div>
+  </a>
+  <a href="?status=rejected" class="rounded-xl border bg-card p-4 {% if status_filter == 'rejected' %}ring-2 ring-primary{% endif %} hover:bg-accent transition-colors">
+    <div class="text-center">
+      <span class="text-2xl font-bold text-red-500">{{ stats.rejected }}</span>
+      <p class="text-sm text-muted-foreground">Rejected</p>
+    </div>
+  </a>
+  <a href="?status=ignored" class="rounded-xl border bg-card p-4 {% if status_filter == 'ignored' %}ring-2 ring-primary{% endif %} hover:bg-accent transition-colors">
+    <div class="text-center">
+      <span class="text-2xl font-bold text-gray-500">{{ stats.ignored }}</span>
+      <p class="text-sm text-muted-foreground">Ignored</p>
+    </div>
+  </a>
+  <a href="?status=all" class="rounded-xl border bg-card p-4 {% if status_filter == 'all' %}ring-2 ring-primary{% endif %} hover:bg-accent transition-colors">
+    <div class="text-center">
+      <span class="text-2xl font-bold">{{ stats.total }}</span>
+      <p class="text-sm text-muted-foreground">Total</p>
+    </div>
+  </a>
+</div>
+
+<!-- Queue Table -->
+<div class="rounded-xl border bg-card overflow-hidden">
+  <div id="discovery-table" hx-get="" hx-trigger="change from:select">
+    {% include "devices/_discovery_queue_table.html" %}
+  </div>
+</div>
+{% endblock %}

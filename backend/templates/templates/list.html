@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Configuration Templates{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-base-content">Configuration Templates</h1>
+            <p class="text-sm text-base-content/60 mt-1">
+                Jinja2 templates for standardized device configuration generation
+            </p>
+        </div>
+        <a href="{% url 'templates-create' %}" class="btn btn-primary">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            New Template
+        </a>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-base-200 rounded-lg p-4 mb-6">
+        <form hx-get="{% url 'templates-list' %}" hx-target="#templates-table" hx-swap="innerHTML" class="flex gap-4 items-end">
+            <div class="form-control flex-1">
+                <label class="label">
+                    <span class="label-text">Search</span>
+                </label>
+                <input type="text" name="search" value="{{ search }}" placeholder="Search templates..." class="input input-bordered w-full" />
+            </div>
+            <div class="form-control">
+                <label class="label">
+                    <span class="label-text">Category</span>
+                </label>
+                <select name="category" class="select select-bordered" onchange="this.form.requestSubmit()">
+                    <option value="">All Categories</option>
+                    {% for value, label in categories %}
+                    <option value="{{ value }}" {% if category == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-secondary">Search</button>
+        </form>
+    </div>
+
+    <!-- Templates Table -->
+    <div id="templates-table">
+        {% include "templates/_table.html" %}
+    </div>
+</div>
+{% endblock %}

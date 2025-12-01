@@ -1,0 +1,116 @@
+<table class="w-full">
+  <thead class="border-b">
+    <tr>
+      <th class="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Hostname</th>
+      <th class="px-4 py-3 text-left text-sm font-medium text-muted-foreground">IP Address</th>
+      <th class="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Vendor/Platform</th>
+      <th class="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Source</th>
+      <th class="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Credential</th>
+      <th class="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Status</th>
+      <th class="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Discovered</th>
+      <th class="px-4 py-3 text-right text-sm font-medium text-muted-foreground">Actions</th>
+    </tr>
+  </thead>
+  <tbody class="divide-y">
+    {% for device in discovered_devices %}
+    <tr class="hover:bg-muted/50">
+      <td class="px-4 py-3">
+        <span class="font-medium">{{ device.hostname }}</span>
+      </td>
+      <td class="px-4 py-3 text-sm text-muted-foreground font-mono">
+        {{ device.mgmt_ip|default:"-" }}
+      </td>
+      <td class="px-4 py-3 text-sm">
+        {{ device.vendor|default:"Unknown" }} / {{ device.platform|default:"Unknown" }}
+        {% if device.software_version %}
+        <span class="text-xs text-muted-foreground block">{{ device.software_version }}</span>
+        {% endif %}
+      </td>
+      <td class="px-4 py-3 text-sm">
+        <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium 
+          {% if device.discovery_source == 'snmp' %}bg-blue-500/10 text-blue-500
+          {% elif device.discovery_source == 'topology' %}bg-purple-500/10 text-purple-500
+          {% else %}bg-gray-500/10 text-gray-500{% endif %}">
+          {{ device.get_discovery_source_display }}
+        </span>
+      </td>
+      <td class="px-4 py-3 text-sm">
+        {% if device.credential_tested %}
+        <span class="inline-flex items-center gap-1 text-green-500">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+          </svg>
+          {{ device.credential_tested.name }}
+        </span>
+        {% elif device.credential_test_status == 'failed' %}
+        <span class="text-red-500 text-xs">No match</span>
+        {% else %}
+        <span class="text-muted-foreground text-xs">Untested</span>
+        {% endif %}
+      </td>
+      <td class="px-4 py-3">
+        <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium 
+          {% if device.status == 'pending' %}bg-yellow-500/10 text-yellow-500
+          {% elif device.status == 'approved' %}bg-green-500/10 text-green-500
+          {% elif device.status == 'rejected' %}bg-red-500/10 text-red-500
+          {% else %}bg-gray-500/10 text-gray-500{% endif %}">
+          {{ device.get_status_display }}
+        </span>
+      </td>
+      <td class="px-4 py-3 text-sm text-muted-foreground">
+        {{ device.discovered_at|timesince }} ago
+      </td>
+      <td class="px-4 py-3 text-right">
+        {% if device.status == 'pending' %}
+        <div class="flex items-center justify-end gap-2">
+          <form hx-post="{% url 'discovery-action' pk=device.id action='approve' %}" hx-target="#discovery-table" class="inline">
+            {% csrf_token %}
+            <select name="credential_id" required class="h-8 text-xs rounded border border-input bg-background px-2">
+              <option value="">Select credential...</option>
+              {% for cred in credentials %}
+              <option value="{{ cred.id }}" {% if device.credential_tested and device.credential_tested.id == cred.id %}selected{% endif %}>
+                {{ cred.name }}
+              </option>
+              {% endfor %}
+            </select>
+            <input type="hidden" name="vendor" value="{{ device.vendor }}">
+            <input type="hidden" name="platform" value="{{ device.platform }}">
+            <button type="submit" class="inline-flex items-center justify-center rounded-lg text-xs font-medium h-8 px-3 bg-green-500 text-white hover:bg-green-600">
+              Approve
+            </button>
+          </form>
+          <form hx-post="{% url 'discovery-action' pk=device.id action='reject' %}" hx-target="#discovery-table" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="inline-flex items-center justify-center rounded-lg text-xs font-medium h-8 px-3 bg-red-500 text-white hover:bg-red-600">
+              Reject
+            </button>
+          </form>
+          <form hx-post="{% url 'discovery-action' pk=device.id action='ignore' %}" hx-target="#discovery-table" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="inline-flex items-center justify-center rounded-lg text-xs font-medium h-8 px-3 border border-input bg-background hover:bg-accent">
+              Ignore
+            </button>
+          </form>
+        </div>
+        {% elif device.status == 'approved' and device.created_device %}
+        <a href="{% url 'devices-detail' pk=device.created_device.id %}" class="text-sm text-primary hover:underline">
+          View Device
+        </a>
+        {% endif %}
+      </td>
+    </tr>
+    {% empty %}
+    <tr>
+      <td colspan="8" class="px-4 py-12 text-center text-muted-foreground">
+        <div class="flex flex-col items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-muted-foreground/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p class="text-lg font-medium">No discovered devices</p>
+          <p class="text-sm">Run an IP scan or topology discovery to find new devices</p>
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>

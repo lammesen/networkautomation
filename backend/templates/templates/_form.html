@@ -1,0 +1,116 @@
+{% if success %}
+<div class="alert alert-success mb-4">
+    <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+    <span>Template saved successfully!</span>
+</div>
+{% endif %}
+
+<form method="post" class="space-y-4">
+    {% csrf_token %}
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-control">
+            <label class="label">
+                <span class="label-text">Name</span>
+            </label>
+            <input type="text" name="name" value="{{ form.name.value|default:'' }}" 
+                   class="input input-bordered w-full {% if form.name.errors %}input-error{% endif %}" />
+            {% if form.name.errors %}
+            <label class="label">
+                <span class="label-text-alt text-error">{{ form.name.errors.0 }}</span>
+            </label>
+            {% endif %}
+        </div>
+
+        <div class="form-control">
+            <label class="label">
+                <span class="label-text">Customer</span>
+            </label>
+            <select name="customer" class="select select-bordered w-full {% if form.customer.errors %}select-error{% endif %}">
+                {% for customer in form.customer.field.queryset %}
+                <option value="{{ customer.id }}" {% if form.customer.value|stringformat:"s" == customer.id|stringformat:"s" %}selected{% endif %}>
+                    {{ customer.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-control">
+            <label class="label">
+                <span class="label-text">Category</span>
+            </label>
+            <select name="category" class="select select-bordered w-full">
+                {% for value, label in form.category.field.choices %}
+                <option value="{{ value }}" {% if form.category.value == value %}selected{% endif %}>
+                    {{ label }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-control">
+            <label class="label">
+                <span class="label-text">Status</span>
+            </label>
+            <label class="label cursor-pointer justify-start gap-4">
+                <input type="checkbox" name="is_active" class="toggle toggle-primary" 
+                       {% if form.is_active.value %}checked{% endif %} />
+                <span class="label-text">Active</span>
+            </label>
+        </div>
+    </div>
+
+    <div class="form-control">
+        <label class="label">
+            <span class="label-text">Description</span>
+        </label>
+        <textarea name="description" rows="2" 
+                  class="textarea textarea-bordered w-full">{{ form.description.value|default:'' }}</textarea>
+    </div>
+
+    <div class="form-control">
+        <label class="label">
+            <span class="label-text">Template Content (Jinja2)</span>
+        </label>
+        <textarea name="template_content" rows="15" 
+                  class="textarea textarea-bordered w-full font-mono text-sm {% if form.template_content.errors %}textarea-error{% endif %}">{{ form.template_content.value|default:'' }}</textarea>
+        {% if form.template_content.errors %}
+        <label class="label">
+            <span class="label-text-alt text-error">{{ form.template_content.errors.0 }}</span>
+        </label>
+        {% endif %}
+    </div>
+
+    <div class="form-control">
+        <label class="label">
+            <span class="label-text">Variables Schema (JSON)</span>
+        </label>
+        <textarea name="variables_schema" rows="6" 
+                  class="textarea textarea-bordered w-full font-mono text-sm"
+                  placeholder='{"hostname": {"type": "string", "required": true, "description": "Device hostname"}}'>{{ form.variables_schema.value|default:'' }}</textarea>
+        <label class="label">
+            <span class="label-text-alt text-base-content/60">
+                Define variables with type, required, default, and description fields
+            </span>
+        </label>
+    </div>
+
+    <div class="form-control">
+        <label class="label">
+            <span class="label-text">Platform Tags (JSON array)</span>
+        </label>
+        <input type="text" name="platform_tags" 
+               value="{{ form.platform_tags.value|default:'[]' }}"
+               placeholder='["cisco_ios", "juniper"]'
+               class="input input-bordered w-full font-mono" />
+    </div>
+
+    <div class="flex justify-end gap-2 pt-4">
+        <a href="{% url 'templates-list' %}" class="btn btn-ghost">Cancel</a>
+        <button type="submit" class="btn btn-primary">Save Template</button>
+    </div>
+</form>

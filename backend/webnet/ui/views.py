@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from difflib import unified_diff
 import json
+import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q, Count
@@ -17,11 +18,22 @@ from django.urls import reverse
 
 from webnet.api.permissions import user_has_customer_access
 from webnet.compliance.models import CompliancePolicy, ComplianceResult
-from webnet.config_mgmt.models import ConfigSnapshot, GitRepository, GitSyncLog
+from webnet.config_mgmt.models import ConfigSnapshot, GitRepository, GitSyncLog, ConfigTemplate
 from webnet.customers.models import Customer
-from webnet.devices.models import Device, TopologyLink, Credential
+from webnet.devices.models import (
+    Device,
+    TopologyLink,
+    Credential,
+    DiscoveredDevice,
+    Tag,
+    DeviceGroup,
+    NetBoxConfig,
+    NetBoxSyncLog,
+)
 from webnet.jobs.models import Job, JobLog
 from webnet.jobs.services import JobService
+
+logger = logging.getLogger(__name__)
 
 
 class DeviceForm(forms.ModelForm):
@@ -1272,3 +1284,909 @@ class GitSyncLogsView(TenantScopedView):
             return render(request, self.partial_name, {"repository": repo, "sync_logs": logs})
 
         return render(request, self.template_name, {"repository": repo, "sync_logs": logs})
+
+
+# =============================================================================
+# Issue #40 - Bulk Device Onboarding Views
+# =============================================================================
+
+
+class BulkOnboardingView(TenantScopedView):
+    """Main view for bulk device onboarding."""
+
+    template_name = "devices/bulk_onboarding.html"
+
+    def get(self, request):
+        # Get customer's credentials
+        customers = (
+            request.user.customers.all()
+            if getattr(request.user, "role", "viewer") != "admin"
+            else Customer.objects.all()
+        )
+        credentials = Credential.objects.filter(customer__in=customers)
+
+        # Get discovered devices stats
+        discovered_qs = self.filter_by_customer(DiscoveredDevice.objects.all())
+        stats = {
+            "pending": discovered_qs.filter(status=DiscoveredDevice.STATUS_PENDING).count(),
+            "approved": discovered_qs.filter(status=DiscoveredDevice.STATUS_APPROVED).count(),
+            "rejected": discovered_qs.filter(status=DiscoveredDevice.STATUS_REJECTED).count(),
+            "total": discovered_qs.count(),
+        }
+
+        return render(
+            request,
+            self.template_name,
+            {
+                "customers": customers,
+                "credentials": credentials,
+                "stats": stats,
+            },
+        )
+
+
+class DiscoveryQueueView(TenantScopedView):
+    """View for the discovery staging area / queue."""
+
+    template_name = "devices/discovery_queue.html"
+    partial_name = "devices/_discovery_queue_table.html"
+    customer_field = "customer_id"
+
+    def get(self, request):
+        status_filter = request.GET.get("status", "pending")
+
+        qs = DiscoveredDevice.objects.select_related(
+            "customer", "discovered_via_device", "credential_tested"
+        ).order_by("-discovered_at")
+
+        qs = self.filter_by_customer(qs)
+
+        if status_filter and status_filter != "all":
+            qs = qs.filter(status=status_filter)
+
+        # Get credentials for approval
+        customers = (
+            request.user.customers.all()
+            if getattr(request.user, "role", "viewer") != "admin"
+            else Customer.objects.all()
+        )
+        credentials = Credential.objects.filter(customer__in=customers)
+
+        # Get stats
+        all_qs = self.filter_by_customer(DiscoveredDevice.objects.all())
+        stats = {
+            "pending": all_qs.filter(status=DiscoveredDevice.STATUS_PENDING).count(),
+            "approved": all_qs.filter(status=DiscoveredDevice.STATUS_APPROVED).count(),
+            "rejected": all_qs.filter(status=DiscoveredDevice.STATUS_REJECTED).count(),
+            "ignored": all_qs.filter(status=DiscoveredDevice.STATUS_IGNORED).count(),
+            "total": all_qs.count(),
+        }
+
+        context = {
+            "discovered_devices": qs[:200],
+            "credentials": credentials,
+            "stats": stats,
+            "status_filter": status_filter,
+        }
+
+        if request.headers.get("HX-Request"):
+            return render(request, self.partial_name, context)
+        return render(request, self.template_name, context)
+
+
+class DiscoveryQueueActionView(TenantScopedView):
+    """Handle actions on discovered devices (approve/reject/ignore)."""
+
+    partial_name = "devices/_discovery_queue_table.html"
+    allowed_write_roles = {"operator", "admin"}
+
+    def post(self, request, pk, action):
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        device = get_object_or_404(DiscoveredDevice, pk=pk)
+        check = self.ensure_customer_access(device.customer_id)
+        if check:
+            return check
+
+        if action == "approve":
+            credential_id = request.POST.get("credential_id")
+            if not credential_id:
+                return HttpResponseBadRequest("Credential ID required")
+            try:
+                credential = Credential.objects.get(id=credential_id, customer=device.customer)
+            except Credential.DoesNotExist:
+                return HttpResponseBadRequest("Invalid credential")
+
+            vendor = request.POST.get("vendor") or device.vendor
+            platform = request.POST.get("platform") or device.platform
+
+            try:
+                device.approve_and_create_device(
+                    credential=credential,
+                    user=request.user,
+                    vendor=vendor,
+                    platform=platform,
+                )
+            except ValueError as e:
+                logger.error("Device approval failed: %s", e, exc_info=True)
+                return HttpResponseBadRequest("Invalid device approval request.")
+
+        elif action == "reject":
+            notes = request.POST.get("notes", "")
+            device.reject(request.user, notes)
+
+        elif action == "ignore":
+            notes = request.POST.get("notes", "")
+            device.ignore(request.user, notes)
+
+        # Return updated table
+        qs = self.filter_by_customer(
+            DiscoveredDevice.objects.filter(status=DiscoveredDevice.STATUS_PENDING)
+        ).order_by("-discovered_at")[:200]
+
+        return render(request, self.partial_name, {"discovered_devices": qs})
+
+
+class ScanIPRangeView(TenantScopedView):
+    """Start an IP range scan job."""
+
+    partial_name = "devices/_scan_result.html"
+    allowed_write_roles = {"operator", "admin"}
+
+    def post(self, request):
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        ip_ranges = request.POST.get("ip_ranges", "").strip()
+        credential_ids = request.POST.getlist("credential_ids")
+        use_snmp = request.POST.get("use_snmp") == "on"
+        snmp_community = request.POST.get("snmp_community", "public")
+        test_ssh = request.POST.get("test_ssh") == "on"
+
+        if not ip_ranges:
+            return render(request, self.partial_name, {"error": "IP ranges required"})
+
+        if not credential_ids:
+            return render(request, self.partial_name, {"error": "At least one credential required"})
+
+        customer = request.user.customers.first()
+        if not customer:
+            return render(request, self.partial_name, {"error": "No customer access"})
+
+        # Parse IP ranges (comma-separated)
+        ranges = [r.strip() for r in ip_ranges.split(",") if r.strip()]
+
+        # Validate credentials belong to customer
+        valid_cred_ids = list(
+            Credential.objects.filter(id__in=credential_ids, customer=customer).values_list(
+                "id", flat=True
+            )
+        )
+
+        if not valid_cred_ids:
+            return render(request, self.partial_name, {"error": "No valid credentials found"})
+
+        js = JobService()
+        job = js.create_job(
+            job_type="ip_range_scan",
+            user=request.user,
+            customer=customer,
+            target_summary={"ip_ranges": ranges},
+            payload={
+                "ip_ranges": ranges,
+                "credential_ids": valid_cred_ids,
+                "use_snmp": use_snmp,
+                "snmp_community": snmp_community,
+                "test_ssh": test_ssh,
+                "ports": [22],
+            },
+        )
+
+        return render(
+            request,
+            self.partial_name,
+            {"job": job, "message": f"Scan job started for {len(ranges)} IP range(s)"},
+        )
+
+
+# =============================================================================
+# Issue #24 - Device Tags and Groups Views
+# =============================================================================
+
+
+class TagListView(TenantScopedView):
+    """List and manage device tags."""
+
+    template_name = "devices/tags.html"
+    partial_name = "devices/_tags_table.html"
+    customer_field = "customer_id"
+
+    def get(self, request):
+        from django.db.models import Count
+
+        qs = Tag.objects.annotate(device_count=Count("devices")).order_by("category", "name")
+        qs = self.filter_by_customer(qs)
+
+        # Get customers for new tag form
+        customers = (
+            request.user.customers.all()
+            if getattr(request.user, "role", "viewer") != "admin"
+            else Customer.objects.all()
+        )
+
+        context = {
+            "tags": qs,
+            "customers": customers,
+        }
+
+        if request.headers.get("HX-Request"):
+            return render(request, self.partial_name, context)
+        return render(request, self.template_name, context)
+
+
+class TagCreateView(TenantScopedView):
+    """Create a new tag."""
+
+    partial_name = "devices/_tags_table.html"
+    allowed_write_roles = {"operator", "admin"}
+
+    def post(self, request):
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        name = request.POST.get("name", "").strip()
+        color = request.POST.get("color", "#3B82F6")
+        description = request.POST.get("description", "").strip()
+        category = request.POST.get("category", "").strip() or None
+        customer_id = request.POST.get("customer")
+
+        if not name or not customer_id:
+            return HttpResponseBadRequest("Name and customer required")
+
+        try:
+            customer = Customer.objects.get(pk=customer_id)
+        except Customer.DoesNotExist:
+            return HttpResponseBadRequest("Invalid customer")
+
+        check = self.ensure_customer_access(customer.id)
+        if check:
+            return check
+
+        Tag.objects.create(
+            customer=customer,
+            name=name,
+            color=color,
+            description=description,
+            category=category,
+        )
+
+        # Return updated table
+        from django.db.models import Count
+
+        qs = Tag.objects.annotate(device_count=Count("devices")).order_by("category", "name")
+        qs = self.filter_by_customer(qs)
+
+        return render(request, self.partial_name, {"tags": qs})
+
+
+class TagDeleteView(TenantScopedView):
+    """Delete a tag."""
+
+    partial_name = "devices/_tags_table.html"
+    allowed_write_roles = {"operator", "admin"}
+
+    def post(self, request, pk):
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        tag = get_object_or_404(Tag, pk=pk)
+        check = self.ensure_customer_access(tag.customer_id)
+        if check:
+            return check
+
+        tag.delete()
+
+        # Return updated table
+        from django.db.models import Count
+
+        qs = Tag.objects.annotate(device_count=Count("devices")).order_by("category", "name")
+        qs = self.filter_by_customer(qs)
+
+        return render(request, self.partial_name, {"tags": qs})
+
+
+class DeviceGroupListView(TenantScopedView):
+    """List and manage device groups."""
+
+    template_name = "devices/groups.html"
+    partial_name = "devices/_groups_table.html"
+    customer_field = "customer_id"
+
+    def get(self, request):
+        qs = DeviceGroup.objects.select_related("customer", "parent").order_by("name")
+        qs = self.filter_by_customer(qs)
+
+        # Add device counts
+        groups_with_counts = []
+        for group in qs:
+            groups_with_counts.append(
+                {
+                    "group": group,
+                    "device_count": group.device_count,
+                }
+            )
+
+        # Get customers for new group form
+        customers = (
+            request.user.customers.all()
+            if getattr(request.user, "role", "viewer") != "admin"
+            else Customer.objects.all()
+        )
+
+        context = {
+            "groups": groups_with_counts,
+            "customers": customers,
+        }
+
+        if request.headers.get("HX-Request"):
+            return render(request, self.partial_name, context)
+        return render(request, self.template_name, context)
+
+
+class DeviceGroupCreateView(TenantScopedView):
+    """Create a new device group."""
+
+    partial_name = "devices/_groups_table.html"
+    allowed_write_roles = {"operator", "admin"}
+
+    def post(self, request):
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        name = request.POST.get("name", "").strip()
+        description = request.POST.get("description", "").strip()
+        group_type = request.POST.get("group_type", DeviceGroup.TYPE_STATIC)
+        customer_id = request.POST.get("customer")
+        filter_rules = {}
+
+        if not name or not customer_id:
+            return HttpResponseBadRequest("Name and customer required")
+
+        try:
+            customer = Customer.objects.get(pk=customer_id)
+        except Customer.DoesNotExist:
+            return HttpResponseBadRequest("Invalid customer")
+
+        check = self.ensure_customer_access(customer.id)
+        if check:
+            return check
+
+        # Parse filter rules for dynamic groups
+        if group_type == DeviceGroup.TYPE_DYNAMIC:
+            if request.POST.get("filter_vendor"):
+                filter_rules["vendor"] = request.POST.get("filter_vendor")
+            if request.POST.get("filter_platform"):
+                filter_rules["platform"] = request.POST.get("filter_platform")
+            if request.POST.get("filter_site"):
+                filter_rules["site"] = request.POST.get("filter_site")
+            if request.POST.get("filter_role"):
+                filter_rules["role"] = request.POST.get("filter_role")
+
+        DeviceGroup.objects.create(
+            customer=customer,
+            name=name,
+            description=description,
+            group_type=group_type,
+            filter_rules=filter_rules or None,
+        )
+
+        # Return updated table
+        qs = DeviceGroup.objects.select_related("customer", "parent").order_by("name")
+        qs = self.filter_by_customer(qs)
+        groups_with_counts = [{"group": g, "device_count": g.device_count} for g in qs]
+
+        return render(request, self.partial_name, {"groups": groups_with_counts})
+
+
+class DeviceGroupDetailView(TenantScopedView):
+    """View device group details and members."""
+
+    template_name = "devices/group_detail.html"
+    partial_name = "devices/_group_devices.html"
+
+    def get(self, request, pk):
+        group = get_object_or_404(DeviceGroup.objects.select_related("customer"), pk=pk)
+        check = self.ensure_customer_access(group.customer_id)
+        if check:
+            return check
+
+        devices = group.get_devices()
+
+        context = {
+            "group": group,
+            "devices": devices,
+            "device_count": devices.count(),
+        }
+
+        if request.headers.get("HX-Request"):
+            return render(request, self.partial_name, context)
+        return render(request, self.template_name, context)
+
+
+class DeviceGroupDeleteView(TenantScopedView):
+    """Delete a device group."""
+
+    partial_name = "devices/_groups_table.html"
+    allowed_write_roles = {"operator", "admin"}
+
+    def post(self, request, pk):
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        group = get_object_or_404(DeviceGroup, pk=pk)
+        check = self.ensure_customer_access(group.customer_id)
+        if check:
+            return check
+
+        group.delete()
+
+        # Return updated table
+        qs = DeviceGroup.objects.select_related("customer", "parent").order_by("name")
+        qs = self.filter_by_customer(qs)
+        groups_with_counts = [{"group": g, "device_count": g.device_count} for g in qs]
+
+        return render(request, self.partial_name, {"groups": groups_with_counts})
+
+
+class ConfigTemplateForm(forms.ModelForm):
+    """Form for configuration templates."""
+
+    class Meta:
+        model = ConfigTemplate
+        fields = [
+            "customer",
+            "name",
+            "description",
+            "category",
+            "template_content",
+            "variables_schema",
+            "platform_tags",
+            "is_active",
+        ]
+        widgets = {
+            "template_content": forms.Textarea(attrs={"rows": 15, "class": "font-mono"}),
+            "description": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        user = kwargs.pop("user", None)
+        super().__init__(*args, **kwargs)
+        if user and getattr(user, "role", "viewer") != "admin":
+            self.fields["customer"].queryset = user.customers.all()
+        else:
+            self.fields["customer"].queryset = Customer.objects.all()
+
+
+class ConfigTemplateListView(TenantScopedView):
+    """List configuration templates."""
+
+    template_name = "templates/list.html"
+    partial_name = "templates/_table.html"
+
+    def get(self, request):
+        category = request.GET.get("category", "")
+        search = request.GET.get("search", "").strip()
+
+        qs = ConfigTemplate.objects.select_related("customer", "created_by").order_by(
+            "category", "name"
+        )
+
+        if category:
+            qs = qs.filter(category=category)
+        if search:
+            qs = qs.filter(name__icontains=search)
+
+        qs = self.filter_by_customer(qs)
+
+        context = {
+            "templates": qs,
+            "category": category,
+            "search": search,
+            "categories": ConfigTemplate.CATEGORY_CHOICES,
+        }
+
+        if request.headers.get("HX-Request"):
+            return render(request, self.partial_name, context)
+        return render(request, self.template_name, context)
+
+
+class ConfigTemplateDetailView(TenantScopedView):
+    """View/edit a configuration template."""
+
+    template_name = "templates/detail.html"
+    partial_name = "templates/_form.html"
+
+    def get(self, request, pk):
+        template = get_object_or_404(
+            ConfigTemplate.objects.select_related("customer", "created_by"), pk=pk
+        )
+        check = self.ensure_customer_access(template.customer_id)
+        if check:
+            return check
+
+        form = ConfigTemplateForm(instance=template, user=request.user)
+        return render(
+            request,
+            self.template_name,
+            {"template": template, "form": form},
+        )
+
+    def post(self, request, pk):
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        template = get_object_or_404(
+            ConfigTemplate.objects.select_related("customer", "created_by"), pk=pk
+        )
+        check = self.ensure_customer_access(template.customer_id)
+        if check:
+            return check
+
+        form = ConfigTemplateForm(request.POST, instance=template, user=request.user)
+        if form.is_valid():
+            form.save()
+            if request.headers.get("HX-Request"):
+                return render(
+                    request,
+                    self.partial_name,
+                    {"template": template, "form": form, "success": True},
+                )
+            return redirect("templates-detail", pk=pk)
+
+        return render(
+            request,
+            self.template_name,
+            {"template": template, "form": form},
+        )
+
+
+class ConfigTemplateCreateView(TenantScopedView):
+    """Create a new configuration template."""
+
+    template_name = "templates/create.html"
+
+    def get(self, request):
+        form = ConfigTemplateForm(user=request.user)
+        return render(request, self.template_name, {"form": form})
+
+    def post(self, request):
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        form = ConfigTemplateForm(request.POST, user=request.user)
+        if form.is_valid():
+            template = form.save(commit=False)
+            template.created_by = request.user
+            template.save()
+            return redirect("templates-detail", pk=template.pk)
+
+        return render(request, self.template_name, {"form": form})
+
+
+class ConfigTemplateDeleteView(TenantScopedView):
+    """Delete a configuration template."""
+
+    def post(self, request, pk):
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        template = get_object_or_404(ConfigTemplate.objects.select_related("customer"), pk=pk)
+        check = self.ensure_customer_access(template.customer_id)
+        if check:
+            return check
+
+        template.delete()
+        return redirect("templates-list")
+
+
+class ConfigTemplateRenderView(TenantScopedView):
+    """Render a configuration template with variables."""
+
+    partial_name = "templates/_render_result.html"
+
+    def post(self, request, pk):
+        template = get_object_or_404(ConfigTemplate.objects.select_related("customer"), pk=pk)
+        check = self.ensure_customer_access(template.customer_id)
+        if check:
+            return check
+
+        # Parse variables from request
+        variables = {}
+        for key, value in request.POST.items():
+            if key.startswith("var_"):
+                var_name = key[4:]  # Remove "var_" prefix
+                variables[var_name] = value
+
+        try:
+            rendered = template.render(variables)
+            return render(
+                request,
+                self.partial_name,
+                {
+                    "template": template,
+                    "rendered": rendered,
+                    "variables": variables,
+                    "success": True,
+                },
+            )
+        except Exception as e:
+            logger.exception("Template rendering failed for template %s", template.id)
+            return render(
+                request,
+                self.partial_name,
+                {
+                    "template": template,
+                    "error": str(e),
+                    "variables": variables,
+                },
+            )
+
+
+# ==============================================================================
+# NetBox Integration Views (Issue #9)
+# ==============================================================================
+
+
+class NetBoxConfigForm(forms.ModelForm):
+    """Form for NetBox configuration."""
+
+    api_token = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(attrs={"placeholder": "Enter API token"}),
+        help_text="NetBox API token (leave blank to keep existing)",
+    )
+
+    class Meta:
+        model = NetBoxConfig
+        fields = [
+            "customer",
+            "name",
+            "api_url",
+            "api_token",
+            "sync_frequency",
+            "enabled",
+            "site_filter",
+            "tenant_filter",
+            "role_filter",
+            "status_filter",
+            "default_credential",
+        ]
+
+    def __init__(self, *args, **kwargs):
+        user = kwargs.pop("user", None)
+        super().__init__(*args, **kwargs)
+        if user and getattr(user, "role", "viewer") != "admin":
+            self.fields["customer"].queryset = user.customers.all()
+            self.fields["default_credential"].queryset = Credential.objects.filter(
+                customer__in=user.customers.all()
+            )
+        else:
+            self.fields["customer"].queryset = Customer.objects.all()
+            self.fields["default_credential"].queryset = Credential.objects.all()
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        api_token = self.cleaned_data.get("api_token")
+        if api_token:
+            instance.api_token = api_token
+        if commit:
+            instance.save()
+        return instance
+
+
+class NetBoxSettingsListView(TenantScopedView):
+    """List NetBox configurations."""
+
+    template_name = "settings/netbox_list.html"
+
+    def get(self, request):
+        configs = self.filter_by_customer(
+            NetBoxConfig.objects.select_related("customer", "default_credential").all()
+        )
+        return render(request, self.template_name, {"configs": configs})
+
+
+class NetBoxSettingsDetailView(TenantScopedView):
+    """View/edit a NetBox configuration."""
+
+    template_name = "settings/netbox_detail.html"
+    partial_name = "settings/_netbox_form.html"
+
+    def get(self, request, pk):
+        config = get_object_or_404(
+            NetBoxConfig.objects.select_related("customer", "default_credential"), pk=pk
+        )
+        check = self.ensure_customer_access(config.customer_id)
+        if check:
+            return check
+
+        # Get recent sync logs
+        sync_logs = NetBoxSyncLog.objects.filter(config=config).order_by("-started_at")[:10]
+
+        form = NetBoxConfigForm(instance=config, user=request.user)
+        return render(
+            request,
+            self.template_name,
+            {"config": config, "form": form, "sync_logs": sync_logs},
+        )
+
+    def post(self, request, pk):
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        config = get_object_or_404(
+            NetBoxConfig.objects.select_related("customer", "default_credential"), pk=pk
+        )
+        check = self.ensure_customer_access(config.customer_id)
+        if check:
+            return check
+
+        form = NetBoxConfigForm(request.POST, instance=config, user=request.user)
+        if form.is_valid():
+            form.save()
+            if request.headers.get("HX-Request"):
+                return render(
+                    request,
+                    self.partial_name,
+                    {"config": config, "form": form, "success": True},
+                )
+            return redirect("netbox-settings-detail", pk=pk)
+
+        return render(request, self.template_name, {"config": config, "form": form})
+
+
+class NetBoxSettingsCreateView(TenantScopedView):
+    """Create a new NetBox configuration."""
+
+    template_name = "settings/netbox_create.html"
+
+    def get(self, request):
+        form = NetBoxConfigForm(user=request.user)
+        return render(request, self.template_name, {"form": form})
+
+    def post(self, request):
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        form = NetBoxConfigForm(request.POST, user=request.user)
+        if form.is_valid():
+            config = form.save()
+            return redirect("netbox-settings-detail", pk=config.pk)
+
+        return render(request, self.template_name, {"form": form})
+
+
+class NetBoxSettingsDeleteView(TenantScopedView):
+    """Delete a NetBox configuration."""
+
+    def post(self, request, pk):
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        config = get_object_or_404(NetBoxConfig.objects.select_related("customer"), pk=pk)
+        check = self.ensure_customer_access(config.customer_id)
+        if check:
+            return check
+
+        config.delete()
+        return redirect("netbox-settings")
+
+
+class NetBoxSyncView(TenantScopedView):
+    """Trigger a manual NetBox sync."""
+
+    partial_name = "settings/_netbox_sync_result.html"
+
+    def post(self, request, pk):
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        config = get_object_or_404(NetBoxConfig.objects.select_related("customer"), pk=pk)
+        check = self.ensure_customer_access(config.customer_id)
+        if check:
+            return check
+
+        if not config.enabled:
+            return render(
+                request,
+                self.partial_name,
+                {"config": config, "error": "NetBox sync is disabled"},
+            )
+
+        if not config.has_api_token():
+            return render(
+                request,
+                self.partial_name,
+                {"config": config, "error": "API token is not configured"},
+            )
+
+        from webnet.jobs.tasks import netbox_sync_job
+
+        full_sync = request.POST.get("full_sync", "").lower() == "true"
+        netbox_sync_job.delay(config.id, full_sync=full_sync)
+
+        return render(
+            request,
+            self.partial_name,
+            {"config": config, "success": True, "message": "NetBox sync queued"},
+        )
+
+
+class NetBoxTestConnectionView(TenantScopedView):
+    """Test NetBox API connection."""
+
+    partial_name = "settings/_netbox_test_result.html"
+
+    def post(self, request, pk):
+        config = get_object_or_404(NetBoxConfig.objects.select_related("customer"), pk=pk)
+        check = self.ensure_customer_access(config.customer_id)
+        if check:
+            return check
+
+        if not config.has_api_token():
+            return render(
+                request,
+                self.partial_name,
+                {"config": config, "success": False, "message": "API token not configured"},
+            )
+
+        from webnet.devices.netbox_service import NetBoxService
+
+        service = NetBoxService(config)
+        result = service.test_connection()
+
+        return render(
+            request,
+            self.partial_name,
+            {
+                "config": config,
+                "success": result.success,
+                "message": result.message,
+                "netbox_version": result.netbox_version,
+                "error": result.error,
+            },
+        )
+
+
+class NetBoxSyncLogsView(TenantScopedView):
+    """View NetBox sync logs."""
+
+    template_name = "settings/netbox_sync_logs.html"
+    partial_name = "settings/_netbox_sync_logs_table.html"
+
+    def get(self, request, pk):
+        config = get_object_or_404(NetBoxConfig.objects.select_related("customer"), pk=pk)
+        check = self.ensure_customer_access(config.customer_id)
+        if check:
+            return check
+
+        logs = NetBoxSyncLog.objects.filter(config=config).order_by("-started_at")[:50]
+
+        if request.headers.get("HX-Request"):
+            return render(request, self.partial_name, {"config": config, "sync_logs": logs})
+
+        return render(request, self.template_name, {"config": config, "sync_logs": logs})
