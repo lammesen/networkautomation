@@ -930,7 +930,8 @@ class SSHHostKeyViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
             host_key = SSHHostKeyService.import_from_openssh_known_hosts(device, known_hosts_line)
             return Response(SSHHostKeySerializer(host_key).data, status=status.HTTP_201_CREATED)
         except ValueError as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            logger.warning("SSH host key import failed: %s", e)
+            return Response({"error": "Invalid known_hosts line"}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=False, methods=["get"], url_path="stats")
     def stats(self, request):
