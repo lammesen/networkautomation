@@ -7,7 +7,12 @@ from webnet.devices.models import Device, Credential, TopologyLink, DiscoveredDe
 from webnet.devices.models import NetBoxConfig, NetBoxSyncLog
 from webnet.jobs.models import Job, JobLog
 from webnet.config_mgmt.models import ConfigSnapshot, ConfigTemplate, ConfigDrift, DriftAlert
-from webnet.compliance.models import CompliancePolicy, ComplianceResult
+from webnet.compliance.models import (
+    CompliancePolicy,
+    ComplianceResult,
+    RemediationRule,
+    RemediationAction,
+)
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -233,6 +238,59 @@ class ComplianceResultSerializer(serializers.ModelSerializer):
         model = ComplianceResult
         fields = ["id", "policy", "device", "job", "ts", "status", "details_json"]
         read_only_fields = ["ts"]
+
+
+class RemediationRuleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RemediationRule
+        fields = [
+            "id",
+            "policy",
+            "name",
+            "description",
+            "enabled",
+            "config_snippet",
+            "approval_required",
+            "max_daily_executions",
+            "apply_mode",
+            "verify_after",
+            "rollback_on_failure",
+            "created_by",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["created_at", "updated_at"]
+
+
+class RemediationActionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RemediationAction
+        fields = [
+            "id",
+            "rule",
+            "compliance_result",
+            "device",
+            "job",
+            "status",
+            "before_snapshot",
+            "after_snapshot",
+            "verification_passed",
+            "error_message",
+            "started_at",
+            "finished_at",
+        ]
+        # Note: read_only_fields specification is technically redundant since
+        # RemediationActionViewSet is ReadOnlyModelViewSet, but kept for documentation
+        # to clearly indicate which fields are system-managed
+        read_only_fields = [
+            "status",
+            "before_snapshot",
+            "after_snapshot",
+            "verification_passed",
+            "error_message",
+            "started_at",
+            "finished_at",
+        ]
 
 
 class TopologyLinkSerializer(serializers.ModelSerializer):

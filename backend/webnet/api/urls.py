@@ -14,6 +14,16 @@ router.register(r"jobs", views.JobViewSet, basename="job")
 router.register(r"jobs/admin", views.JobAdminViewSet, basename="job-admin")
 router.register(r"compliance/policies", views.CompliancePolicyViewSet, basename="compliance-policy")
 router.register(r"compliance/results", views.ComplianceResultViewSet, basename="compliance-result")
+router.register(
+    r"compliance/remediation-rules",
+    views.RemediationRuleViewSet,
+    basename="remediation-rule",
+)
+router.register(
+    r"compliance/remediation-actions",
+    views.RemediationActionViewSet,
+    basename="remediation-action",
+)
 router.register(r"topology/links", views.TopologyLinkViewSet, basename="topology-link")
 router.register(
     r"topology/discovered-devices", views.DiscoveredDeviceViewSet, basename="discovered-device"

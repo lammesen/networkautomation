@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("config_mgmt", "0004_config_templates"),
-        ("devices", "0006_add_drift_analysis"),
+        ("devices", "0006_alter_netboxconfig__api_token"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

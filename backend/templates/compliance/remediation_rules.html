@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Remediation Rules - webnet{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-bold tracking-tight">Auto-Remediation Rules</h1>
+    <p class="text-muted-foreground">Automatically fix compliance violations with predefined configuration changes</p>
+  </div>
+</div>
+
+<!-- Rules Table -->
+<div class="rounded-lg border bg-card">
+  <div id="remediation-rules-table">
+    {% include "compliance/_remediation_rules_table.html" %}
+  </div>
+</div>
+{% endblock %}
