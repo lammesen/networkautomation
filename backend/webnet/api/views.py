@@ -1528,14 +1528,19 @@ class ConfigTemplateViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
                 }
             )
         except ValueError as e:
+            # ValueError from template validation contains user-facing messages
+            logger.warning("Template validation error for template %s: %s", template.id, e)
             return Response(
-                {"detail": str(e), "errors": str(e).split("; ")},
+                {
+                    "detail": "Template rendering failed due to invalid input.",
+                    "errors": ["Invalid template or variable values."],
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        except Exception as e:
+        except Exception:
             logger.exception("Template rendering failed for template %s", template.id)
             return Response(
-                {"detail": f"Template rendering failed: {e}"},
+                {"detail": "Template rendering failed due to an internal error."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -1573,13 +1578,15 @@ class ConfigTemplateViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
         try:
             rendered = template.render(variables)
         except ValueError as e:
+            logger.warning("Template rendering value error: %s", e)
             return Response(
-                {"detail": str(e)},
+                {"detail": "Invalid input for template rendering."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        except Exception as e:
+        except Exception:
+            logger.exception("Template rendering failed for template %s", template.id)
             return Response(
-                {"detail": f"Template rendering failed: {e}"},
+                {"detail": "Template rendering failed due to an internal error."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -1771,9 +1778,9 @@ class NetBoxConfigViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
                     "would_update": preview.would_update,
                 }
             )
-        except Exception as e:
+        except Exception:
             logger.exception("NetBox preview failed for config %s", config.id)
             return Response(
-                {"detail": f"Preview failed: {e}"},
+                {"detail": "Preview failed due to an internal error."},
                 status=status.HTTP_400_BAD_REQUEST,
             )

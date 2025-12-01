@@ -4,11 +4,9 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('devices', '0004_add_tags_groups_bulk_discovery'),
-        ('devices', '0004_netbox_integration'),
+        ("devices", "0004_add_tags_groups_bulk_discovery"),
+        ("devices", "0004_netbox_integration"),
     ]
 
-    operations = [
-    ]
+    operations = []
