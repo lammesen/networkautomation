@@ -24,7 +24,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 
 from webnet.users.models import User, APIKey
 from webnet.customers.models import Customer, CustomerIPRange
-from webnet.devices.models import Device, Credential, TopologyLink
+from webnet.devices.models import Device, Credential, TopologyLink, DiscoveredDevice
 from webnet.jobs.models import Job, JobLog
 from webnet.jobs.services import JobService
 from webnet.config_mgmt.models import ConfigSnapshot, GitRepository, GitSyncLog
@@ -44,8 +44,10 @@ from .serializers import (
     CompliancePolicySerializer,
     ComplianceResultSerializer,
     TopologyLinkSerializer,
-    GitRepositorySerializer,
-    GitSyncLogSerializer,
+    DiscoveredDeviceSerializer,
+    DiscoveredDeviceApproveSerializer,
+    DiscoveredDeviceRejectSerializer,
+    TopologyDiscoverRequestSerializer,
 )
 from .permissions import (
     RolePermission,
@@ -535,19 +537,36 @@ class CommandViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=["post"])
     def discover(self, request) -> Response:
+        """Run topology discovery using CDP and/or LLDP protocols.
+
+        Request body:
+        - targets: Device filter targets (optional, default: all devices)
+        - protocol: 'cdp', 'lldp', or 'both' (default: 'both')
+        - auto_create_devices: Queue discovered unknown devices for review (default: false)
+        """
         customer = resolve_customer_for_request(request)
         if not customer:
             return Response(
                 {"detail": "customer_id required or no access"}, status=status.HTTP_400_BAD_REQUEST
             )
-        targets = request.data.get("targets") or {}
+
+        serializer = TopologyDiscoverRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        targets = serializer.validated_data.get("targets") or {}
+        protocol = serializer.validated_data.get("protocol", "both")
+        auto_create_devices = serializer.validated_data.get("auto_create_devices", False)
+
         js = JobService()
         job = js.create_job(
             job_type="topology_discovery",
             user=request.user,
             customer=customer,
-            target_summary={"filters": targets},
-            payload={},
+            target_summary={"filters": targets, "protocol": protocol},
+            payload={
+                "protocol": protocol,
+                "auto_create_devices": auto_create_devices,
+            },
         )
         return Response({"job_id": job.id, "status": job.status}, status=status.HTTP_202_ACCEPTED)
 
@@ -808,85 +827,203 @@ class TopologyLinkViewSet(CustomerScopedQuerysetMixin, viewsets.ReadOnlyModelVie
         return Response({"nodes": list(nodes.values()), "edges": edges})
 
 
-class GitRepositoryViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
-    """ViewSet for Git repository configuration.
+class DiscoveredDeviceViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
+    """ViewSet for managing discovered devices in the discovery queue.
 
-    Provides CRUD operations and additional actions for:
-    - Testing repository connection
-    - Triggering manual sync
-    - Viewing sync history
+    Discovered devices are neighbors found via CDP/LLDP that are not yet
+    in the device inventory. Users can review, approve, reject, or ignore them.
     """
 
-    queryset = GitRepository.objects.select_related("customer")
-    serializer_class = GitRepositorySerializer
+    queryset = DiscoveredDevice.objects.all()
+    serializer_class = DiscoveredDeviceSerializer
     permission_classes = [IsAuthenticated, RolePermission, ObjectCustomerPermission]
+    customer_field = "customer_id"
+    filterset_fields = ["status", "discovered_via_protocol", "hostname"]
 
-    @action(detail=True, methods=["post"], url_path="test-connection")
-    def test_connection(self, request, pk=None):
-        """Test the Git repository connection."""
-        repository = self.get_object()
-
-        from webnet.config_mgmt.git_service import GitService
-
-        service = GitService(repository)
-        result = service.test_connection()
-
-        return Response(
-            {
-                "success": result.success,
-                "message": result.message,
-                "error": result.error,
-            },
-            status=status.HTTP_200_OK if result.success else status.HTTP_400_BAD_REQUEST,
+    def get_queryset(self):
+        qs = super().get_queryset()
+        # Filter by status if provided
+        status_filter = self.request.query_params.get("status")
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+        return qs.select_related(
+            "customer", "discovered_via_device", "reviewed_by", "created_device"
         )
 
     @action(detail=True, methods=["post"])
-    def sync(self, request, pk=None):
-        """Trigger a manual sync of unsynced config snapshots."""
-        repository = self.get_object()
+    def approve(self, request, pk=None) -> Response:
+        """Approve a discovered device and create a Device from it.
 
-        if not repository.enabled:
+        Request body:
+        - credential_id: ID of credential to assign (required)
+        - vendor: Device vendor (required if not auto-detected)
+        - platform: Device platform (optional, uses discovered if not provided)
+        - role: Device role (optional)
+        - site: Device site (optional)
+        """
+        discovered = self.get_object()
+
+        if discovered.status != DiscoveredDevice.STATUS_PENDING:
             return Response(
-                {"detail": "Git sync is disabled for this repository"},
+                {"detail": f"Device already {discovered.status}"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        from webnet.jobs.tasks import git_sync_job
+        serializer = DiscoveredDeviceApproveSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
-        # Queue async sync task
-        git_sync_job.delay(repository.customer_id)
+        # Verify credential belongs to same customer
+        credential_id = serializer.validated_data["credential_id"]
+        try:
+            credential = Credential.objects.get(id=credential_id, customer=discovered.customer)
+        except Credential.DoesNotExist:
+            return Response(
+                {"detail": "Credential not found or not accessible"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            device = discovered.approve_and_create_device(
+                credential=credential,
+                user=request.user,
+                vendor=serializer.validated_data.get("vendor") or None,
+                platform=serializer.validated_data.get("platform") or None,
+                role=serializer.validated_data.get("role") or None,
+                site=serializer.validated_data.get("site") or None,
+            )
+            return Response(
+                {
+                    "detail": "Device created",
+                    "device_id": device.id,
+                    "hostname": device.hostname,
+                },
+                status=status.HTTP_201_CREATED,
+            )
+        except ValueError as e:
+            logger.warning("Device approval failed for %s: %s", discovered.id, e)
+            return Response(
+                {"detail": "Could not approve device. Check vendor is provided."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    @action(detail=True, methods=["post"])
+    def reject(self, request, pk=None) -> Response:
+        """Reject a discovered device."""
+        discovered = self.get_object()
+
+        if discovered.status != DiscoveredDevice.STATUS_PENDING:
+            return Response(
+                {"detail": f"Device already {discovered.status}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = DiscoveredDeviceRejectSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        discovered.reject(
+            user=request.user,
+            notes=serializer.validated_data.get("notes"),
+        )
+        return Response({"detail": "Device rejected"})
+
+    @action(detail=True, methods=["post"])
+    def ignore(self, request, pk=None) -> Response:
+        """Mark a discovered device as ignored (e.g., non-network device)."""
+        discovered = self.get_object()
+
+        if discovered.status != DiscoveredDevice.STATUS_PENDING:
+            return Response(
+                {"detail": f"Device already {discovered.status}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = DiscoveredDeviceRejectSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        discovered.ignore(
+            user=request.user,
+            notes=serializer.validated_data.get("notes"),
+        )
+        return Response({"detail": "Device ignored"})
+
+    @action(detail=False, methods=["post"], url_path="bulk-approve")
+    def bulk_approve(self, request) -> Response:
+        """Approve multiple discovered devices at once.
+
+        Request body:
+        - ids: List of discovered device IDs to approve
+        - credential_id: ID of credential to assign to all
+        - vendor: Default vendor for devices without auto-detected vendor
+
+        Note: All devices must belong to the same customer.
+        """
+        ids = request.data.get("ids", [])
+        credential_id = request.data.get("credential_id")
+        default_vendor = request.data.get("vendor")
+
+        if not ids:
+            return Response(
+                {"detail": "No device IDs provided"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        if not credential_id:
+            return Response(
+                {"detail": "credential_id is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Get all pending devices
+        devices = self.get_queryset().filter(id__in=ids, status=DiscoveredDevice.STATUS_PENDING)
+
+        # Verify all devices belong to the same customer (security: prevent cross-tenant)
+        customer_ids = set(devices.values_list("customer_id", flat=True))
+        if not customer_ids:
+            return Response(
+                {"detail": "No valid devices found"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        if len(customer_ids) > 1:
+            return Response(
+                {"detail": "All devices must belong to the same customer"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        customer_id = next(iter(customer_ids))
+
+        # Verify credential belongs to the same customer
+        try:
+            credential = Credential.objects.get(id=credential_id, customer_id=customer_id)
+        except Credential.DoesNotExist:
+            return Response(
+                {"detail": "Credential not found or not accessible"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        created = []
+        errors = []
+        for discovered in devices:
+            try:
+                device = discovered.approve_and_create_device(
+                    credential=credential,
+                    user=request.user,
+                    vendor=default_vendor,
+                )
+                created.append({"id": discovered.id, "device_id": device.id})
+            except ValueError as e:
+                logger.warning("Bulk approval failed for device %s: %s", discovered.id, e)
+                errors.append({"id": discovered.id, "error": "Failed to approve device"})
 
         return Response(
-            {"detail": "Git sync queued", "customer_id": repository.customer_id},
-            status=status.HTTP_202_ACCEPTED,
+            {"created": created, "errors": errors},
+            status=status.HTTP_201_CREATED if created else status.HTTP_400_BAD_REQUEST,
         )
 
-    @action(detail=True, methods=["get"])
-    def logs(self, request, pk=None):
-        """Get sync logs for this repository."""
-        repository = self.get_object()
-        limit = int(request.query_params.get("limit", 20))
-        logs = GitSyncLog.objects.filter(repository=repository).order_by("-started_at")[:limit]
-        return Response(GitSyncLogSerializer(logs, many=True).data)
-
-    @action(detail=True, methods=["get"])
-    def commits(self, request, pk=None):
-        """Get recent commits from the Git repository."""
-        repository = self.get_object()
-        limit = int(request.query_params.get("limit", 10))
-
-        from webnet.config_mgmt.git_service import GitService
-
-        service = GitService(repository)
-        commits = service.get_recent_commits(limit=limit)
-
-        return Response(commits)
-
-
-class GitSyncLogViewSet(CustomerScopedQuerysetMixin, viewsets.ReadOnlyModelViewSet):
-    """ViewSet for Git sync logs (read-only)."""
-
-    queryset = GitSyncLog.objects.select_related("repository", "repository__customer", "job")
-    serializer_class = GitSyncLogSerializer
-    permission_classes = [IsAuthenticated, RolePermission]
-    customer_field = "repository__customer_id"
+    @action(detail=False, methods=["get"], url_path="stats")
+    def stats(self, request) -> Response:
+        """Get discovery queue statistics."""
+        qs = self.get_queryset()
+        return Response(
+            {
+                "pending": qs.filter(status=DiscoveredDevice.STATUS_PENDING).count(),
+                "approved": qs.filter(status=DiscoveredDevice.STATUS_APPROVED).count(),
+                "rejected": qs.filter(status=DiscoveredDevice.STATUS_REJECTED).count(),
+                "ignored": qs.filter(status=DiscoveredDevice.STATUS_IGNORED).count(),
+                "total": qs.count(),
+            }
+        )
