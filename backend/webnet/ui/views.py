@@ -17,7 +17,12 @@ from django.http import HttpResponseBadRequest
 from django.urls import reverse
 
 from webnet.api.permissions import user_has_customer_access
-from webnet.compliance.models import CompliancePolicy, ComplianceResult
+from webnet.compliance.models import (
+    CompliancePolicy,
+    ComplianceResult,
+    RemediationRule,
+    RemediationAction,
+)
 from webnet.config_mgmt.models import ConfigSnapshot, GitRepository, GitSyncLog, ConfigTemplate
 from webnet.customers.models import Customer
 from webnet.devices.models import (
@@ -2190,3 +2195,100 @@ class NetBoxSyncLogsView(TenantScopedView):
             return render(request, self.partial_name, {"config": config, "sync_logs": logs})
 
         return render(request, self.template_name, {"config": config, "sync_logs": logs})
+
+
+class RemediationRuleListView(TenantScopedView):
+    """List remediation rules for compliance policies."""
+
+    template_name = "compliance/remediation_rules.html"
+    partial_name = "compliance/_remediation_rules_table.html"
+
+    def get(self, request):
+        qs = RemediationRule.objects.select_related("policy", "policy__customer", "created_by")
+        qs = self.filter_by_customer(qs, "policy__customer_id")
+
+        # Convert to list to avoid duplicate query execution
+        rules = list(qs)
+
+        rules_payload = [
+            {
+                "id": r.id,
+                "name": r.name,
+                "policy": r.policy.name,
+                "enabled": r.enabled,
+                "approval": r.get_approval_required_display(),
+                "max_daily": r.max_daily_executions,
+                "updated_at": timezone.localtime(r.updated_at).strftime("%Y-%m-%d %H:%M:%S"),
+            }
+            for r in rules
+        ]
+
+        context = {
+            "rules": rules,
+            "rules_table_props": json.dumps(
+                {
+                    "rows": rules_payload,
+                    "emptyState": {
+                        "title": "No remediation rules found",
+                        "description": "Create auto-remediation rules to automatically fix compliance violations.",
+                    },
+                }
+            ),
+        }
+
+        if request.headers.get("HX-Request"):
+            return render(request, self.partial_name, context)
+        return render(request, self.template_name, context)
+
+
+class RemediationActionListView(TenantScopedView):
+    """List remediation action audit log."""
+
+    template_name = "compliance/remediation_actions.html"
+    partial_name = "compliance/_remediation_actions_table.html"
+
+    def get(self, request):
+        qs = RemediationAction.objects.select_related(
+            "rule",
+            "rule__policy",
+            "rule__policy__customer",
+            "device",
+            "compliance_result",
+            "job",
+        ).order_by("-started_at")[
+            :100
+        ]  # Limit to recent 100
+        qs = self.filter_by_customer(qs, "rule__policy__customer_id")
+
+        # Convert to list to avoid duplicate query execution
+        actions = list(qs)
+
+        actions_payload = [
+            {
+                "id": a.id,
+                "rule_name": a.rule.name,
+                "device": a.device.hostname,
+                "status": a.status,
+                "verification_passed": a.verification_passed,
+                "started_at": timezone.localtime(a.started_at).strftime("%Y-%m-%d %H:%M:%S"),
+                "error_message": a.error_message,
+            }
+            for a in actions
+        ]
+
+        context = {
+            "actions": actions,
+            "actions_table_props": json.dumps(
+                {
+                    "rows": actions_payload,
+                    "emptyState": {
+                        "title": "No remediation actions found",
+                        "description": "Remediation actions will appear here when auto-remediation is triggered.",
+                    },
+                }
+            ),
+        }
+
+        if request.headers.get("HX-Request"):
+            return render(request, self.partial_name, context)
+        return render(request, self.template_name, context)
