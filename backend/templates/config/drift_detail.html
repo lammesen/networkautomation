@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}Drift Detail - webnet{% endblock %}
+
+{% block content %}
+<!-- Breadcrumb -->
+<nav class="flex mb-4" aria-label="Breadcrumb">
+  <ol class="inline-flex items-center space-x-1 md:space-x-2 text-sm">
+    <li class="inline-flex items-center">
+      <a href="/config/" class="text-muted-foreground hover:text-foreground">Config Snapshots</a>
+    </li>
+    <li class="flex items-center">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mx-1 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+      </svg>
+      <a href="/config/drift/timeline" class="text-muted-foreground hover:text-foreground">Drift Timeline</a>
+    </li>
+    <li class="flex items-center">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mx-1 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+      </svg>
+      <span class="font-medium">Detail</span>
+    </li>
+  </ol>
+</nav>
+
+{% if error %}
+<div class="rounded-lg border bg-card p-6">
+  <div class="flex items-center gap-2 text-destructive">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+    <span class="font-medium">{{ error }}</span>
+  </div>
+</div>
+{% elif drift %}
+<!-- Page Header -->
+<div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-bold tracking-tight">Configuration Drift Detail</h1>
+    <p class="text-muted-foreground">{{ drift.device.hostname }} - {{ drift.detected_at|date:"Y-m-d H:i:s" }}</p>
+  </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+  <div class="rounded-lg border bg-card p-4">
+    <div class="text-sm text-muted-foreground">Change Magnitude</div>
+    <div class="text-xl font-bold">{{ drift.get_change_magnitude }}</div>
+  </div>
+  <div class="rounded-lg border bg-card p-4">
+    <div class="text-sm text-muted-foreground">Lines Added</div>
+    <div class="text-xl font-bold text-green-600">+{{ drift.additions }}</div>
+  </div>
+  <div class="rounded-lg border bg-card p-4">
+    <div class="text-sm text-muted-foreground">Lines Deleted</div>
+    <div class="text-xl font-bold text-red-600">-{{ drift.deletions }}</div>
+  </div>
+  <div class="rounded-lg border bg-card p-4">
+    <div class="text-sm text-muted-foreground">Total Changes</div>
+    <div class="text-xl font-bold">{{ drift.changes }}</div>
+  </div>
+</div>
+
+<!-- Metadata -->
+<div class="rounded-lg border bg-card p-6 mb-6">
+  <h2 class="text-lg font-semibold mb-4">Change Information</h2>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div>
+      <span class="text-sm text-muted-foreground">From Snapshot:</span>
+      <span class="ml-2 font-mono">#{{ drift.snapshot_from_id }}</span>
+      <span class="text-xs text-muted-foreground ml-2">({{ drift.snapshot_from.created_at|date:"Y-m-d H:i:s" }})</span>
+    </div>
+    <div>
+      <span class="text-sm text-muted-foreground">To Snapshot:</span>
+      <span class="ml-2 font-mono">#{{ drift.snapshot_to_id }}</span>
+      <span class="text-xs text-muted-foreground ml-2">({{ drift.snapshot_to.created_at|date:"Y-m-d H:i:s" }})</span>
+    </div>
+    {% if drift.triggered_by %}
+    <div>
+      <span class="text-sm text-muted-foreground">Triggered by:</span>
+      <span class="ml-2">{{ drift.triggered_by.username }}</span>
+    </div>
+    {% endif %}
+    <div>
+      <span class="text-sm text-muted-foreground">Detected at:</span>
+      <span class="ml-2">{{ drift.detected_at|date:"Y-m-d H:i:s" }}</span>
+    </div>
+  </div>
+  
+  {% if drift.diff_summary %}
+  <div class="mt-4">
+    <span class="text-sm text-muted-foreground block mb-2">Summary:</span>
+    <div class="bg-muted p-3 rounded text-sm">{{ drift.diff_summary }}</div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Diff Output -->
+<div class="rounded-lg border bg-card p-6">
+  <div class="flex items-center justify-between mb-4">
+    <h2 class="text-lg font-semibold">Configuration Diff</h2>
+    <div class="flex gap-2">
+      <a href="/config/diff?from={{ drift.snapshot_from_id }}&to={{ drift.snapshot_to_id }}" 
+         class="inline-flex items-center gap-2 text-sm text-primary hover:underline">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+        </svg>
+        Open in Diff View
+      </a>
+    </div>
+  </div>
+  
+  <div class="border-t pt-4">
+    <div class="rounded-lg bg-muted p-4 overflow-x-auto">
+      {% if diff_text %}
+      <pre class="text-sm font-mono whitespace-pre-wrap">{{ diff_text }}</pre>
+      {% else %}
+      <p class="text-muted-foreground text-sm">No differences found.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

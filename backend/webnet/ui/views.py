@@ -18,7 +18,7 @@ from django.urls import reverse
 
 from webnet.api.permissions import user_has_customer_access
 from webnet.compliance.models import CompliancePolicy, ComplianceResult
-from webnet.config_mgmt.models import ConfigSnapshot, GitRepository, GitSyncLog, ConfigTemplate
+from webnet.config_mgmt.models import ConfigSnapshot, GitRepository, GitSyncLog, ConfigTemplate, ConfigDrift, DriftAlert
 from webnet.customers.models import Customer
 from webnet.devices.models import (
     Device,
@@ -668,6 +668,180 @@ class ConfigDiffView(TenantScopedView):
                         diff_text = "No differences found between snapshots."
 
         context = {"snap_from": snap_from, "snap_to": snap_to, "diff": diff_text, "error": error}
+
+        if request.headers.get("HX-Request"):
+            return render(request, self.partial_name, context)
+        return render(request, self.template_name, context)
+
+
+class DriftTimelineView(TenantScopedView):
+    """View for configuration drift timeline."""
+
+    template_name = "config/drift_timeline.html"
+    partial_name = "config/_drift_timeline.html"
+    customer_field = "device__customer_id"
+
+    def get(self, request):
+        device_id = request.GET.get("device_id")
+        days = int(request.GET.get("days", 30))
+
+        if not device_id:
+            context = {
+                "error": "device_id parameter required",
+                "drifts": [],
+                "device": None,
+                "days": days,
+            }
+            if request.headers.get("HX-Request"):
+                return render(request, self.partial_name, context)
+            return render(request, self.template_name, context)
+
+        from webnet.devices.models import Device
+        from webnet.config_mgmt.drift_service import DriftService
+
+        try:
+            device = Device.objects.select_related("customer").get(pk=device_id)
+        except Device.DoesNotExist:
+            context = {
+                "error": "Device not found",
+                "drifts": [],
+                "device": None,
+                "days": days,
+            }
+            if request.headers.get("HX-Request"):
+                return render(request, self.partial_name, context)
+            return render(request, self.template_name, context)
+
+        # Check access
+        forbidden = self.ensure_customer_access(device.customer_id)
+        if forbidden:
+            return forbidden
+
+        # Get drift timeline
+        ds = DriftService()
+        drifts = ds.get_drift_timeline(device_id, days)
+        frequency_stats = ds.get_change_frequency(device_id, days)
+
+        drifts_payload = [
+            {
+                "id": drift.id,
+                "detected_at": timezone.localtime(drift.detected_at).strftime("%Y-%m-%d %H:%M:%S"),
+                "additions": drift.additions,
+                "deletions": drift.deletions,
+                "changes": drift.changes,
+                "has_changes": drift.has_changes,
+                "change_magnitude": drift.get_change_magnitude(),
+                "snapshot_from_id": drift.snapshot_from_id,
+                "snapshot_to_id": drift.snapshot_to_id,
+                "triggered_by": drift.triggered_by.username if drift.triggered_by else "System",
+            }
+            for drift in drifts
+        ]
+
+        context = {
+            "device": device,
+            "drifts": drifts,
+            "drifts_payload": json.dumps(drifts_payload),
+            "frequency_stats": frequency_stats,
+            "days": days,
+            "error": None,
+        }
+
+        if request.headers.get("HX-Request"):
+            return render(request, self.partial_name, context)
+        return render(request, self.template_name, context)
+
+
+class DriftDetailView(TenantScopedView):
+    """View for drift detail with enhanced diff visualization."""
+
+    template_name = "config/drift_detail.html"
+
+    def get(self, request, drift_id):
+        try:
+            drift = ConfigDrift.objects.select_related(
+                "device__customer",
+                "snapshot_from",
+                "snapshot_to",
+                "triggered_by",
+            ).get(pk=drift_id)
+        except ConfigDrift.DoesNotExist:
+            return render(
+                request,
+                self.template_name,
+                {"error": "Drift not found", "drift": None},
+            )
+
+        # Check access
+        forbidden = self.ensure_customer_access(drift.device.customer_id)
+        if forbidden:
+            return forbidden
+
+        # Generate diff with highlighting
+        diff_lines = unified_diff(
+            drift.snapshot_from.config_text.splitlines(),
+            drift.snapshot_to.config_text.splitlines(),
+            fromfile=f"snapshot-{drift.snapshot_from_id}",
+            tofile=f"snapshot-{drift.snapshot_to_id}",
+            lineterm="",
+        )
+        diff_text = "\n".join(diff_lines)
+
+        context = {
+            "drift": drift,
+            "diff_text": diff_text,
+            "error": None,
+        }
+
+        return render(request, self.template_name, context)
+
+
+class DriftAlertsView(TenantScopedView):
+    """View for drift alerts."""
+
+    template_name = "config/drift_alerts.html"
+    partial_name = "config/_alerts_table.html"
+    customer_field = "drift__device__customer_id"
+
+    def get(self, request):
+        status_filter = request.GET.get("status", "open")
+        severity_filter = request.GET.get("severity")
+
+        qs = DriftAlert.objects.select_related(
+            "drift__device__customer",
+            "drift__device",
+            "acknowledged_by",
+        ).order_by("-detected_at")[:100]
+
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+        if severity_filter:
+            qs = qs.filter(severity=severity_filter)
+
+        qs = self.filter_by_customer(qs)
+
+        alerts_payload = [
+            {
+                "id": alert.id,
+                "drift_id": alert.drift_id,
+                "device_hostname": alert.drift.device.hostname,
+                "severity": alert.severity,
+                "status": alert.status,
+                "message": alert.message,
+                "detected_at": timezone.localtime(alert.detected_at).strftime("%Y-%m-%d %H:%M:%S"),
+                "acknowledged_by": (
+                    alert.acknowledged_by.username if alert.acknowledged_by else None
+                ),
+            }
+            for alert in qs
+        ]
+
+        context = {
+            "alerts": qs,
+            "alerts_payload": json.dumps(alerts_payload),
+            "status_filter": status_filter,
+            "severity_filter": severity_filter,
+        }
 
         if request.headers.get("HX-Request"):
             return render(request, self.partial_name, context)

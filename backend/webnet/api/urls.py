@@ -25,6 +25,8 @@ router.register(r"device-groups", views.DeviceGroupViewSet, basename="device-gro
 router.register(r"bulk-onboarding", views.BulkOnboardingViewSet, basename="bulk-onboarding")
 # Configuration Template Library (Issue #16)
 router.register(r"config/templates", views.ConfigTemplateViewSet, basename="config-template")
+# Configuration Drift Analysis
+router.register(r"config/drift/alerts", views.DriftAlertViewSet, basename="drift-alert")
 # NetBox Integration (Issue #9)
 router.register(r"integrations/netbox", views.NetBoxConfigViewSet, basename="netbox-config")
 
@@ -50,6 +52,17 @@ urlpatterns = [
         "config/devices/<int:device_id>/diff",
         views.ConfigViewSet.as_view({"get": "diff"}),
     ),
+    path("config/drift/detect", views.DriftViewSet.as_view({"post": "detect_drift"})),
+    path("config/drift/analyze-device", views.DriftViewSet.as_view({"post": "analyze_device"})),
+    path(
+        "config/drift/device/<int:device_id>",
+        views.DriftViewSet.as_view({"get": "device_drifts"}),
+    ),
+    path(
+        "config/drift/device/<int:device_id>/frequency",
+        views.DriftViewSet.as_view({"get": "change_frequency"}),
+    ),
+    path("config/drift/<int:pk>", views.DriftViewSet.as_view({"get": "detail"})),
     path("devices/import", views.DeviceImportView.as_view()),
     path("devices/<int:pk>/jobs", views.DeviceViewSet.as_view({"get": "jobs"})),
     path("devices/<int:pk>/snapshots", views.DeviceViewSet.as_view({"get": "snapshots"})),

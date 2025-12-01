@@ -37,7 +37,7 @@ from webnet.devices.models import (
 )
 from webnet.jobs.models import Job, JobLog
 from webnet.jobs.services import JobService
-from webnet.config_mgmt.models import ConfigSnapshot, ConfigTemplate
+from webnet.config_mgmt.models import ConfigSnapshot, ConfigTemplate, ConfigDrift, DriftAlert
 from webnet.compliance.models import CompliancePolicy, ComplianceResult
 
 from .serializers import (
@@ -51,6 +51,8 @@ from .serializers import (
     JobSerializer,
     JobLogSerializer,
     ConfigSnapshotSerializer,
+    ConfigDriftSerializer,
+    DriftAlertSerializer,
     CompliancePolicySerializer,
     ComplianceResultSerializer,
     TopologyLinkSerializer,
@@ -732,6 +734,145 @@ class ConfigViewSet(viewsets.ViewSet):
         )
         diff_text = "\n".join(diff_lines)
         return Response({"from": snap_from.id, "to": snap_to.id, "diff": diff_text})
+
+
+class DriftViewSet(viewsets.ViewSet):
+    """API endpoints for configuration drift analysis."""
+
+    permission_classes = [IsAuthenticated, RolePermission]
+
+    @action(detail=False, methods=["post"], url_path="detect")
+    def detect_drift(self, request):
+        """Detect drift between two snapshots."""
+        from webnet.config_mgmt.drift_service import DriftService
+
+        from_id = request.data.get("snapshot_from_id")
+        to_id = request.data.get("snapshot_to_id")
+
+        if not from_id or not to_id:
+            return Response(
+                {"detail": "snapshot_from_id and snapshot_to_id required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            snap_from = ConfigSnapshot.objects.select_related("device__customer").get(pk=from_id)
+            snap_to = ConfigSnapshot.objects.select_related("device__customer").get(pk=to_id)
+        except ConfigSnapshot.DoesNotExist:
+            return Response(
+                {"detail": "snapshot not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Check access
+        if not user_has_customer_access(request.user, snap_from.device.customer_id):
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        if not user_has_customer_access(request.user, snap_to.device.customer_id):
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        # Detect drift
+        ds = DriftService()
+        drift = ds.detect_drift(snap_from, snap_to, request.user)
+
+        return Response(ConfigDriftSerializer(drift).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=["post"], url_path="analyze-device")
+    def analyze_device(self, request):
+        """Analyze all consecutive snapshots for a device."""
+        from webnet.config_mgmt.drift_service import DriftService
+
+        device_id = request.data.get("device_id")
+        if not device_id:
+            return Response(
+                {"detail": "device_id required"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        device = Device.objects.select_related("customer").filter(pk=device_id).first()
+        if not device or not user_has_customer_access(request.user, device.customer_id):
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        # Analyze drift
+        ds = DriftService()
+        drifts = ds.detect_consecutive_drifts(device_id, request.user)
+
+        return Response(
+            {
+                "device_id": device_id,
+                "drifts_analyzed": len(drifts),
+                "drifts": ConfigDriftSerializer(drifts, many=True).data,
+            }
+        )
+
+    @action(detail=False, methods=["get"], url_path="device/(?P<device_id>[^/.]+)")
+    def device_drifts(self, request, device_id=None):
+        """Get drift timeline for a device."""
+        device = Device.objects.select_related("customer").filter(pk=device_id).first()
+        if not device or not user_has_customer_access(request.user, device.customer_id):
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        days = int(request.query_params.get("days", 30))
+        from webnet.config_mgmt.drift_service import DriftService
+
+        ds = DriftService()
+        drifts = ds.get_drift_timeline(device_id, days)
+
+        return Response(ConfigDriftSerializer(drifts, many=True).data)
+
+    @action(detail=False, methods=["get"], url_path="device/(?P<device_id>[^/.]+)/frequency")
+    def change_frequency(self, request, device_id=None):
+        """Get change frequency statistics for a device."""
+        device = Device.objects.select_related("customer").filter(pk=device_id).first()
+        if not device or not user_has_customer_access(request.user, device.customer_id):
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        days = int(request.query_params.get("days", 30))
+        from webnet.config_mgmt.drift_service import DriftService
+
+        ds = DriftService()
+        stats = ds.get_change_frequency(device_id, days)
+
+        return Response(stats)
+
+    @action(detail=True, methods=["get"])
+    def detail(self, request, pk=None):
+        """Get drift details."""
+        drift = ConfigDrift.objects.select_related(
+            "device__customer", "snapshot_from", "snapshot_to", "triggered_by"
+        ).filter(pk=pk).first()
+
+        if not drift or not user_has_customer_access(request.user, drift.device.customer_id):
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        return Response(ConfigDriftSerializer(drift).data)
+
+
+class DriftAlertViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
+    """API endpoints for drift alerts."""
+
+    queryset = DriftAlert.objects.select_related(
+        "drift__device__customer", "acknowledged_by"
+    )
+    serializer_class = DriftAlertSerializer
+    permission_classes = [IsAuthenticated, RolePermission, ObjectCustomerPermission]
+    customer_field = "drift__device__customer_id"
+
+    @action(detail=True, methods=["post"])
+    def acknowledge(self, request, pk=None):
+        """Acknowledge an alert."""
+        alert = self.get_object()
+        alert.status = "acknowledged"
+        alert.acknowledged_by = request.user
+        alert.acknowledged_at = timezone.now()
+        alert.save()
+        return Response(DriftAlertSerializer(alert).data)
+
+    @action(detail=True, methods=["post"])
+    def resolve(self, request, pk=None):
+        """Resolve an alert."""
+        alert = self.get_object()
+        alert.status = "resolved"
+        alert.resolution_notes = request.data.get("resolution_notes", "")
+        alert.save()
+        return Response(DriftAlertSerializer(alert).data)
 
 
 class CompliancePolicyViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
