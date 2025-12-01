@@ -8,12 +8,62 @@
     <h1 class="text-2xl font-bold tracking-tight">Network Topology</h1>
     <p class="text-muted-foreground">Discovered network links and connections</p>
   </div>
+  <div class="flex items-center gap-2">
+    <!-- View Toggle -->
+    <div class="inline-flex rounded-lg border bg-card p-1">
+      <button
+        id="table-view-btn"
+        class="inline-flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors {% if view != 'map' %}bg-primary text-primary-foreground{% else %}hover:bg-muted{% endif %}"
+        hx-get="/topology/?view=table"
+        hx-target="#topology-content"
+        hx-swap="innerHTML"
+        hx-push-url="true"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+        </svg>
+        Table
+      </button>
+      <button
+        id="map-view-btn"
+        class="inline-flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors {% if view == 'map' %}bg-primary text-primary-foreground{% else %}hover:bg-muted{% endif %}"
+        hx-get="/topology/?view=map"
+        hx-target="#topology-content"
+        hx-swap="innerHTML"
+        hx-push-url="true"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+        </svg>
+        Map
+      </button>
+    </div>
+    <!-- Discover Button -->
+    <button
+      class="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90"
+      hx-post="/api/commands/discover/"
+      hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+      hx-swap="none"
+      hx-on::after-request="if(event.detail.successful) { window.dispatchEvent(new CustomEvent('toast', {detail: {message: 'Topology discovery started', type: 'success'}})); }"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+      </svg>
+      Discover Topology
+    </button>
+  </div>
 </div>
 
-<!-- Topology Table -->
-<div class="rounded-lg border bg-card">
-  <div id="topology-table" hx-get="/topology/" hx-trigger="load" hx-target="#topology-table">
-    {% include "topology/_table.html" %}
-  </div>
+<!-- Topology Content (Table or Map) -->
+<div id="topology-content" class="{% if view == 'map' %}h-[calc(100vh-12rem)]{% endif %}">
+  {% if view == 'map' %}
+    {% include "topology/_map.html" %}
+  {% else %}
+    <div class="rounded-lg border bg-card">
+      <div id="topology-table">
+        {% include "topology/_table.html" %}
+      </div>
+    </div>
+  {% endif %}
 </div>
 {% endblock %}
