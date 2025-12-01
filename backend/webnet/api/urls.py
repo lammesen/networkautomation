@@ -15,6 +15,7 @@ router.register(r"jobs/admin", views.JobAdminViewSet, basename="job-admin")
 router.register(r"compliance/policies", views.CompliancePolicyViewSet, basename="compliance-policy")
 router.register(r"compliance/results", views.ComplianceResultViewSet, basename="compliance-result")
 router.register(r"topology/links", views.TopologyLinkViewSet, basename="topology-link")
+router.register(r"ssh/host-keys", views.SSHHostKeyViewSet, basename="ssh-host-key")
 router.register(
     r"topology/discovered-devices", views.DiscoveredDeviceViewSet, basename="discovered-device"
 )

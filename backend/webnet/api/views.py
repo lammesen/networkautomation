@@ -34,6 +34,7 @@ from webnet.devices.models import (
     DeviceGroup,
     NetBoxConfig,
     NetBoxSyncLog,
+    SSHHostKey,
 )
 from webnet.jobs.models import Job, JobLog
 from webnet.jobs.services import JobService
@@ -54,6 +55,9 @@ from .serializers import (
     CompliancePolicySerializer,
     ComplianceResultSerializer,
     TopologyLinkSerializer,
+    SSHHostKeySerializer,
+    SSHHostKeyVerifySerializer,
+    SSHHostKeyImportSerializer,
     DiscoveredDeviceSerializer,
     DiscoveredDeviceApproveSerializer,
     DiscoveredDeviceRejectSerializer,
@@ -850,6 +854,101 @@ class TopologyLinkViewSet(CustomerScopedQuerysetMixin, viewsets.ReadOnlyModelVie
                 }
             )
         return Response({"nodes": list(nodes.values()), "edges": edges})
+
+
+class SSHHostKeyViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
+    """ViewSet for managing SSH host keys.
+
+    Provides endpoints for viewing, verifying, and managing SSH host keys
+    stored in the database for MITM attack prevention.
+    """
+
+    queryset = SSHHostKey.objects.select_related("device", "device__customer", "verified_by").all()
+    serializer_class = SSHHostKeySerializer
+    permission_classes = [IsAuthenticated, RolePermission, ObjectCustomerPermission]
+    customer_field = "device__customer_id"
+    filterset_fields = ["device", "key_type", "verified"]
+    search_fields = ["device__hostname", "fingerprint_sha256"]
+    ordering_fields = ["first_seen_at", "last_seen_at", "verified"]
+    ordering = ["-verified", "-first_seen_at"]
+
+    @action(detail=True, methods=["post"], url_path="verify")
+    def verify(self, request, pk=None):
+        """Manually verify or unverify a host key.
+
+        Request body:
+            {
+                "verified": true/false
+            }
+        """
+        host_key = self.get_object()
+        serializer = SSHHostKeyVerifySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        from webnet.core.ssh_host_keys import SSHHostKeyService
+
+        if serializer.validated_data["verified"]:
+            SSHHostKeyService.verify_key_manual(host_key, request.user)
+            return Response({"status": "verified", "message": "Host key verified successfully"})
+        else:
+            SSHHostKeyService.unverify_key(host_key)
+            return Response({"status": "unverified", "message": "Host key unverified successfully"})
+
+    @action(detail=False, methods=["post"], url_path="import")
+    def import_key(self, request):
+        """Import a host key from OpenSSH known_hosts format.
+
+        Request body:
+            {
+                "device_id": 123,
+                "known_hosts_line": "192.168.1.1 ssh-rsa AAAAB3NzaC1yc2EA..."
+            }
+        """
+        serializer = SSHHostKeyImportSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        device_id = serializer.validated_data["device_id"]
+        known_hosts_line = serializer.validated_data["known_hosts_line"]
+
+        # Get device and verify customer access
+        try:
+            device = Device.objects.get(id=device_id)
+        except Device.DoesNotExist:
+            return Response({"error": "Device not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        # Verify user has access to the device's customer
+        if not user_has_customer_access(request.user, device.customer):
+            return Response(
+                {"error": "Access denied to this device"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Import the key
+        from webnet.core.ssh_host_keys import SSHHostKeyService
+
+        try:
+            host_key = SSHHostKeyService.import_from_openssh_known_hosts(device, known_hosts_line)
+            return Response(SSHHostKeySerializer(host_key).data, status=status.HTTP_201_CREATED)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=["get"], url_path="stats")
+    def stats(self, request):
+        """Get statistics about SSH host keys for the current customer."""
+        qs = self.get_queryset()
+        total = qs.count()
+        verified = qs.filter(verified=True).count()
+        unverified = qs.filter(verified=False).count()
+        by_type = dict(qs.values_list("key_type").annotate(Count("key_type")))
+
+        return Response(
+            {
+                "total": total,
+                "verified": verified,
+                "unverified": unverified,
+                "by_key_type": by_type,
+            }
+        )
 
 
 class DiscoveredDeviceViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):

@@ -410,6 +410,90 @@ class Device(models.Model):
         return self.hostname
 
 
+class SSHHostKey(models.Model):
+    """SSH host key for device authentication and MITM prevention.
+
+    Implements Trust On First Use (TOFU) pattern for SSH host key verification.
+    Keys can be manually verified by operators to indicate trust.
+    """
+
+    KEY_TYPE_RSA = "ssh-rsa"
+    KEY_TYPE_ECDSA_256 = "ecdsa-sha2-nistp256"
+    KEY_TYPE_ECDSA_384 = "ecdsa-sha2-nistp384"
+    KEY_TYPE_ECDSA_521 = "ecdsa-sha2-nistp521"
+    KEY_TYPE_ED25519 = "ssh-ed25519"
+
+    KEY_TYPE_CHOICES = [
+        (KEY_TYPE_RSA, "RSA"),
+        (KEY_TYPE_ECDSA_256, "ECDSA P-256"),
+        (KEY_TYPE_ECDSA_384, "ECDSA P-384"),
+        (KEY_TYPE_ECDSA_521, "ECDSA P-521"),
+        (KEY_TYPE_ED25519, "Ed25519"),
+    ]
+
+    device = models.ForeignKey(
+        Device,
+        on_delete=models.CASCADE,
+        related_name="ssh_host_keys",
+        help_text="Device this host key belongs to",
+    )
+    key_type = models.CharField(
+        max_length=30,
+        choices=KEY_TYPE_CHOICES,
+        help_text="SSH key algorithm type",
+    )
+    public_key = models.TextField(
+        help_text="Base64-encoded public key data",
+    )
+    fingerprint_sha256 = models.CharField(
+        max_length=64,
+        help_text="SHA256 fingerprint of the public key",
+    )
+    first_seen_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When this key was first seen",
+    )
+    last_seen_at = models.DateTimeField(
+        auto_now=True,
+        help_text="When this key was last seen",
+    )
+    verified = models.BooleanField(
+        default=False,
+        help_text="Whether this key has been manually verified by an operator",
+    )
+    verified_by = models.ForeignKey(
+        "users.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="verified_host_keys",
+        help_text="User who verified this key",
+    )
+    verified_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When this key was verified",
+    )
+
+    class Meta:
+        unique_together = ("device", "key_type", "fingerprint_sha256")
+        ordering = ["-verified", "-first_seen_at"]
+        indexes = [
+            models.Index(fields=["device"]),
+            models.Index(fields=["fingerprint_sha256"]),
+            models.Index(fields=["verified"]),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover
+        status = "verified" if self.verified else "unverified"
+        return f"{self.device.hostname} - {self.key_type} ({status})"
+
+    @property
+    def fingerprint_display(self) -> str:
+        """Return fingerprint in human-readable format (SHA256:base64)."""
+        return f"SHA256:{self.fingerprint_sha256}"
+
+
 class TopologyLink(models.Model):
     customer = models.ForeignKey("customers.Customer", on_delete=models.CASCADE)
     local_device = models.ForeignKey(
