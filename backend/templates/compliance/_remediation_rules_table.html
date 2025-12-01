@@ -1,0 +1,48 @@
+<div class="relative w-full overflow-auto p-4">
+  <table class="w-full caption-bottom text-sm">
+    <thead class="[&_tr]:border-b">
+      <tr class="border-b transition-colors">
+        <th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Rule Name</th>
+        <th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Policy</th>
+        <th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Status</th>
+        <th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Approval</th>
+        <th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Daily Limit</th>
+        <th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Last Updated</th>
+      </tr>
+    </thead>
+    <tbody class="[&_tr:last-child]:border-0">
+      {% for rule in rules %}
+      <tr class="border-b transition-colors hover:bg-muted/50">
+        <td class="p-4 align-middle font-medium">{{ rule.name }}</td>
+        <td class="p-4 align-middle">{{ rule.policy.name }}</td>
+        <td class="p-4 align-middle">
+          {% if rule.enabled %}
+            <span class="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-800">
+              Enabled
+            </span>
+          {% else %}
+            <span class="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-800">
+              Disabled
+            </span>
+          {% endif %}
+        </td>
+        <td class="p-4 align-middle text-sm">{{ rule.get_approval_required_display }}</td>
+        <td class="p-4 align-middle text-sm">{{ rule.max_daily_executions }}</td>
+        <td class="p-4 align-middle text-sm text-muted-foreground">{{ rule.updated_at|date:"Y-m-d H:i:s" }}</td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="6" class="p-4 text-center py-12">
+          <div class="flex flex-col items-center gap-2 text-muted-foreground">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+            </svg>
+            <p class="font-medium">No remediation rules found</p>
+            <p class="text-sm">Create auto-remediation rules to automatically fix compliance violations.</p>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

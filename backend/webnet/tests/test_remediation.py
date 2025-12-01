@@ -2,8 +2,7 @@
 
 import pytest
 from django.utils import timezone
-from datetime import timedelta
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 from webnet.compliance.models import (
     CompliancePolicy,
@@ -197,7 +196,9 @@ class TestRemediationRuleAPI:
         remediation_rule.save()
 
         client.force_login(admin_user)
-        response = client.post(f"/api/v1/compliance/remediation-rules/{remediation_rule.id}/enable/")
+        response = client.post(
+            f"/api/v1/compliance/remediation-rules/{remediation_rule.id}/enable/"
+        )
 
         assert response.status_code == 200
         remediation_rule.refresh_from_db()
@@ -228,7 +229,7 @@ class TestRemediationActionAPI:
         result = ComplianceResult.objects.create(
             policy=policy, device=device, job=job, status="failed", details_json={}
         )
-        action = RemediationAction.objects.create(
+        RemediationAction.objects.create(
             rule=remediation_rule, compliance_result=result, device=device, status="success"
         )
 
