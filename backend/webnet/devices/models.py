@@ -216,8 +216,15 @@ class DiscoveredDevice(models.Model):
 
         Returns:
             The newly created Device instance
+
+        Raises:
+            ValueError: If device was already approved or vendor is missing
         """
         from django.utils import timezone
+
+        # Prevent re-approval which would create duplicate devices
+        if self.status == self.STATUS_APPROVED:
+            raise ValueError("Device has already been approved")
 
         if not vendor and not self.vendor:
             raise ValueError("Vendor is required for device creation")

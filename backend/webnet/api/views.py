@@ -870,7 +870,11 @@ class DiscoveredDeviceViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet
                 status=status.HTTP_201_CREATED,
             )
         except ValueError as e:
-            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            logger.warning("Device approval failed for %s: %s", discovered.id, e)
+            return Response(
+                {"detail": "Could not approve device. Check vendor is provided."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
     @action(detail=True, methods=["post"])
     def reject(self, request, pk=None) -> Response:
@@ -920,6 +924,8 @@ class DiscoveredDeviceViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet
         - ids: List of discovered device IDs to approve
         - credential_id: ID of credential to assign to all
         - vendor: Default vendor for devices without auto-detected vendor
+
+        Note: All devices must belong to the same customer.
         """
         ids = request.data.get("ids", [])
         credential_id = request.data.get("credential_id")
@@ -937,13 +943,20 @@ class DiscoveredDeviceViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet
         # Get all pending devices
         devices = self.get_queryset().filter(id__in=ids, status=DiscoveredDevice.STATUS_PENDING)
 
-        # Verify credential
-        customer_id = devices.first().customer_id if devices.exists() else None
-        if not customer_id:
+        # Verify all devices belong to the same customer (security: prevent cross-tenant)
+        customer_ids = set(devices.values_list("customer_id", flat=True))
+        if not customer_ids:
             return Response(
                 {"detail": "No valid devices found"}, status=status.HTTP_400_BAD_REQUEST
             )
+        if len(customer_ids) > 1:
+            return Response(
+                {"detail": "All devices must belong to the same customer"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        customer_id = next(iter(customer_ids))
 
+        # Verify credential belongs to the same customer
         try:
             credential = Credential.objects.get(id=credential_id, customer_id=customer_id)
         except Credential.DoesNotExist:
@@ -963,7 +976,8 @@ class DiscoveredDeviceViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet
                 )
                 created.append({"id": discovered.id, "device_id": device.id})
             except ValueError as e:
-                errors.append({"id": discovered.id, "error": str(e)})
+                logger.warning("Bulk approval failed for device %s: %s", discovered.id, e)
+                errors.append({"id": discovered.id, "error": "Failed to approve device"})
 
         return Response(
             {"created": created, "errors": errors},

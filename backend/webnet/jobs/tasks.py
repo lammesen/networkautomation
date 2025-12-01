@@ -276,12 +276,12 @@ _def_cdp_ip_re = re.compile(
 _def_cdp_platform_re = re.compile(r"Platform\s*:\s*(?P<platform>[^,\n]+)", re.IGNORECASE)
 
 # LLDP parsing regexes (multi-vendor support)
-_def_lldp_chassis_re = re.compile(
-    r"(?:Chassis id|System Name)\s*:\s*(?P<hostname>\S+)", re.IGNORECASE
-)
-_def_lldp_sysname_re = re.compile(r"System Name\s*:\s*(?P<sysname>.+)", re.IGNORECASE)
+# Note: Chassis ID may contain MAC address; we prefer System Name for hostname
+_def_lldp_chassis_re = re.compile(r"Chassis id\s*:\s*(?P<chassis>\S+)", re.IGNORECASE)
+_def_lldp_sysname_re = re.compile(r"System Name\s*:\s*(?P<sysname>\S+)", re.IGNORECASE)
+# Local interface - don't include "Port id" as that refers to remote port
 _def_lldp_local_intf_re = re.compile(
-    r"(?:Local Intf|Local Interface|Port id)\s*:\s*(?P<local_intf>\S+)", re.IGNORECASE
+    r"(?:Local Intf|Local Interface)\s*:\s*(?P<local_intf>\S+)", re.IGNORECASE
 )
 _def_lldp_port_id_re = re.compile(r"Port id\s*:\s*(?P<port_id>\S+)", re.IGNORECASE)
 _def_lldp_port_desc_re = re.compile(
@@ -293,8 +293,9 @@ _def_lldp_mgmt_ip_re = re.compile(
     r"(?:Management Address(?:es)?|Mgmt-address)[:\s\n]+(?:IP:\s*)?(?P<ip>[\d.]+)",
     re.IGNORECASE | re.MULTILINE,
 )
+# Non-greedy match to avoid capturing across multiple blocks
 _def_lldp_sysdesc_re = re.compile(
-    r"System Description\s*:\s*(?P<sysdesc>.+)", re.IGNORECASE | re.DOTALL
+    r"System Description\s*:\s*(?P<sysdesc>.+?)\n\n", re.IGNORECASE | re.DOTALL
 )
 
 
@@ -365,6 +366,7 @@ def _parse_lldp_neighbors(output: str) -> list[dict[str, str | None]]:
             continue
 
         # Try to extract hostname (prefer System Name over Chassis ID)
+        # Note: Chassis ID often contains MAC address, so System Name is preferred
         hostname = None
         sysname_match = _def_lldp_sysname_re.search(block)
         if sysname_match:
@@ -372,7 +374,7 @@ def _parse_lldp_neighbors(output: str) -> list[dict[str, str | None]]:
         else:
             chassis_match = _def_lldp_chassis_re.search(block)
             if chassis_match:
-                hostname = chassis_match.group("hostname").strip()
+                hostname = chassis_match.group("chassis").strip()
 
         # Extract local interface
         local_intf = None
@@ -422,82 +424,12 @@ def _parse_lldp_neighbors(output: str) -> list[dict[str, str | None]]:
     return neighbors
 
 
-def _discover_neighbors_for_device(
-    nr: Nornir,
-    js: JobService,
-    job: Job,
-    device: Device,
-    protocol: str,
-) -> list[dict[str, str | None]]:
-    """Run neighbor discovery for a single device using specified protocol.
-
-    Args:
-        nr: Nornir instance filtered to the target device
-        js: JobService for logging
-        job: Job instance
-        device: Device to discover neighbors for
-        protocol: 'cdp', 'lldp', or 'both'
-
-    Returns:
-        List of neighbor dictionaries with protocol key added
-    """
-    all_neighbors: list[dict[str, str | None]] = []
-
-    protocols_to_try = []
-    if protocol == "both":
-        protocols_to_try = ["cdp", "lldp"]
-    elif protocol in ("cdp", "lldp"):
-        protocols_to_try = [protocol]
-    else:
-        protocols_to_try = ["cdp"]  # Default to CDP
-
-    for proto in protocols_to_try:
-        if proto == "cdp":
-            cmd = "show cdp neighbors detail"
-            parser = _parse_cdp_neighbors
-        else:  # lldp
-            cmd = "show lldp neighbors detail"
-            parser = _parse_lldp_neighbors
-
-        try:
-            res = nr.run(netmiko_send_command, command_string=cmd)
-            for host, r in res.items():
-                if r.failed:
-                    js.append_log(
-                        job,
-                        level="WARNING",
-                        host=host,
-                        message=f"{proto.upper()} discovery failed: {r.exception or r.result}",
-                    )
-                    continue
-                neighbors = parser(str(r.result))
-                js.append_log(
-                    job,
-                    level="INFO",
-                    host=host,
-                    message=f"Discovered {len(neighbors)} neighbors via {proto.upper()}",
-                )
-                for n in neighbors:
-                    n["protocol"] = proto
-                all_neighbors.extend(neighbors)
-        except Exception as exc:
-            js.append_log(
-                job,
-                level="WARNING",
-                host=device.hostname,
-                message=f"{proto.upper()} command failed: {exc}",
-            )
-
-    return all_neighbors
-
-
 @shared_task(name="topology_discovery_job")
 def topology_discovery_job(
     job_id: int,
     targets: dict,
     protocol: str = "both",
     auto_create_devices: bool = False,
-    max_depth: int = 0,
 ) -> None:
     """Run topology discovery using CDP and/or LLDP.
 
@@ -506,7 +438,6 @@ def topology_discovery_job(
         targets: Device filter targets
         protocol: 'cdp', 'lldp', or 'both' (default: 'both')
         auto_create_devices: If True, create DiscoveredDevice entries for unknown neighbors
-        max_depth: Maximum discovery hops (0 = single hop, disabled for recursive)
     """
     js = JobService()
     try:
@@ -524,6 +455,9 @@ def topology_discovery_job(
     nr = _nr_from_inventory(inventory)
     discovered_links = 0
     discovered_devices_count = 0
+
+    # Prefetch all customer devices to avoid N+1 queries
+    customer_devices = {d.hostname: d for d in Device.objects.filter(customer=job.customer)}
 
     try:
         # Run discovery command(s) based on protocol preference
@@ -548,7 +482,7 @@ def topology_discovery_job(
 
             for host, r in res.items():
                 _log_host_result(js, job, host, r)
-                device = Device.objects.filter(hostname=host, customer=job.customer).first()
+                device = customer_devices.get(host)
                 if not device or r.failed:
                     continue
 
@@ -562,9 +496,7 @@ def topology_discovery_job(
 
                 for n in neighbors:
                     remote_hostname = n["remote_hostname"]
-                    remote_dev = Device.objects.filter(
-                        customer=device.customer, hostname=remote_hostname
-                    ).first()
+                    remote_dev = customer_devices.get(remote_hostname)
 
                     # Create or update topology link
                     _, created = TopologyLink.objects.update_or_create(
