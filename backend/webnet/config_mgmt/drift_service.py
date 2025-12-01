@@ -1,10 +1,8 @@
 """Service for configuration drift detection and analysis."""
 
 import difflib
-import re
 from typing import Optional
 
-from django.db.models import Q
 from django.utils import timezone
 
 from webnet.config_mgmt.models import ConfigSnapshot, ConfigDrift, DriftAlert
@@ -47,8 +45,12 @@ class DriftService:
         )
 
         # Count changes
-        additions = sum(1 for line in diff_lines if line.startswith("+") and not line.startswith("+++"))
-        deletions = sum(1 for line in diff_lines if line.startswith("-") and not line.startswith("---"))
+        additions = sum(
+            1 for line in diff_lines if line.startswith("+") and not line.startswith("+++")
+        )
+        deletions = sum(
+            1 for line in diff_lines if line.startswith("-") and not line.startswith("---")
+        )
         total_lines = len(diff_lines)
         has_changes = additions > 0 or deletions > 0
 
@@ -83,9 +85,7 @@ class DriftService:
         Returns:
             List of ConfigDrift objects
         """
-        snapshots = list(
-            ConfigSnapshot.objects.filter(device_id=device_id).order_by("created_at")
-        )
+        snapshots = list(ConfigSnapshot.objects.filter(device_id=device_id).order_by("created_at"))
 
         drifts = []
         for i in range(len(snapshots) - 1):
@@ -172,9 +172,7 @@ class DriftService:
 
         return "; ".join(sections[:5])  # Limit to first 5 changes
 
-    def get_drift_timeline(
-        self, device_id: int, days: int = 30
-    ) -> list[ConfigDrift]:
+    def get_drift_timeline(self, device_id: int, days: int = 30) -> list[ConfigDrift]:
         """Get drift timeline for a device.
 
         Args:
@@ -193,9 +191,7 @@ class DriftService:
             .order_by("-detected_at")
         )
 
-    def get_change_frequency(
-        self, device_id: int, days: int = 30
-    ) -> dict[str, int]:
+    def get_change_frequency(self, device_id: int, days: int = 30) -> dict[str, int]:
         """Calculate change frequency for a device.
 
         Args:

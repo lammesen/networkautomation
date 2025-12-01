@@ -759,9 +759,7 @@ class DriftViewSet(viewsets.ViewSet):
             snap_from = ConfigSnapshot.objects.select_related("device__customer").get(pk=from_id)
             snap_to = ConfigSnapshot.objects.select_related("device__customer").get(pk=to_id)
         except ConfigSnapshot.DoesNotExist:
-            return Response(
-                {"detail": "snapshot not found"}, status=status.HTTP_404_NOT_FOUND
-            )
+            return Response({"detail": "snapshot not found"}, status=status.HTTP_404_NOT_FOUND)
 
         # Check access
         if not user_has_customer_access(request.user, snap_from.device.customer_id):
@@ -782,9 +780,7 @@ class DriftViewSet(viewsets.ViewSet):
 
         device_id = request.data.get("device_id")
         if not device_id:
-            return Response(
-                {"detail": "device_id required"}, status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"detail": "device_id required"}, status=status.HTTP_400_BAD_REQUEST)
 
         device = Device.objects.select_related("customer").filter(pk=device_id).first()
         if not device or not user_has_customer_access(request.user, device.customer_id):
@@ -835,9 +831,13 @@ class DriftViewSet(viewsets.ViewSet):
     @action(detail=True, methods=["get"])
     def detail(self, request, pk=None):
         """Get drift details."""
-        drift = ConfigDrift.objects.select_related(
-            "device__customer", "snapshot_from", "snapshot_to", "triggered_by"
-        ).filter(pk=pk).first()
+        drift = (
+            ConfigDrift.objects.select_related(
+                "device__customer", "snapshot_from", "snapshot_to", "triggered_by"
+            )
+            .filter(pk=pk)
+            .first()
+        )
 
         if not drift or not user_has_customer_access(request.user, drift.device.customer_id):
             return Response(status=status.HTTP_404_NOT_FOUND)
@@ -848,9 +848,7 @@ class DriftViewSet(viewsets.ViewSet):
 class DriftAlertViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
     """API endpoints for drift alerts."""
 
-    queryset = DriftAlert.objects.select_related(
-        "drift__device__customer", "acknowledged_by"
-    )
+    queryset = DriftAlert.objects.select_related("drift__device__customer", "acknowledged_by")
     serializer_class = DriftAlertSerializer
     permission_classes = [IsAuthenticated, RolePermission, ObjectCustomerPermission]
     customer_field = "drift__device__customer_id"

@@ -6,13 +6,15 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('devices', '0005_merge_20251201_2108'),
+        ("devices", "0005_merge_20251201_2108"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='netboxconfig',
-            name='_api_token',
-            field=models.TextField(db_column='api_token', help_text='Encrypted NetBox API token (required)'),
+            model_name="netboxconfig",
+            name="_api_token",
+            field=models.TextField(
+                db_column="api_token", help_text="Encrypted NetBox API token (required)"
+            ),
         ),
     ]

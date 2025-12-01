@@ -18,7 +18,14 @@ from django.urls import reverse
 
 from webnet.api.permissions import user_has_customer_access
 from webnet.compliance.models import CompliancePolicy, ComplianceResult
-from webnet.config_mgmt.models import ConfigSnapshot, GitRepository, GitSyncLog, ConfigTemplate, ConfigDrift, DriftAlert
+from webnet.config_mgmt.models import (
+    ConfigSnapshot,
+    GitRepository,
+    GitSyncLog,
+    ConfigTemplate,
+    ConfigDrift,
+    DriftAlert,
+)
 from webnet.customers.models import Customer
 from webnet.devices.models import (
     Device,
@@ -820,7 +827,7 @@ class DriftAlertsView(TenantScopedView):
             qs = qs.filter(severity=severity_filter)
 
         qs = self.filter_by_customer(qs)
-        
+
         # Slice after filtering
         qs = qs[:100]
 

@@ -481,24 +481,12 @@ class ConfigDrift(models.Model):
         help_text="Later snapshot in comparison",
     )
     detected_at = models.DateTimeField(auto_now_add=True)
-    additions = models.IntegerField(
-        default=0, help_text="Number of lines added"
-    )
-    deletions = models.IntegerField(
-        default=0, help_text="Number of lines deleted"
-    )
-    changes = models.IntegerField(
-        default=0, help_text="Number of lines changed"
-    )
-    total_lines = models.IntegerField(
-        default=0, help_text="Total lines in diff output"
-    )
-    has_changes = models.BooleanField(
-        default=False, help_text="Whether any changes were detected"
-    )
-    diff_summary = models.TextField(
-        blank=True, help_text="Summary of major changes"
-    )
+    additions = models.IntegerField(default=0, help_text="Number of lines added")
+    deletions = models.IntegerField(default=0, help_text="Number of lines deleted")
+    changes = models.IntegerField(default=0, help_text="Number of lines changed")
+    total_lines = models.IntegerField(default=0, help_text="Total lines in diff output")
+    has_changes = models.BooleanField(default=False, help_text="Whether any changes were detected")
+    diff_summary = models.TextField(blank=True, help_text="Summary of major changes")
     triggered_by = models.ForeignKey(
         "users.User",
         on_delete=models.SET_NULL,
@@ -567,9 +555,7 @@ class DriftAlert(models.Model):
         default="open",
         help_text="Alert status",
     )
-    message = models.TextField(
-        help_text="Alert message describing the change"
-    )
+    message = models.TextField(help_text="Alert message describing the change")
     detected_at = models.DateTimeField(auto_now_add=True)
     acknowledged_by = models.ForeignKey(
         "users.User",
@@ -578,12 +564,8 @@ class DriftAlert(models.Model):
         blank=True,
         related_name="acknowledged_drift_alerts",
     )
-    acknowledged_at = models.DateTimeField(
-        null=True, blank=True
-    )
-    resolution_notes = models.TextField(
-        blank=True, help_text="Notes about alert resolution"
-    )
+    acknowledged_at = models.DateTimeField(null=True, blank=True)
+    resolution_notes = models.TextField(blank=True, help_text="Notes about alert resolution")
 
     class Meta:
         indexes = [

@@ -1,12 +1,9 @@
 """Tests for configuration drift analysis feature."""
 
 import pytest
-from django.utils import timezone
-from webnet.config_mgmt.models import ConfigSnapshot, ConfigDrift, DriftAlert
+from webnet.config_mgmt.models import ConfigSnapshot, ConfigDrift
 from webnet.config_mgmt.drift_service import DriftService
-from webnet.devices.models import Device, Credential
-from webnet.users.models import User
-from webnet.customers.models import Customer
+from webnet.devices.models import Device
 
 
 @pytest.fixture

@@ -159,9 +159,7 @@ class ConfigDriftSerializer(serializers.ModelSerializer):
     snapshot_from_created = serializers.DateTimeField(
         source="snapshot_from.created_at", read_only=True
     )
-    snapshot_to_created = serializers.DateTimeField(
-        source="snapshot_to.created_at", read_only=True
-    )
+    snapshot_to_created = serializers.DateTimeField(source="snapshot_to.created_at", read_only=True)
     triggered_by_username = serializers.CharField(
         source="triggered_by.username", read_only=True, allow_null=True
     )
@@ -191,9 +189,7 @@ class ConfigDriftSerializer(serializers.ModelSerializer):
 
 
 class DriftAlertSerializer(serializers.ModelSerializer):
-    drift_device_hostname = serializers.CharField(
-        source="drift.device.hostname", read_only=True
-    )
+    drift_device_hostname = serializers.CharField(source="drift.device.hostname", read_only=True)
     acknowledged_by_username = serializers.CharField(
         source="acknowledged_by.username", read_only=True, allow_null=True
     )

@@ -94,6 +94,12 @@
                 </svg>
                 Config Diff
               </a>
+              <a href="/config/drift/timeline" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium transition-colors {% if '/config/drift' in request.path %}bg-accent text-accent-foreground{% else %}hover:bg-accent hover:text-accent-foreground{% endif %}">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                Drift Analysis
+              </a>
             </div>
           </div>
 
@@ -272,6 +278,7 @@
               <div class="space-y-1">
                 <a href="/config/" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium hover:bg-accent">Backups</a>
                 <a href="/config/diff" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium hover:bg-accent">Config Diff</a>
+                <a href="/config/drift/timeline" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium hover:bg-accent">Drift Analysis</a>
               </div>
             </div>
             <div>
