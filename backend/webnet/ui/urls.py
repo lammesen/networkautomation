@@ -34,6 +34,19 @@ from .views import (
     GitSyncView,
     GitTestConnectionView,
     GitSyncLogsView,
+    # Issue #40 - Bulk Device Onboarding
+    BulkOnboardingView,
+    DiscoveryQueueView,
+    DiscoveryQueueActionView,
+    ScanIPRangeView,
+    # Issue #24 - Device Tags and Groups
+    TagListView,
+    TagCreateView,
+    TagDeleteView,
+    DeviceGroupListView,
+    DeviceGroupCreateView,
+    DeviceGroupDetailView,
+    DeviceGroupDeleteView,
 )
 
 urlpatterns = [
@@ -74,4 +87,21 @@ urlpatterns = [
     path("settings/git/<int:pk>/sync", GitSyncView.as_view(), name="git-sync"),
     path("settings/git/<int:pk>/test", GitTestConnectionView.as_view(), name="git-test-connection"),
     path("settings/git/<int:pk>/logs", GitSyncLogsView.as_view(), name="git-sync-logs"),
+    # Issue #40 - Bulk Device Onboarding
+    path("devices/bulk-onboarding/", BulkOnboardingView.as_view(), name="bulk-onboarding"),
+    path("devices/discovery-queue/", DiscoveryQueueView.as_view(), name="discovery-queue"),
+    path(
+        "devices/discovery/<int:pk>/<str:action>",
+        DiscoveryQueueActionView.as_view(),
+        name="discovery-action",
+    ),
+    path("devices/scan-ip-range/", ScanIPRangeView.as_view(), name="scan-ip-range"),
+    # Issue #24 - Device Tags and Groups
+    path("devices/tags/", TagListView.as_view(), name="tags-list"),
+    path("devices/tags/new", TagCreateView.as_view(), name="tags-create"),
+    path("devices/tags/<int:pk>/delete", TagDeleteView.as_view(), name="tags-delete"),
+    path("devices/groups/", DeviceGroupListView.as_view(), name="groups-list"),
+    path("devices/groups/new", DeviceGroupCreateView.as_view(), name="groups-create"),
+    path("devices/groups/<int:pk>/", DeviceGroupDetailView.as_view(), name="groups-detail"),
+    path("devices/groups/<int:pk>/delete", DeviceGroupDeleteView.as_view(), name="groups-delete"),
 ]

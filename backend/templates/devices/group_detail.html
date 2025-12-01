@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}{{ group.name }} - Device Group - webnet{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div>
+      <div class="flex items-center gap-3">
+        <a href="{% url 'groups-list' %}" class="text-muted-foreground hover:text-foreground">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+        </a>
+        <h1 class="text-2xl font-bold tracking-tight">{{ group.name }}</h1>
+        <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium 
+          {% if group.group_type == 'static' %}bg-blue-500/10 text-blue-500
+          {% else %}bg-purple-500/10 text-purple-500{% endif %}">
+          {{ group.get_group_type_display }}
+        </span>
+      </div>
+      <p class="text-muted-foreground mt-1">{{ group.description|default:"No description" }}</p>
+    </div>
+    <div class="flex gap-2">
+      <form hx-post="{% url 'groups-delete' pk=group.id %}" hx-confirm="Delete this group?">
+        {% csrf_token %}
+        <button type="submit" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium ring-offset-background transition-colors border border-red-500/50 text-red-500 hover:bg-red-500/10 h-10 px-4 shadow-sm">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+          Delete Group
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Group Info Card -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+  <div class="rounded-xl border bg-card p-4">
+    <div class="text-sm text-muted-foreground">Total Devices</div>
+    <div class="text-2xl font-bold">{{ device_count }}</div>
+  </div>
+  <div class="rounded-xl border bg-card p-4">
+    <div class="text-sm text-muted-foreground">Customer</div>
+    <div class="text-lg font-semibold">{{ group.customer.name }}</div>
+  </div>
+  <div class="rounded-xl border bg-card p-4">
+    <div class="text-sm text-muted-foreground">Created</div>
+    <div class="text-lg font-semibold">{{ group.created_at|date:"M d, Y" }}</div>
+  </div>
+</div>
+
+{% if group.group_type == 'dynamic' and group.filter_rules %}
+<div class="rounded-xl border bg-card p-4 mb-6">
+  <h2 class="text-lg font-semibold mb-3">Filter Rules</h2>
+  <div class="flex flex-wrap gap-2">
+    {% for key, value in group.filter_rules.items %}
+    <span class="inline-flex items-center rounded-md bg-muted px-2.5 py-1 text-sm">
+      <span class="text-muted-foreground mr-1">{{ key }}:</span>
+      <span class="font-medium">{{ value }}</span>
+    </span>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Devices Table -->
+<div class="rounded-xl border bg-card overflow-hidden">
+  <div class="p-4 border-b flex items-center justify-between">
+    <h2 class="text-lg font-semibold">Group Members</h2>
+    {% if group.group_type == 'dynamic' %}
+    <span class="text-sm text-muted-foreground">Membership is evaluated dynamically based on filter rules</span>
+    {% endif %}
+  </div>
+  <div id="group-devices">
+    {% include "devices/_group_devices.html" %}
+  </div>
+</div>
+{% endblock %}

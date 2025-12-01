@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Device Tags - webnet{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight">Device Tags</h1>
+      <p class="text-muted-foreground mt-1">Organize devices with flexible tagging for automation and compliance</p>
+    </div>
+    <div class="flex gap-2">
+      <a href="{% url 'groups-list' %}" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium ring-offset-background transition-colors border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 shadow-sm">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+        </svg>
+        Device Groups
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- Create Tag Form -->
+<div class="rounded-xl border bg-card overflow-hidden mb-6">
+  <div class="p-4 border-b">
+    <h2 class="text-lg font-semibold">Create New Tag</h2>
+  </div>
+  <form hx-post="{% url 'tags-create' %}" hx-target="#tags-table" class="p-4">
+    {% csrf_token %}
+    <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+      <div>
+        <label class="block text-sm font-medium mb-1">Name</label>
+        <input type="text" name="name" required placeholder="production" class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1">Color</label>
+        <input type="color" name="color" value="#3B82F6" class="h-10 w-full rounded-lg border border-input bg-background p-1">
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1">Category (optional)</label>
+        <input type="text" name="category" placeholder="environment" class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1">Customer</label>
+        <select name="customer" required class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+          {% for customer in customers %}
+          <option value="{{ customer.id }}">{{ customer.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex items-end">
+        <button type="submit" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium ring-offset-background transition-colors bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 shadow-sm w-full">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+          </svg>
+          Create Tag
+        </button>
+      </div>
+    </div>
+    <div class="mt-3">
+      <label class="block text-sm font-medium mb-1">Description (optional)</label>
+      <input type="text" name="description" placeholder="Production environment devices" class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+    </div>
+  </form>
+</div>
+
+<!-- Tags Table -->
+<div class="rounded-xl border bg-card overflow-hidden">
+  <div class="p-4 border-b">
+    <h2 class="text-lg font-semibold">Existing Tags</h2>
+  </div>
+  <div id="tags-table">
+    {% include "devices/_tags_table.html" %}
+  </div>
+</div>
+{% endblock %}

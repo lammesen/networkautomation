@@ -1272,3 +1272,480 @@ class GitSyncLogsView(TenantScopedView):
             return render(request, self.partial_name, {"repository": repo, "sync_logs": logs})
 
         return render(request, self.template_name, {"repository": repo, "sync_logs": logs})
+
+
+# =============================================================================
+# Issue #40 - Bulk Device Onboarding Views
+# =============================================================================
+
+
+class BulkOnboardingView(TenantScopedView):
+    """Main view for bulk device onboarding."""
+
+    template_name = "devices/bulk_onboarding.html"
+
+    def get(self, request):
+        from webnet.devices.models import DiscoveredDevice
+
+        # Get customer's credentials
+        customers = (
+            request.user.customers.all()
+            if getattr(request.user, "role", "viewer") != "admin"
+            else Customer.objects.all()
+        )
+        credentials = Credential.objects.filter(customer__in=customers)
+
+        # Get discovered devices stats
+        discovered_qs = self.filter_by_customer(DiscoveredDevice.objects.all())
+        stats = {
+            "pending": discovered_qs.filter(status=DiscoveredDevice.STATUS_PENDING).count(),
+            "approved": discovered_qs.filter(status=DiscoveredDevice.STATUS_APPROVED).count(),
+            "rejected": discovered_qs.filter(status=DiscoveredDevice.STATUS_REJECTED).count(),
+            "total": discovered_qs.count(),
+        }
+
+        return render(
+            request,
+            self.template_name,
+            {
+                "customers": customers,
+                "credentials": credentials,
+                "stats": stats,
+            },
+        )
+
+
+class DiscoveryQueueView(TenantScopedView):
+    """View for the discovery staging area / queue."""
+
+    template_name = "devices/discovery_queue.html"
+    partial_name = "devices/_discovery_queue_table.html"
+    customer_field = "customer_id"
+
+    def get(self, request):
+        from webnet.devices.models import DiscoveredDevice
+
+        status_filter = request.GET.get("status", "pending")
+
+        qs = DiscoveredDevice.objects.select_related(
+            "customer", "discovered_via_device", "credential_tested"
+        ).order_by("-discovered_at")
+
+        qs = self.filter_by_customer(qs)
+
+        if status_filter and status_filter != "all":
+            qs = qs.filter(status=status_filter)
+
+        # Get credentials for approval
+        customers = (
+            request.user.customers.all()
+            if getattr(request.user, "role", "viewer") != "admin"
+            else Customer.objects.all()
+        )
+        credentials = Credential.objects.filter(customer__in=customers)
+
+        # Get stats
+        all_qs = self.filter_by_customer(DiscoveredDevice.objects.all())
+        stats = {
+            "pending": all_qs.filter(status=DiscoveredDevice.STATUS_PENDING).count(),
+            "approved": all_qs.filter(status=DiscoveredDevice.STATUS_APPROVED).count(),
+            "rejected": all_qs.filter(status=DiscoveredDevice.STATUS_REJECTED).count(),
+            "ignored": all_qs.filter(status=DiscoveredDevice.STATUS_IGNORED).count(),
+            "total": all_qs.count(),
+        }
+
+        context = {
+            "discovered_devices": qs[:200],
+            "credentials": credentials,
+            "stats": stats,
+            "status_filter": status_filter,
+        }
+
+        if request.headers.get("HX-Request"):
+            return render(request, self.partial_name, context)
+        return render(request, self.template_name, context)
+
+
+class DiscoveryQueueActionView(TenantScopedView):
+    """Handle actions on discovered devices (approve/reject/ignore)."""
+
+    partial_name = "devices/_discovery_queue_table.html"
+    allowed_write_roles = {"operator", "admin"}
+
+    def post(self, request, pk, action):
+        from webnet.devices.models import DiscoveredDevice
+
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        device = get_object_or_404(DiscoveredDevice, pk=pk)
+        check = self.ensure_customer_access(device.customer_id)
+        if check:
+            return check
+
+        if action == "approve":
+            credential_id = request.POST.get("credential_id")
+            if not credential_id:
+                return HttpResponseBadRequest("Credential ID required")
+            try:
+                credential = Credential.objects.get(id=credential_id, customer=device.customer)
+            except Credential.DoesNotExist:
+                return HttpResponseBadRequest("Invalid credential")
+
+            vendor = request.POST.get("vendor") or device.vendor
+            platform = request.POST.get("platform") or device.platform
+
+            try:
+                device.approve_and_create_device(
+                    credential=credential,
+                    user=request.user,
+                    vendor=vendor,
+                    platform=platform,
+                )
+            except ValueError as e:
+                return HttpResponseBadRequest(str(e))
+
+        elif action == "reject":
+            notes = request.POST.get("notes", "")
+            device.reject(request.user, notes)
+
+        elif action == "ignore":
+            notes = request.POST.get("notes", "")
+            device.ignore(request.user, notes)
+
+        # Return updated table
+        qs = self.filter_by_customer(
+            DiscoveredDevice.objects.filter(status=DiscoveredDevice.STATUS_PENDING)
+        ).order_by("-discovered_at")[:200]
+
+        return render(request, self.partial_name, {"discovered_devices": qs})
+
+
+class ScanIPRangeView(TenantScopedView):
+    """Start an IP range scan job."""
+
+    partial_name = "devices/_scan_result.html"
+    allowed_write_roles = {"operator", "admin"}
+
+    def post(self, request):
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        ip_ranges = request.POST.get("ip_ranges", "").strip()
+        credential_ids = request.POST.getlist("credential_ids")
+        use_snmp = request.POST.get("use_snmp") == "on"
+        snmp_community = request.POST.get("snmp_community", "public")
+        test_ssh = request.POST.get("test_ssh") == "on"
+
+        if not ip_ranges:
+            return render(request, self.partial_name, {"error": "IP ranges required"})
+
+        if not credential_ids:
+            return render(request, self.partial_name, {"error": "At least one credential required"})
+
+        customer = request.user.customers.first()
+        if not customer:
+            return render(request, self.partial_name, {"error": "No customer access"})
+
+        # Parse IP ranges (comma-separated)
+        ranges = [r.strip() for r in ip_ranges.split(",") if r.strip()]
+
+        # Validate credentials belong to customer
+        valid_cred_ids = list(
+            Credential.objects.filter(id__in=credential_ids, customer=customer).values_list(
+                "id", flat=True
+            )
+        )
+
+        if not valid_cred_ids:
+            return render(request, self.partial_name, {"error": "No valid credentials found"})
+
+        js = JobService()
+        job = js.create_job(
+            job_type="ip_range_scan",
+            user=request.user,
+            customer=customer,
+            target_summary={"ip_ranges": ranges},
+            payload={
+                "ip_ranges": ranges,
+                "credential_ids": valid_cred_ids,
+                "use_snmp": use_snmp,
+                "snmp_community": snmp_community,
+                "test_ssh": test_ssh,
+                "ports": [22],
+            },
+        )
+
+        return render(
+            request,
+            self.partial_name,
+            {"job": job, "message": f"Scan job started for {len(ranges)} IP range(s)"},
+        )
+
+
+# =============================================================================
+# Issue #24 - Device Tags and Groups Views
+# =============================================================================
+
+
+class TagListView(TenantScopedView):
+    """List and manage device tags."""
+
+    template_name = "devices/tags.html"
+    partial_name = "devices/_tags_table.html"
+    customer_field = "customer_id"
+
+    def get(self, request):
+        from webnet.devices.models import Tag
+        from django.db.models import Count
+
+        qs = Tag.objects.annotate(device_count=Count("devices")).order_by("category", "name")
+        qs = self.filter_by_customer(qs)
+
+        # Get customers for new tag form
+        customers = (
+            request.user.customers.all()
+            if getattr(request.user, "role", "viewer") != "admin"
+            else Customer.objects.all()
+        )
+
+        context = {
+            "tags": qs,
+            "customers": customers,
+        }
+
+        if request.headers.get("HX-Request"):
+            return render(request, self.partial_name, context)
+        return render(request, self.template_name, context)
+
+
+class TagCreateView(TenantScopedView):
+    """Create a new tag."""
+
+    partial_name = "devices/_tags_table.html"
+    allowed_write_roles = {"operator", "admin"}
+
+    def post(self, request):
+        from webnet.devices.models import Tag
+
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        name = request.POST.get("name", "").strip()
+        color = request.POST.get("color", "#3B82F6")
+        description = request.POST.get("description", "").strip()
+        category = request.POST.get("category", "").strip() or None
+        customer_id = request.POST.get("customer")
+
+        if not name or not customer_id:
+            return HttpResponseBadRequest("Name and customer required")
+
+        try:
+            customer = Customer.objects.get(pk=customer_id)
+        except Customer.DoesNotExist:
+            return HttpResponseBadRequest("Invalid customer")
+
+        check = self.ensure_customer_access(customer.id)
+        if check:
+            return check
+
+        Tag.objects.create(
+            customer=customer,
+            name=name,
+            color=color,
+            description=description,
+            category=category,
+        )
+
+        # Return updated table
+        from django.db.models import Count
+
+        qs = Tag.objects.annotate(device_count=Count("devices")).order_by("category", "name")
+        qs = self.filter_by_customer(qs)
+
+        return render(request, self.partial_name, {"tags": qs})
+
+
+class TagDeleteView(TenantScopedView):
+    """Delete a tag."""
+
+    partial_name = "devices/_tags_table.html"
+    allowed_write_roles = {"operator", "admin"}
+
+    def post(self, request, pk):
+        from webnet.devices.models import Tag
+
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        tag = get_object_or_404(Tag, pk=pk)
+        check = self.ensure_customer_access(tag.customer_id)
+        if check:
+            return check
+
+        tag.delete()
+
+        # Return updated table
+        from django.db.models import Count
+
+        qs = Tag.objects.annotate(device_count=Count("devices")).order_by("category", "name")
+        qs = self.filter_by_customer(qs)
+
+        return render(request, self.partial_name, {"tags": qs})
+
+
+class DeviceGroupListView(TenantScopedView):
+    """List and manage device groups."""
+
+    template_name = "devices/groups.html"
+    partial_name = "devices/_groups_table.html"
+    customer_field = "customer_id"
+
+    def get(self, request):
+        from webnet.devices.models import DeviceGroup
+
+        qs = DeviceGroup.objects.select_related("customer", "parent").order_by("name")
+        qs = self.filter_by_customer(qs)
+
+        # Add device counts
+        groups_with_counts = []
+        for group in qs:
+            groups_with_counts.append(
+                {
+                    "group": group,
+                    "device_count": group.device_count,
+                }
+            )
+
+        # Get customers for new group form
+        customers = (
+            request.user.customers.all()
+            if getattr(request.user, "role", "viewer") != "admin"
+            else Customer.objects.all()
+        )
+
+        context = {
+            "groups": groups_with_counts,
+            "customers": customers,
+        }
+
+        if request.headers.get("HX-Request"):
+            return render(request, self.partial_name, context)
+        return render(request, self.template_name, context)
+
+
+class DeviceGroupCreateView(TenantScopedView):
+    """Create a new device group."""
+
+    partial_name = "devices/_groups_table.html"
+    allowed_write_roles = {"operator", "admin"}
+
+    def post(self, request):
+        from webnet.devices.models import DeviceGroup
+
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        name = request.POST.get("name", "").strip()
+        description = request.POST.get("description", "").strip()
+        group_type = request.POST.get("group_type", DeviceGroup.TYPE_STATIC)
+        customer_id = request.POST.get("customer")
+        filter_rules = {}
+
+        if not name or not customer_id:
+            return HttpResponseBadRequest("Name and customer required")
+
+        try:
+            customer = Customer.objects.get(pk=customer_id)
+        except Customer.DoesNotExist:
+            return HttpResponseBadRequest("Invalid customer")
+
+        check = self.ensure_customer_access(customer.id)
+        if check:
+            return check
+
+        # Parse filter rules for dynamic groups
+        if group_type == DeviceGroup.TYPE_DYNAMIC:
+            if request.POST.get("filter_vendor"):
+                filter_rules["vendor"] = request.POST.get("filter_vendor")
+            if request.POST.get("filter_platform"):
+                filter_rules["platform"] = request.POST.get("filter_platform")
+            if request.POST.get("filter_site"):
+                filter_rules["site"] = request.POST.get("filter_site")
+            if request.POST.get("filter_role"):
+                filter_rules["role"] = request.POST.get("filter_role")
+
+        DeviceGroup.objects.create(
+            customer=customer,
+            name=name,
+            description=description,
+            group_type=group_type,
+            filter_rules=filter_rules or None,
+        )
+
+        # Return updated table
+        qs = DeviceGroup.objects.select_related("customer", "parent").order_by("name")
+        qs = self.filter_by_customer(qs)
+        groups_with_counts = [{"group": g, "device_count": g.device_count} for g in qs]
+
+        return render(request, self.partial_name, {"groups": groups_with_counts})
+
+
+class DeviceGroupDetailView(TenantScopedView):
+    """View device group details and members."""
+
+    template_name = "devices/group_detail.html"
+    partial_name = "devices/_group_devices.html"
+
+    def get(self, request, pk):
+        from webnet.devices.models import DeviceGroup
+
+        group = get_object_or_404(DeviceGroup.objects.select_related("customer"), pk=pk)
+        check = self.ensure_customer_access(group.customer_id)
+        if check:
+            return check
+
+        devices = group.get_devices()
+
+        context = {
+            "group": group,
+            "devices": devices,
+            "device_count": devices.count(),
+        }
+
+        if request.headers.get("HX-Request"):
+            return render(request, self.partial_name, context)
+        return render(request, self.template_name, context)
+
+
+class DeviceGroupDeleteView(TenantScopedView):
+    """Delete a device group."""
+
+    partial_name = "devices/_groups_table.html"
+    allowed_write_roles = {"operator", "admin"}
+
+    def post(self, request, pk):
+        from webnet.devices.models import DeviceGroup
+
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        group = get_object_or_404(DeviceGroup, pk=pk)
+        check = self.ensure_customer_access(group.customer_id)
+        if check:
+            return check
+
+        group.delete()
+
+        # Return updated table
+        qs = DeviceGroup.objects.select_related("customer", "parent").order_by("name")
+        qs = self.filter_by_customer(qs)
+        groups_with_counts = [{"group": g, "device_count": g.device_count} for g in qs]
+
+        return render(request, self.partial_name, {"groups": groups_with_counts})

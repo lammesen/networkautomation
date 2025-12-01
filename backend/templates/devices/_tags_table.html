@@ -1,0 +1,60 @@
+<table class="w-full">
+  <thead class="border-b">
+    <tr>
+      <th class="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Tag</th>
+      <th class="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Category</th>
+      <th class="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Description</th>
+      <th class="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Devices</th>
+      <th class="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Customer</th>
+      <th class="px-4 py-3 text-right text-sm font-medium text-muted-foreground">Actions</th>
+    </tr>
+  </thead>
+  <tbody class="divide-y">
+    {% for tag in tags %}
+    <tr class="hover:bg-muted/50">
+      <td class="px-4 py-3">
+        <span class="inline-flex items-center gap-2 rounded-md px-2.5 py-1 text-sm font-medium" style="background-color: {{ tag.color }}20; color: {{ tag.color }}">
+          <span class="h-2 w-2 rounded-full" style="background-color: {{ tag.color }}"></span>
+          {{ tag.name }}
+        </span>
+      </td>
+      <td class="px-4 py-3 text-sm text-muted-foreground">
+        {{ tag.category|default:"-" }}
+      </td>
+      <td class="px-4 py-3 text-sm text-muted-foreground">
+        {{ tag.description|default:"-"|truncatechars:50 }}
+      </td>
+      <td class="px-4 py-3">
+        <span class="inline-flex items-center rounded-md bg-muted px-2 py-1 text-xs font-medium">
+          {{ tag.device_count }} device{{ tag.device_count|pluralize }}
+        </span>
+      </td>
+      <td class="px-4 py-3 text-sm text-muted-foreground">
+        {{ tag.customer.name }}
+      </td>
+      <td class="px-4 py-3 text-right">
+        <form hx-post="{% url 'tags-delete' pk=tag.id %}" hx-target="#tags-table" hx-confirm="Delete tag '{{ tag.name }}'? This will remove it from all devices." class="inline">
+          {% csrf_token %}
+          <button type="submit" class="inline-flex items-center justify-center rounded-lg text-sm font-medium h-8 w-8 text-red-500 hover:bg-red-500/10">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
+        </form>
+      </td>
+    </tr>
+    {% empty %}
+    <tr>
+      <td colspan="6" class="px-4 py-12 text-center text-muted-foreground">
+        <div class="flex flex-col items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-muted-foreground/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+          </svg>
+          <p class="text-lg font-medium">No tags yet</p>
+          <p class="text-sm">Create your first tag to start organizing devices</p>
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>

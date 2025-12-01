@@ -255,3 +255,25 @@
   - Sub-issue #7: Added comprehensive tests (22 new tests covering models, API, UI, service)
   - Features: Configurable directory structure (by_customer, by_site, flat), commit messages with job metadata
   - All 74 backend tests passing, lint clean
+
+- 2025-12-01 – Implemented Issue #40 (Bulk Device Onboarding) and Issue #24 (Device Groups and Tagging):
+  **Issue #40 - Bulk Device Onboarding:**
+  - Enhanced DiscoveredDevice model with serial_number, software_version, interfaces_json, discovery_source fields
+  - Created IP range scanning Celery task with SSH port detection and SNMP device discovery
+  - Added SNMP sysDescr parsing for auto-detecting vendor/platform/software version
+  - Created credential testing functionality with Netmiko auto-detection
+  - Built BulkOnboardingViewSet API with scan, test-credential, and test-credentials-bulk endpoints
+  - Created HTMX UI for bulk onboarding (IP range scan form, discovery queue, approve/reject/ignore actions)
+  - Added duplicate detection between Device and DiscoveredDevice tables
+  
+  **Issue #24 - Device Groups and Tagging:**
+  - Created Tag model with customer scoping, color, category, and description fields
+  - Created DeviceGroup model with static (manual) and dynamic (filter-based) membership types
+  - Added device_tags M2M relationship on Device model for tag assignment
+  - Created TagViewSet and DeviceGroupViewSet APIs with CRUD and bulk operations
+  - Built HTMX UI for tag management (create, list, delete) and group management (create, list, detail, delete)
+  - Dynamic groups evaluate filter rules (vendor, platform, site, role, tags) on the fly
+  - Added run-job and create-from-filter actions on device groups
+  
+  - All 96 tests passing (5 pre-existing failures in GitRepository API tests unrelated to these changes)
+  - Lint checks passing (ruff + black)
