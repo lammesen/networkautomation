@@ -380,8 +380,10 @@ export function TopologyMap({ nodes, edges, onRefresh, wsUrl }: TopologyMapProps
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data.type === "device_status_changed" && nodesDataSetRef.current) {
-          const deviceId = String(data.device_id);
+        // Handle device update broadcasts from UpdatesConsumer
+        // Format: {type: "update", entity: "device", action: "updated", id: number, reachability_status: string, ...}
+        if (data.type === "update" && data.entity === "device" && nodesDataSetRef.current) {
+          const deviceId = String(data.id);
           const node = nodes.find((n) => n.id === deviceId);
           if (node) {
             // Update node with new status
@@ -389,7 +391,7 @@ export function TopologyMap({ nodes, edges, onRefresh, wsUrl }: TopologyMapProps
               ...node,
               data: {
                 ...node.data,
-                reachability_status: data.status,
+                reachability_status: data.reachability_status,
               },
             };
             nodesDataSetRef.current.update({
@@ -401,6 +403,11 @@ export function TopologyMap({ nodes, edges, onRefresh, wsUrl }: TopologyMapProps
             });
           }
         }
+        // Handle topology link updates (new/removed connections)
+        if (data.type === "update" && data.entity === "topology") {
+          // Trigger a refresh when topology changes
+          onRefresh?.();
+        }
       } catch (e) {
         console.error("Failed to parse WebSocket message:", e);
       }
@@ -409,7 +416,7 @@ export function TopologyMap({ nodes, edges, onRefresh, wsUrl }: TopologyMapProps
     return () => {
       ws.close();
     };
-  }, [wsUrl, nodes]);
+  }, [wsUrl, nodes, onRefresh]);
 
   return (
     <div className="relative h-full w-full">

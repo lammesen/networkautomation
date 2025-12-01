@@ -875,10 +875,12 @@ class TopologyListView(TenantScopedView):
                         },
                     }
                 )
+            # Use wss:// for secure connections, ws:// otherwise
+            ws_scheme = "wss" if request.is_secure() else "ws"
             topology_map_props = {
                 "nodes": list(nodes.values()),
                 "edges": edges,
-                "wsUrl": f"ws://{request.get_host()}/ws/updates/",
+                "wsUrl": f"{ws_scheme}://{request.get_host()}/ws/updates/",
             }
             context["topology_map_props"] = json.dumps(topology_map_props)
 
