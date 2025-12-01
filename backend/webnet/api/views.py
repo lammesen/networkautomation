@@ -38,7 +38,12 @@ from webnet.devices.models import (
 from webnet.jobs.models import Job, JobLog
 from webnet.jobs.services import JobService
 from webnet.config_mgmt.models import ConfigSnapshot, ConfigTemplate
-from webnet.compliance.models import CompliancePolicy, ComplianceResult
+from webnet.compliance.models import (
+    CompliancePolicy,
+    ComplianceResult,
+    RemediationRule,
+    RemediationAction,
+)
 
 from .serializers import (
     UserSerializer,
@@ -53,6 +58,8 @@ from .serializers import (
     ConfigSnapshotSerializer,
     CompliancePolicySerializer,
     ComplianceResultSerializer,
+    RemediationRuleSerializer,
+    RemediationActionSerializer,
     TopologyLinkSerializer,
     DiscoveredDeviceSerializer,
     DiscoveredDeviceApproveSerializer,
@@ -758,6 +765,40 @@ class ComplianceResultViewSet(CustomerScopedQuerysetMixin, viewsets.ReadOnlyMode
     serializer_class = ComplianceResultSerializer
     permission_classes = [IsAuthenticated, RolePermission, ObjectCustomerPermission]
     customer_field = ("policy__customer_id", "device__customer_id", "job__customer_id")
+
+
+class RemediationRuleViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
+    queryset = RemediationRule.objects.select_related("policy", "created_by")
+    serializer_class = RemediationRuleSerializer
+    permission_classes = [IsAuthenticated, RolePermission, ObjectCustomerPermission]
+    customer_field = "policy__customer_id"
+
+    @action(detail=True, methods=["post"])
+    def enable(self, request, pk=None):
+        """Enable a remediation rule."""
+        rule = self.get_object()
+        rule.enabled = True
+        rule.save(update_fields=["enabled"])
+        return Response({"status": "enabled"}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"])
+    def disable(self, request, pk=None):
+        """Disable a remediation rule."""
+        rule = self.get_object()
+        rule.enabled = False
+        rule.save(update_fields=["enabled"])
+        return Response({"status": "disabled"}, status=status.HTTP_200_OK)
+
+
+class RemediationActionViewSet(CustomerScopedQuerysetMixin, viewsets.ReadOnlyModelViewSet):
+    queryset = RemediationAction.objects.select_related("rule", "device", "compliance_result")
+    serializer_class = RemediationActionSerializer
+    permission_classes = [IsAuthenticated, RolePermission, ObjectCustomerPermission]
+    customer_field = (
+        "rule__policy__customer_id",
+        "device__customer_id",
+        "compliance_result__policy__customer_id",
+    )
 
 
 class TopologyLinkViewSet(CustomerScopedQuerysetMixin, viewsets.ReadOnlyModelViewSet):

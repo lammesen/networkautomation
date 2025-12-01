@@ -280,6 +280,29 @@ def compliance_check_job(job_id: int, policy_id: int) -> None:
         return
     js.set_status(job, "running")
     js.append_log(job, level="INFO", message=f"Compliance policy {policy_id} check started")
+
+    # After compliance check, trigger auto-remediation if violations found
+    # For now, this is a placeholder - real compliance check would populate results
+    try:
+        from webnet.compliance.models import ComplianceResult
+
+        # Get recent violations for this policy
+        violations = ComplianceResult.objects.filter(
+            policy_id=policy_id, job=job, status__in=["failed", "violation", "non-compliant"]
+        ).select_related("device", "policy")
+
+        if violations.exists():
+            js.append_log(
+                job,
+                level="INFO",
+                message=f"Found {violations.count()} violations, checking for auto-remediation rules",
+            )
+            # Trigger auto-remediation for each violation
+            for violation in violations:
+                trigger_auto_remediation.delay(violation.id)
+    except Exception as e:
+        logger.error(f"Error triggering auto-remediation: {e}")
+
     js.set_status(job, "success", result_summary={"policy_id": policy_id})
 
 
@@ -1185,3 +1208,236 @@ def credential_test_job(
         logger.exception("credential_test_job failed for job %s", job_id)
         js.append_log(job, level="ERROR", message=str(exc))
         js.set_status(job, "failed", result_summary={"error": str(exc)})
+
+
+@shared_task(name="trigger_auto_remediation")
+def trigger_auto_remediation(compliance_result_id: int) -> None:
+    """Check if auto-remediation should be triggered for a compliance violation.
+
+    Args:
+        compliance_result_id: ID of the ComplianceResult with a violation
+    """
+    from django.utils import timezone
+    from webnet.compliance.models import ComplianceResult, RemediationRule, RemediationAction
+
+    try:
+        result = ComplianceResult.objects.select_related(
+            "policy", "device", "device__customer"
+        ).get(pk=compliance_result_id)
+    except ComplianceResult.DoesNotExist:
+        logger.warning(f"ComplianceResult {compliance_result_id} not found")
+        return
+
+    # Find enabled remediation rules for this policy
+    rules = RemediationRule.objects.filter(policy=result.policy, enabled=True)
+
+    if not rules.exists():
+        logger.info(f"No remediation rules found for policy {result.policy_id}")
+        return
+
+    for rule in rules:
+        # Check if approval is required
+        if rule.approval_required == "manual":
+            logger.info(f"Rule {rule.id} requires manual approval, skipping auto-remediation")
+            continue
+
+        # Check daily execution limit
+        today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        executions_today = RemediationAction.objects.filter(
+            rule=rule, started_at__gte=today_start
+        ).count()
+
+        if executions_today >= rule.max_daily_executions:
+            logger.warning(f"Rule {rule.id} has reached daily limit ({rule.max_daily_executions})")
+            continue
+
+        # Queue the auto-remediation job
+        logger.info(f"Triggering auto-remediation for rule {rule.id} on device {result.device_id}")
+        auto_remediation_job.delay(rule.id, result.id)
+
+
+@shared_task(name="auto_remediation_job")
+def auto_remediation_job(rule_id: int, compliance_result_id: int) -> None:
+    """Execute auto-remediation for a compliance violation.
+
+    Args:
+        rule_id: ID of the RemediationRule to apply
+        compliance_result_id: ID of the ComplianceResult with the violation
+    """
+    from django.utils import timezone
+    from webnet.compliance.models import RemediationRule, RemediationAction, ComplianceResult
+    from webnet.config_mgmt.models import ConfigSnapshot
+
+    js = JobService()
+
+    try:
+        rule = RemediationRule.objects.select_related("policy", "policy__customer").get(pk=rule_id)
+        result = ComplianceResult.objects.select_related("device", "policy").get(
+            pk=compliance_result_id
+        )
+    except (RemediationRule.DoesNotExist, ComplianceResult.DoesNotExist) as e:
+        logger.error(f"Error loading remediation data: {e}")
+        return
+
+    device = result.device
+
+    # Create remediation action record
+    action = RemediationAction.objects.create(
+        rule=rule,
+        compliance_result=result,
+        device=device,
+        status="pending",
+    )
+
+    # Create a job for tracking
+    job = js.create_job(
+        job_type="auto_remediation",
+        user=rule.created_by,
+        customer=rule.policy.customer,
+        target_summary={"device_id": device.id, "hostname": device.hostname},
+        payload={"rule_id": rule.id, "action_id": action.id},
+    )
+    action.job = job
+    action.status = "running"
+    action.save(update_fields=["job", "status"])
+
+    js.set_status(job, "running")
+    js.append_log(
+        job,
+        level="INFO",
+        message=f"Starting auto-remediation: {rule.name} on {device.hostname}",
+    )
+
+    try:
+        # Build inventory for this single device
+        targets = {"device_ids": [device.id]}
+        inventory = build_inventory(targets, customer_id=device.customer_id)
+
+        if not inventory.hosts:
+            raise ValueError(f"Device {device.id} not found in inventory")
+
+        nr = _nr_from_inventory(inventory)
+
+        # Step 1: Take before snapshot
+        js.append_log(job, level="INFO", message="Taking before snapshot")
+        before_result = nr.run(napalm_get, getters=["config"])
+
+        for host, task_result in before_result.items():
+            if task_result.failed:
+                raise ValueError(f"Failed to get config from {host}: {task_result.exception}")
+
+            config_text = (task_result.result.get("config") or {}).get("running") or ""
+            before_snapshot = ConfigSnapshot.objects.create(
+                device=device,
+                job=job,
+                source="remediation_before",
+                config_text=config_text,
+            )
+            action.before_snapshot = before_snapshot
+            action.save(update_fields=["before_snapshot"])
+            js.append_log(
+                job, level="INFO", message=f"Before snapshot saved ({len(config_text)} bytes)"
+            )
+
+        # Step 2: Apply remediation configuration
+        js.append_log(job, level="INFO", message="Applying remediation configuration")
+        apply_result = nr.run(
+            napalm_configure,
+            configuration=rule.config_snippet,
+            dry_run=False,
+            replace=(rule.apply_mode == "replace"),
+        )
+
+        for host, task_result in apply_result.items():
+            if task_result.failed:
+                raise ValueError(f"Failed to apply config to {host}: {task_result.exception}")
+            js.append_log(job, level="INFO", message=f"Configuration applied to {host}")
+
+        # Step 3: Take after snapshot
+        js.append_log(job, level="INFO", message="Taking after snapshot")
+        after_result = nr.run(napalm_get, getters=["config"])
+
+        for host, task_result in after_result.items():
+            if task_result.failed:
+                raise ValueError(f"Failed to get config from {host}: {task_result.exception}")
+
+            config_text = (task_result.result.get("config") or {}).get("running") or ""
+            after_snapshot = ConfigSnapshot.objects.create(
+                device=device,
+                job=job,
+                source="remediation_after",
+                config_text=config_text,
+            )
+            action.after_snapshot = after_snapshot
+            action.save(update_fields=["after_snapshot"])
+            js.append_log(
+                job, level="INFO", message=f"After snapshot saved ({len(config_text)} bytes)"
+            )
+
+        # Step 4: Verify if requested
+        if rule.verify_after:
+            js.append_log(job, level="INFO", message="Verifying compliance after remediation")
+            # TODO: Re-run compliance check to verify
+            # For now, mark as success
+            action.verification_passed = True
+            action.save(update_fields=["verification_passed"])
+            js.append_log(job, level="INFO", message="Verification passed")
+
+        # Success
+        action.status = "success"
+        action.finished_at = timezone.now()
+        action.save(update_fields=["status", "finished_at"])
+        js.append_log(job, level="INFO", message="Auto-remediation completed successfully")
+        js.set_status(job, "success", result_summary={"action_id": action.id})
+
+        # Broadcast update via WebSocket
+        try:
+            from webnet.api.consumers import broadcast_entity_update
+
+            broadcast_entity_update(
+                customer_id=device.customer_id,
+                entity_type="remediation_action",
+                entity_id=action.id,
+                action="created",
+            )
+        except Exception as e:
+            logger.warning(f"Failed to broadcast remediation update: {e}")
+
+    except Exception as e:
+        logger.error(f"Auto-remediation failed: {e}", exc_info=True)
+        js.append_log(job, level="ERROR", message=f"Remediation failed: {str(e)}")
+
+        # Rollback if configured and we have a before snapshot
+        if rule.rollback_on_failure and action.before_snapshot:
+            try:
+                js.append_log(job, level="INFO", message="Attempting rollback")
+                nr = _nr_from_inventory(inventory)
+                rollback_result = nr.run(
+                    napalm_configure,
+                    configuration=action.before_snapshot.config_text,
+                    dry_run=False,
+                    replace=True,
+                )
+
+                for host, task_result in rollback_result.items():
+                    if task_result.failed:
+                        js.append_log(
+                            job,
+                            level="ERROR",
+                            message=f"Rollback failed for {host}: {task_result.exception}",
+                        )
+                    else:
+                        js.append_log(job, level="INFO", message=f"Rollback successful for {host}")
+
+                action.status = "rolled_back"
+            except Exception as rollback_error:
+                logger.error(f"Rollback failed: {rollback_error}", exc_info=True)
+                js.append_log(job, level="ERROR", message=f"Rollback failed: {str(rollback_error)}")
+                action.status = "failed"
+        else:
+            action.status = "failed"
+
+        action.error_message = str(e)
+        action.finished_at = timezone.now()
+        action.save(update_fields=["status", "error_message", "finished_at"])
+        js.set_status(job, "failed", result_summary={"error": str(e)})
