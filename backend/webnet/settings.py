@@ -150,6 +150,7 @@ AUTHENTICATION_BACKENDS = [
 ]
 
 # Load LDAP configuration if enabled
+# Import after BASE_DIR and env() are defined (E402 is expected here)
 from webnet.ldap_config import LDAP_ENABLED, LDAP_CONFIG  # noqa: E402
 
 if LDAP_ENABLED:

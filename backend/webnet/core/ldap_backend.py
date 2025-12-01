@@ -21,7 +21,8 @@ class WebnetLDAPBackend(LDAPBackend):
         if user is None:
             return None
 
-        # Import here to avoid circular imports
+        # Import LDAP_CONFIG here to avoid circular import issues
+        # (webnet.settings imports this module, which would import ldap_config)
         from webnet.ldap_config import LDAP_CONFIG
 
         # Get user's LDAP group DNs - safely handle missing group configuration

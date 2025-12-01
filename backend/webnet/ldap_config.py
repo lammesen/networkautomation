@@ -163,7 +163,7 @@ if LDAP_ENABLED:
     }
 
     # Add optional configurations
-    if ldap_user_dn_template:
+    if ldap_user_dn_template:  # Variable defined at line 83
         LDAP_CONFIG["AUTH_LDAP_USER_DN_TEMPLATE"] = ldap_user_dn_template
 
     if AUTH_LDAP_GROUP_SEARCH_BASE:
