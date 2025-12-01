@@ -28,7 +28,7 @@ class WebnetLDAPBackend(LDAPBackend):
         # Get user's LDAP group DNs - safely handle missing group configuration
         try:
             user_groups = ldap_user.group_dns
-        except Exception:
+        except (AttributeError, KeyError):
             # If group queries fail or aren't configured, use empty list
             user_groups = []
 
@@ -36,7 +36,6 @@ class WebnetLDAPBackend(LDAPBackend):
         # Priority: admin > operator > viewer
         role = "viewer"  # Default role
 
-        viewer_groups = LDAP_CONFIG.get("VIEWER_GROUPS", [])
         operator_groups = LDAP_CONFIG.get("OPERATOR_GROUPS", [])
         admin_groups = LDAP_CONFIG.get("ADMIN_GROUPS", [])
 
@@ -47,8 +46,6 @@ class WebnetLDAPBackend(LDAPBackend):
                 break  # Admin is highest priority
             elif group_dn in operator_groups:
                 role = "operator"  # May be overridden by admin
-            elif group_dn in viewer_groups and role == "viewer":
-                role = "viewer"
 
         # Update user role if changed
         if user.role != role:
@@ -65,7 +62,7 @@ class WebnetLDAPBackend(LDAPBackend):
                 if customer_value and len(customer_value) > 0:
                     customer_identifier = customer_value[0]
                     self._assign_customer(user, customer_identifier)
-            except Exception as e:
+            except (KeyError, IndexError, AttributeError) as e:
                 logger.warning(f"Failed to assign customer from LDAP: {e}")
 
         return user

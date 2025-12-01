@@ -207,11 +207,18 @@ LDAP_START_TLS=true
 
 ### Certificate Validation
 
-In production, never disable certificate validation:
+In production, always validate certificates:
+
+```bash
+# Production: Always validate certificates
+LDAP_IGNORE_CERT_ERRORS=false
+```
+
+For development/testing only, you can disable validation:
 
 ```bash
 # Development only - never use in production!
-LDAP_IGNORE_CERT_ERRORS=false
+LDAP_IGNORE_CERT_ERRORS=true
 ```
 
 If you have custom certificates, ensure they are trusted by the system running webnet.

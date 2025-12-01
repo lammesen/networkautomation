@@ -47,6 +47,10 @@ if LDAP_ENABLED:
 
     # Certificate validation
     if env_bool("LDAP_IGNORE_CERT_ERRORS", False):
+        logger.warning(
+            "LDAP certificate validation is disabled via LDAP_IGNORE_CERT_ERRORS - "
+            "this is insecure and should not be used in production!"
+        )
         AUTH_LDAP_CONNECTION_OPTIONS[ldap.OPT_X_TLS_REQUIRE_CERT] = ldap.OPT_X_TLS_NEVER
     else:
         AUTH_LDAP_CONNECTION_OPTIONS[ldap.OPT_X_TLS_REQUIRE_CERT] = ldap.OPT_X_TLS_DEMAND
@@ -160,6 +164,7 @@ if LDAP_ENABLED:
         "VIEWER_GROUPS": viewer_groups,
         "OPERATOR_GROUPS": operator_groups,
         "ADMIN_GROUPS": admin_groups,
+        "LDAP_ATTR_CUSTOMER": env("LDAP_ATTR_CUSTOMER", ""),
     }
 
     # Add optional configurations
