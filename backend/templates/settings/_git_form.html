@@ -1,0 +1,128 @@
+{% if success %}
+<div class="mb-4 rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-950">
+  <p class="text-sm text-green-700 dark:text-green-300">Settings saved successfully.</p>
+</div>
+{% endif %}
+
+<div class="space-y-4">
+  <div>
+    <label for="id_customer" class="block text-sm font-medium">Customer</label>
+    {{ form.customer }}
+    {% if form.customer.errors %}
+      <p class="mt-1 text-sm text-red-600">{{ form.customer.errors.0 }}</p>
+    {% endif %}
+  </div>
+
+  <div>
+    <label for="id_name" class="block text-sm font-medium">Repository Name</label>
+    <input type="text" name="name" id="id_name" value="{{ form.name.value|default:'' }}"
+           class="mt-1 block w-full rounded-md border bg-background px-3 py-2 text-sm"
+           placeholder="My Config Backup Repo">
+    {% if form.name.errors %}
+      <p class="mt-1 text-sm text-red-600">{{ form.name.errors.0 }}</p>
+    {% endif %}
+  </div>
+
+  <div>
+    <label for="id_remote_url" class="block text-sm font-medium">Remote URL</label>
+    <input type="text" name="remote_url" id="id_remote_url" value="{{ form.remote_url.value|default:'' }}"
+           class="mt-1 block w-full rounded-md border bg-background px-3 py-2 text-sm font-mono"
+           placeholder="https://github.com/org/repo.git or git@github.com:org/repo.git">
+    <p class="mt-1 text-xs text-muted-foreground">HTTPS or SSH format</p>
+    {% if form.remote_url.errors %}
+      <p class="mt-1 text-sm text-red-600">{{ form.remote_url.errors.0 }}</p>
+    {% endif %}
+  </div>
+
+  <div>
+    <label for="id_branch" class="block text-sm font-medium">Branch</label>
+    <input type="text" name="branch" id="id_branch" value="{{ form.branch.value|default:'main' }}"
+           class="mt-1 block w-full rounded-md border bg-background px-3 py-2 text-sm"
+           placeholder="main">
+    {% if form.branch.errors %}
+      <p class="mt-1 text-sm text-red-600">{{ form.branch.errors.0 }}</p>
+    {% endif %}
+  </div>
+
+  <div>
+    <label for="id_auth_type" class="block text-sm font-medium">Authentication Type</label>
+    <select name="auth_type" id="id_auth_type"
+            class="mt-1 block w-full rounded-md border bg-background px-3 py-2 text-sm">
+      <option value="token" {% if form.auth_type.value == 'token' %}selected{% endif %}>Access Token (HTTPS)</option>
+      <option value="ssh_key" {% if form.auth_type.value == 'ssh_key' %}selected{% endif %}>SSH Key</option>
+    </select>
+    {% if form.auth_type.errors %}
+      <p class="mt-1 text-sm text-red-600">{{ form.auth_type.errors.0 }}</p>
+    {% endif %}
+  </div>
+
+  <div id="token-field">
+    <label for="id_auth_token" class="block text-sm font-medium">Access Token</label>
+    <input type="password" name="auth_token" id="id_auth_token"
+           class="mt-1 block w-full rounded-md border bg-background px-3 py-2 text-sm"
+           placeholder="{% if repository and repository.pk %}Leave blank to keep existing{% else %}Enter access token{% endif %}">
+    <p class="mt-1 text-xs text-muted-foreground">
+      {% if repository and repository.has_auth_token %}
+        Token is configured. Leave blank to keep existing.
+      {% else %}
+        GitHub: Personal Access Token, GitLab: Project/Personal Token
+      {% endif %}
+    </p>
+    {% if form.auth_token.errors %}
+      <p class="mt-1 text-sm text-red-600">{{ form.auth_token.errors.0 }}</p>
+    {% endif %}
+  </div>
+
+  <div id="ssh-key-field" style="display: none;">
+    <label for="id_ssh_private_key" class="block text-sm font-medium">SSH Private Key</label>
+    <textarea name="ssh_private_key" id="id_ssh_private_key" rows="4"
+              class="mt-1 block w-full rounded-md border bg-background px-3 py-2 text-sm font-mono"
+              placeholder="{% if repository and repository.pk %}Leave blank to keep existing{% else %}-----BEGIN OPENSSH PRIVATE KEY-----{% endif %}"></textarea>
+    <p class="mt-1 text-xs text-muted-foreground">
+      {% if repository and repository.has_ssh_key %}
+        SSH key is configured. Leave blank to keep existing.
+      {% else %}
+        Private key for SSH authentication (keep secret!)
+      {% endif %}
+    </p>
+    {% if form.ssh_private_key.errors %}
+      <p class="mt-1 text-sm text-red-600">{{ form.ssh_private_key.errors.0 }}</p>
+    {% endif %}
+  </div>
+
+  <div>
+    <label for="id_path_structure" class="block text-sm font-medium">Directory Structure</label>
+    <select name="path_structure" id="id_path_structure"
+            class="mt-1 block w-full rounded-md border bg-background px-3 py-2 text-sm">
+      <option value="by_customer" {% if form.path_structure.value == 'by_customer' %}selected{% endif %}>By Customer: /{customer}/{device}/config.txt</option>
+      <option value="by_site" {% if form.path_structure.value == 'by_site' %}selected{% endif %}>By Site: /{site}/{device}/config.txt</option>
+      <option value="flat" {% if form.path_structure.value == 'flat' %}selected{% endif %}>Flat: /{device}.txt</option>
+    </select>
+    {% if form.path_structure.errors %}
+      <p class="mt-1 text-sm text-red-600">{{ form.path_structure.errors.0 }}</p>
+    {% endif %}
+  </div>
+
+  <div class="flex items-center gap-2">
+    <input type="checkbox" name="enabled" id="id_enabled" {% if form.enabled.value %}checked{% endif %}
+           class="h-4 w-4 rounded border-gray-300">
+    <label for="id_enabled" class="text-sm font-medium">Enable automatic sync after backups</label>
+  </div>
+</div>
+
+<script>
+  // Toggle auth fields based on auth type
+  document.getElementById('id_auth_type').addEventListener('change', function() {
+    const tokenField = document.getElementById('token-field');
+    const sshField = document.getElementById('ssh-key-field');
+    if (this.value === 'token') {
+      tokenField.style.display = 'block';
+      sshField.style.display = 'none';
+    } else {
+      tokenField.style.display = 'none';
+      sshField.style.display = 'block';
+    }
+  });
+  // Initial state
+  document.getElementById('id_auth_type').dispatchEvent(new Event('change'));
+</script>

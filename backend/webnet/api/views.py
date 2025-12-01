@@ -27,7 +27,7 @@ from webnet.customers.models import Customer, CustomerIPRange
 from webnet.devices.models import Device, Credential, TopologyLink
 from webnet.jobs.models import Job, JobLog
 from webnet.jobs.services import JobService
-from webnet.config_mgmt.models import ConfigSnapshot
+from webnet.config_mgmt.models import ConfigSnapshot, GitRepository, GitSyncLog
 from webnet.compliance.models import CompliancePolicy, ComplianceResult
 
 from .serializers import (
@@ -44,6 +44,8 @@ from .serializers import (
     CompliancePolicySerializer,
     ComplianceResultSerializer,
     TopologyLinkSerializer,
+    GitRepositorySerializer,
+    GitSyncLogSerializer,
 )
 from .permissions import (
     RolePermission,
@@ -774,3 +776,87 @@ class TopologyLinkViewSet(CustomerScopedQuerysetMixin, viewsets.ReadOnlyModelVie
                 }
             )
         return Response({"nodes": list(nodes.values()), "edges": edges})
+
+
+class GitRepositoryViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
+    """ViewSet for Git repository configuration.
+
+    Provides CRUD operations and additional actions for:
+    - Testing repository connection
+    - Triggering manual sync
+    - Viewing sync history
+    """
+
+    queryset = GitRepository.objects.select_related("customer")
+    serializer_class = GitRepositorySerializer
+    permission_classes = [IsAuthenticated, RolePermission, ObjectCustomerPermission]
+
+    @action(detail=True, methods=["post"], url_path="test-connection")
+    def test_connection(self, request, pk=None):
+        """Test the Git repository connection."""
+        repository = self.get_object()
+
+        from webnet.config_mgmt.git_service import GitService
+
+        service = GitService(repository)
+        result = service.test_connection()
+
+        return Response(
+            {
+                "success": result.success,
+                "message": result.message,
+                "error": result.error,
+            },
+            status=status.HTTP_200_OK if result.success else status.HTTP_400_BAD_REQUEST,
+        )
+
+    @action(detail=True, methods=["post"])
+    def sync(self, request, pk=None):
+        """Trigger a manual sync of unsynced config snapshots."""
+        repository = self.get_object()
+
+        if not repository.enabled:
+            return Response(
+                {"detail": "Git sync is disabled for this repository"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from webnet.jobs.tasks import git_sync_job
+
+        # Queue async sync task
+        git_sync_job.delay(repository.customer_id)
+
+        return Response(
+            {"detail": "Git sync queued", "customer_id": repository.customer_id},
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+    @action(detail=True, methods=["get"])
+    def logs(self, request, pk=None):
+        """Get sync logs for this repository."""
+        repository = self.get_object()
+        limit = int(request.query_params.get("limit", 20))
+        logs = GitSyncLog.objects.filter(repository=repository).order_by("-started_at")[:limit]
+        return Response(GitSyncLogSerializer(logs, many=True).data)
+
+    @action(detail=True, methods=["get"])
+    def commits(self, request, pk=None):
+        """Get recent commits from the Git repository."""
+        repository = self.get_object()
+        limit = int(request.query_params.get("limit", 10))
+
+        from webnet.config_mgmt.git_service import GitService
+
+        service = GitService(repository)
+        commits = service.get_recent_commits(limit=limit)
+
+        return Response(commits)
+
+
+class GitSyncLogViewSet(CustomerScopedQuerysetMixin, viewsets.ReadOnlyModelViewSet):
+    """ViewSet for Git sync logs (read-only)."""
+
+    queryset = GitSyncLog.objects.select_related("repository", "repository__customer", "job")
+    serializer_class = GitSyncLogSerializer
+    permission_classes = [IsAuthenticated, RolePermission]
+    customer_field = "repository__customer_id"

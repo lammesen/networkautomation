@@ -105,7 +105,8 @@ def test_config_backup_job_creates_snapshot(monkeypatch):
     )
     monkeypatch.setattr(tasks, "_nr_from_inventory", lambda inv: _DummyNornir(inv.hosts.keys()))
 
-    tasks.config_backup_job(job.id, {"filters": {}}, source_label="manual")
+    # Disable auto git sync for this test (no Redis available)
+    tasks.config_backup_job(job.id, {"filters": {}}, source_label="manual", auto_git_sync=False)
 
     job.refresh_from_db()
     assert job.status == "success"

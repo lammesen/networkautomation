@@ -15,6 +15,8 @@ router.register(r"jobs/admin", views.JobAdminViewSet, basename="job-admin")
 router.register(r"compliance/policies", views.CompliancePolicyViewSet, basename="compliance-policy")
 router.register(r"compliance/results", views.ComplianceResultViewSet, basename="compliance-result")
 router.register(r"topology/links", views.TopologyLinkViewSet, basename="topology-link")
+router.register(r"git/repositories", views.GitRepositoryViewSet, basename="git-repository")
+router.register(r"git/sync-logs", views.GitSyncLogViewSet, basename="git-sync-log")
 
 urlpatterns = [
     path("auth/login", views.AuthViewSet.as_view({"post": "login"})),
