@@ -5,7 +5,7 @@ from webnet.users.models import User, APIKey
 from webnet.customers.models import Customer, CustomerIPRange
 from webnet.devices.models import Device, Credential, TopologyLink
 from webnet.jobs.models import Job, JobLog
-from webnet.config_mgmt.models import ConfigSnapshot
+from webnet.config_mgmt.models import ConfigSnapshot, GitRepository, GitSyncLog
 from webnet.compliance.models import CompliancePolicy, ComplianceResult
 
 
@@ -192,3 +192,103 @@ class TopologyLinkSerializer(serializers.ModelSerializer):
             "job_id",
         ]
         read_only_fields = ["discovered_at", "job_id"]
+
+
+class GitRepositorySerializer(serializers.ModelSerializer):
+    """Serializer for Git repository configuration.
+
+    Write-only fields for sensitive auth credentials.
+    """
+
+    auth_token = serializers.CharField(
+        write_only=True, allow_null=True, required=False, allow_blank=True
+    )
+    ssh_private_key = serializers.CharField(
+        write_only=True, allow_null=True, required=False, allow_blank=True
+    )
+    has_auth_token = serializers.SerializerMethodField()
+    has_ssh_key = serializers.SerializerMethodField()
+
+    class Meta:
+        model = GitRepository
+        fields = [
+            "id",
+            "customer",
+            "name",
+            "remote_url",
+            "branch",
+            "auth_type",
+            "auth_token",
+            "ssh_private_key",
+            "has_auth_token",
+            "has_ssh_key",
+            "path_structure",
+            "enabled",
+            "last_sync_at",
+            "last_sync_status",
+            "last_sync_message",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "last_sync_at",
+            "last_sync_status",
+            "last_sync_message",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_has_auth_token(self, obj: GitRepository) -> bool:
+        """Check if auth token is configured (without exposing it)."""
+        return bool(obj._auth_token)
+
+    def get_has_ssh_key(self, obj: GitRepository) -> bool:
+        """Check if SSH key is configured (without exposing it)."""
+        return bool(obj._ssh_private_key)
+
+    def create(self, validated_data: dict) -> GitRepository:
+        auth_token = validated_data.pop("auth_token", None)
+        ssh_private_key = validated_data.pop("ssh_private_key", None)
+
+        repository = GitRepository(**validated_data)
+        if auth_token:
+            repository.auth_token = auth_token
+        if ssh_private_key:
+            repository.ssh_private_key = ssh_private_key
+        repository.save()
+        return repository
+
+    def update(self, instance: GitRepository, validated_data: dict) -> GitRepository:
+        auth_token = validated_data.pop("auth_token", None)
+        ssh_private_key = validated_data.pop("ssh_private_key", None)
+
+        for key, value in validated_data.items():
+            setattr(instance, key, value)
+
+        # Only update credentials if provided (allows partial updates)
+        if auth_token:
+            instance.auth_token = auth_token
+        if ssh_private_key:
+            instance.ssh_private_key = ssh_private_key
+
+        instance.save()
+        return instance
+
+
+class GitSyncLogSerializer(serializers.ModelSerializer):
+    """Serializer for Git sync logs."""
+
+    class Meta:
+        model = GitSyncLog
+        fields = [
+            "id",
+            "repository",
+            "job",
+            "status",
+            "commit_hash",
+            "files_synced",
+            "message",
+            "started_at",
+            "finished_at",
+        ]
+        read_only_fields = fields  # All fields are read-only

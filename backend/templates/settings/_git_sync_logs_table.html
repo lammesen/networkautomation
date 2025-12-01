@@ -1,0 +1,74 @@
+{% if sync_logs %}
+<table class="w-full">
+  <thead>
+    <tr class="border-b bg-muted/50">
+      <th class="px-4 py-3 text-left text-sm font-medium">Status</th>
+      <th class="px-4 py-3 text-left text-sm font-medium">Started</th>
+      <th class="px-4 py-3 text-left text-sm font-medium">Finished</th>
+      <th class="px-4 py-3 text-left text-sm font-medium">Commit</th>
+      <th class="px-4 py-3 text-left text-sm font-medium">Files</th>
+      <th class="px-4 py-3 text-left text-sm font-medium">Job</th>
+      <th class="px-4 py-3 text-left text-sm font-medium">Message</th>
+    </tr>
+  </thead>
+  <tbody class="divide-y">
+    {% for log in sync_logs %}
+    <tr class="hover:bg-muted/50">
+      <td class="px-4 py-3 text-sm">
+        {% if log.status == 'success' %}
+          <span class="inline-flex items-center rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-700 dark:bg-green-900 dark:text-green-300">
+            Success
+          </span>
+        {% elif log.status == 'failed' %}
+          <span class="inline-flex items-center rounded-full bg-red-100 px-2 py-1 text-xs font-medium text-red-700 dark:bg-red-900 dark:text-red-300">
+            Failed
+          </span>
+        {% elif log.status == 'running' %}
+          <span class="inline-flex items-center rounded-full bg-yellow-100 px-2 py-1 text-xs font-medium text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300">
+            Running
+          </span>
+        {% else %}
+          <span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+            {{ log.status }}
+          </span>
+        {% endif %}
+      </td>
+      <td class="px-4 py-3 text-sm" title="{{ log.started_at }}">
+        {{ log.started_at|date:"M d, H:i" }}
+      </td>
+      <td class="px-4 py-3 text-sm" title="{{ log.finished_at }}">
+        {% if log.finished_at %}
+          {{ log.finished_at|date:"M d, H:i" }}
+        {% else %}
+          <span class="text-muted-foreground">-</span>
+        {% endif %}
+      </td>
+      <td class="px-4 py-3 text-sm font-mono">
+        {% if log.commit_hash %}
+          <span title="{{ log.commit_hash }}">{{ log.commit_hash|slice:":7" }}</span>
+        {% else %}
+          <span class="text-muted-foreground">-</span>
+        {% endif %}
+      </td>
+      <td class="px-4 py-3 text-sm">{{ log.files_synced }}</td>
+      <td class="px-4 py-3 text-sm">
+        {% if log.job_id %}
+          <a href="{% url 'jobs-detail' log.job_id %}" class="text-primary hover:underline">
+            #{{ log.job_id }}
+          </a>
+        {% else %}
+          <span class="text-muted-foreground">Manual</span>
+        {% endif %}
+      </td>
+      <td class="px-4 py-3 text-sm max-w-xs truncate" title="{{ log.message }}">
+        {{ log.message|truncatechars:50 }}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="p-12 text-center">
+  <p class="text-muted-foreground">No sync logs yet</p>
+</div>
+{% endif %}

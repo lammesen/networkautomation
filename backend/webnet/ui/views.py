@@ -17,7 +17,7 @@ from django.urls import reverse
 
 from webnet.api.permissions import user_has_customer_access
 from webnet.compliance.models import CompliancePolicy, ComplianceResult
-from webnet.config_mgmt.models import ConfigSnapshot
+from webnet.config_mgmt.models import ConfigSnapshot, GitRepository, GitSyncLog
 from webnet.customers.models import Customer
 from webnet.devices.models import Device, TopologyLink, Credential
 from webnet.jobs.models import Job, JobLog
@@ -941,3 +941,238 @@ class WizardStep4View(TenantScopedView):
 
     def get(self, request):
         return render(request, self.template_name)
+
+
+class GitRepositoryForm(forms.ModelForm):
+    """Form for Git repository configuration."""
+
+    auth_token = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(attrs={"placeholder": "Enter access token"}),
+        help_text="Access token for HTTPS authentication (GitHub, GitLab, Bitbucket)",
+    )
+    ssh_private_key = forms.CharField(
+        required=False,
+        widget=forms.Textarea(
+            attrs={"rows": 5, "placeholder": "-----BEGIN OPENSSH PRIVATE KEY-----"}
+        ),
+        help_text="SSH private key for SSH authentication",
+    )
+
+    class Meta:
+        model = GitRepository
+        fields = [
+            "customer",
+            "name",
+            "remote_url",
+            "branch",
+            "auth_type",
+            "auth_token",
+            "ssh_private_key",
+            "path_structure",
+            "enabled",
+        ]
+
+    def __init__(self, *args, **kwargs):
+        user = kwargs.pop("user", None)
+        super().__init__(*args, **kwargs)
+        if user and getattr(user, "role", "viewer") != "admin":
+            self.fields["customer"].queryset = user.customers.all()
+        else:
+            self.fields["customer"].queryset = Customer.objects.all()
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        auth_token = self.cleaned_data.get("auth_token")
+        ssh_private_key = self.cleaned_data.get("ssh_private_key")
+        if auth_token:
+            instance.auth_token = auth_token
+        if ssh_private_key:
+            instance.ssh_private_key = ssh_private_key
+        if commit:
+            instance.save()
+        return instance
+
+
+class GitSettingsListView(TenantScopedView):
+    """List Git repository settings for the user's customers."""
+
+    template_name = "settings/git_list.html"
+
+    def get(self, request):
+        repos = self.filter_by_customer(GitRepository.objects.select_related("customer").all())
+        return render(request, self.template_name, {"repositories": repos})
+
+
+class GitSettingsDetailView(TenantScopedView):
+    """View/edit a Git repository configuration."""
+
+    template_name = "settings/git_detail.html"
+    partial_name = "settings/_git_form.html"
+
+    def get(self, request, pk):
+        repo = get_object_or_404(GitRepository.objects.select_related("customer"), pk=pk)
+        check = self.ensure_customer_access(repo.customer_id)
+        if check:
+            return check
+
+        # Get recent sync logs
+        sync_logs = GitSyncLog.objects.filter(repository=repo).order_by("-started_at")[:10]
+
+        form = GitRepositoryForm(instance=repo, user=request.user)
+        return render(
+            request,
+            self.template_name,
+            {
+                "repository": repo,
+                "form": form,
+                "sync_logs": sync_logs,
+            },
+        )
+
+    def post(self, request, pk):
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        repo = get_object_or_404(GitRepository.objects.select_related("customer"), pk=pk)
+        check = self.ensure_customer_access(repo.customer_id)
+        if check:
+            return check
+
+        form = GitRepositoryForm(request.POST, instance=repo, user=request.user)
+        if form.is_valid():
+            form.save()
+            if request.headers.get("HX-Request"):
+                return render(
+                    request,
+                    self.partial_name,
+                    {"repository": repo, "form": form, "success": True},
+                )
+            return redirect("git-settings-detail", pk=pk)
+
+        return render(
+            request,
+            self.template_name,
+            {"repository": repo, "form": form},
+        )
+
+
+class GitSettingsCreateView(TenantScopedView):
+    """Create a new Git repository configuration."""
+
+    template_name = "settings/git_create.html"
+
+    def get(self, request):
+        form = GitRepositoryForm(user=request.user)
+        return render(request, self.template_name, {"form": form})
+
+    def post(self, request):
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        form = GitRepositoryForm(request.POST, user=request.user)
+        if form.is_valid():
+            repo = form.save()
+            return redirect("git-settings-detail", pk=repo.pk)
+
+        return render(request, self.template_name, {"form": form})
+
+
+class GitSettingsDeleteView(TenantScopedView):
+    """Delete a Git repository configuration."""
+
+    def post(self, request, pk):
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        repo = get_object_or_404(GitRepository.objects.select_related("customer"), pk=pk)
+        check = self.ensure_customer_access(repo.customer_id)
+        if check:
+            return check
+
+        repo.delete()
+        return redirect("git-settings")
+
+
+class GitSyncView(TenantScopedView):
+    """Trigger a manual Git sync."""
+
+    partial_name = "settings/_git_sync_result.html"
+
+    def post(self, request, pk):
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        repo = get_object_or_404(GitRepository.objects.select_related("customer"), pk=pk)
+        check = self.ensure_customer_access(repo.customer_id)
+        if check:
+            return check
+
+        if not repo.enabled:
+            return render(
+                request,
+                self.partial_name,
+                {"repository": repo, "error": "Git sync is disabled for this repository"},
+            )
+
+        from webnet.jobs.tasks import git_sync_job
+
+        git_sync_job.delay(repo.customer_id)
+
+        return render(
+            request,
+            self.partial_name,
+            {"repository": repo, "success": True, "message": "Git sync queued"},
+        )
+
+
+class GitTestConnectionView(TenantScopedView):
+    """Test Git repository connection."""
+
+    partial_name = "settings/_git_test_result.html"
+
+    def post(self, request, pk):
+        repo = get_object_or_404(GitRepository.objects.select_related("customer"), pk=pk)
+        check = self.ensure_customer_access(repo.customer_id)
+        if check:
+            return check
+
+        from webnet.config_mgmt.git_service import GitService
+
+        service = GitService(repo)
+        result = service.test_connection()
+
+        return render(
+            request,
+            self.partial_name,
+            {
+                "repository": repo,
+                "success": result.success,
+                "message": result.message,
+                "error": result.error,
+            },
+        )
+
+
+class GitSyncLogsView(TenantScopedView):
+    """View Git sync logs for a repository."""
+
+    template_name = "settings/git_sync_logs.html"
+    partial_name = "settings/_git_sync_logs_table.html"
+
+    def get(self, request, pk):
+        repo = get_object_or_404(GitRepository.objects.select_related("customer"), pk=pk)
+        check = self.ensure_customer_access(repo.customer_id)
+        if check:
+            return check
+
+        logs = GitSyncLog.objects.filter(repository=repo).order_by("-started_at")[:50]
+
+        if request.headers.get("HX-Request"):
+            return render(request, self.partial_name, {"repository": repo, "sync_logs": logs})
+
+        return render(request, self.template_name, {"repository": repo, "sync_logs": logs})

@@ -245,3 +245,13 @@
 - 2025-12-01 19:50Z – Built shadcn-inspired Django admin theme (new admin-shadcn.css) and added admin base_site/login overrides with branding, gradient header, card layout, and modern form/buttons.
 - 2025-12-01 18:37Z – Refreshed Django admin with shadcn styling: dark gradient shell, pill branding, ghost nav button, tightened login card, accent buttons/inputs, tables/filters/inlines themed, and ensured lint checks remain clean.
 - 2025-12-01 18:44Z – Polished admin shadcn theme: improved search bar styling, checkbox/radio accent colors, inline add-row buttons, and retained lint cleanliness.
+- 2025-12-01 20:00Z – Implemented Git integration for configuration backup (GitHub issue #12):
+  - Sub-issue #1: Added GitRepository and GitSyncLog models with encrypted auth token/SSH key storage
+  - Sub-issue #2: Integrated with existing crypto module for secure credential storage
+  - Sub-issue #3: Created GitService for clone/pull/commit/push operations supporting HTTPS (token) and SSH auth
+  - Sub-issue #4: Auto-export to Git after backup jobs via new git_sync_job Celery task
+  - Sub-issue #5: Added DRF API endpoints (CRUD, test-connection, sync, logs, commits) with tenant scoping
+  - Sub-issue #6: Built HTMX UI for Git settings (list, create, detail, sync logs) with manual sync button
+  - Sub-issue #7: Added comprehensive tests (22 new tests covering models, API, UI, service)
+  - Features: Configurable directory structure (by_customer, by_site, flat), commit messages with job metadata
+  - All 74 backend tests passing, lint clean

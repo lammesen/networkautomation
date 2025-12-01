@@ -27,6 +27,13 @@ from .views import (
     WizardStep2View,
     WizardStep3View,
     WizardStep4View,
+    GitSettingsListView,
+    GitSettingsDetailView,
+    GitSettingsCreateView,
+    GitSettingsDeleteView,
+    GitSyncView,
+    GitTestConnectionView,
+    GitSyncLogsView,
 )
 
 urlpatterns = [
@@ -57,4 +64,14 @@ urlpatterns = [
     path("commands/wizard/step3", WizardStep3View.as_view(), name="wizard-step3"),
     path("commands/wizard/step4", WizardStep4View.as_view(), name="wizard-step4"),
     path("reachability/", ReachabilityView.as_view(), name="reachability-run"),
+    # Git integration settings
+    path("settings/git/", GitSettingsListView.as_view(), name="git-settings"),
+    path("settings/git/new", GitSettingsCreateView.as_view(), name="git-settings-create"),
+    path("settings/git/<int:pk>/", GitSettingsDetailView.as_view(), name="git-settings-detail"),
+    path(
+        "settings/git/<int:pk>/delete", GitSettingsDeleteView.as_view(), name="git-settings-delete"
+    ),
+    path("settings/git/<int:pk>/sync", GitSyncView.as_view(), name="git-sync"),
+    path("settings/git/<int:pk>/test", GitTestConnectionView.as_view(), name="git-test-connection"),
+    path("settings/git/<int:pk>/logs", GitSyncLogsView.as_view(), name="git-sync-logs"),
 ]
