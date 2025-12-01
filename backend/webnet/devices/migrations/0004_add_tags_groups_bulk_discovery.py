@@ -6,7 +6,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("customers", "0001_initial"),
         ("devices", "0003_add_device_discovery_protocol"),

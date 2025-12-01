@@ -47,6 +47,20 @@ from .views import (
     DeviceGroupCreateView,
     DeviceGroupDetailView,
     DeviceGroupDeleteView,
+    # Configuration Template Views (Issue #16)
+    ConfigTemplateListView,
+    ConfigTemplateDetailView,
+    ConfigTemplateCreateView,
+    ConfigTemplateDeleteView,
+    ConfigTemplateRenderView,
+    # NetBox Integration Views (Issue #9)
+    NetBoxSettingsListView,
+    NetBoxSettingsDetailView,
+    NetBoxSettingsCreateView,
+    NetBoxSettingsDeleteView,
+    NetBoxSyncView,
+    NetBoxTestConnectionView,
+    NetBoxSyncLogsView,
 )
 
 urlpatterns = [
@@ -104,4 +118,30 @@ urlpatterns = [
     path("devices/groups/new", DeviceGroupCreateView.as_view(), name="groups-create"),
     path("devices/groups/<int:pk>/", DeviceGroupDetailView.as_view(), name="groups-detail"),
     path("devices/groups/<int:pk>/delete", DeviceGroupDeleteView.as_view(), name="groups-delete"),
+    # Configuration Template Library (Issue #16)
+    path("templates/", ConfigTemplateListView.as_view(), name="templates-list"),
+    path("templates/new", ConfigTemplateCreateView.as_view(), name="templates-create"),
+    path("templates/<int:pk>/", ConfigTemplateDetailView.as_view(), name="templates-detail"),
+    path("templates/<int:pk>/delete", ConfigTemplateDeleteView.as_view(), name="templates-delete"),
+    path("templates/<int:pk>/render", ConfigTemplateRenderView.as_view(), name="templates-render"),
+    # NetBox Integration (Issue #9)
+    path("settings/netbox/", NetBoxSettingsListView.as_view(), name="netbox-settings"),
+    path("settings/netbox/new", NetBoxSettingsCreateView.as_view(), name="netbox-settings-create"),
+    path(
+        "settings/netbox/<int:pk>/",
+        NetBoxSettingsDetailView.as_view(),
+        name="netbox-settings-detail",
+    ),
+    path(
+        "settings/netbox/<int:pk>/delete",
+        NetBoxSettingsDeleteView.as_view(),
+        name="netbox-settings-delete",
+    ),
+    path("settings/netbox/<int:pk>/sync", NetBoxSyncView.as_view(), name="netbox-sync"),
+    path(
+        "settings/netbox/<int:pk>/test",
+        NetBoxTestConnectionView.as_view(),
+        name="netbox-test-connection",
+    ),
+    path("settings/netbox/<int:pk>/logs", NetBoxSyncLogsView.as_view(), name="netbox-sync-logs"),
 ]

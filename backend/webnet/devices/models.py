@@ -3,6 +3,211 @@ from django.db.models import Q
 from webnet.core.crypto import encrypt_text, decrypt_text
 
 
+class NetBoxConfig(models.Model):
+    """NetBox API configuration for device inventory sync.
+
+    Enables syncing devices from NetBox as the source of truth,
+    with configurable field mappings and sync frequency.
+    """
+
+    SYNC_FREQUENCY_CHOICES = [
+        ("manual", "Manual Only"),
+        ("hourly", "Hourly"),
+        ("daily", "Daily"),
+        ("weekly", "Weekly"),
+    ]
+
+    customer = models.OneToOneField(
+        "customers.Customer",
+        on_delete=models.CASCADE,
+        related_name="netbox_config",
+        help_text="Customer this NetBox configuration belongs to",
+    )
+    name = models.CharField(
+        max_length=100,
+        default="NetBox",
+        help_text="Friendly name for this NetBox instance",
+    )
+    api_url = models.URLField(
+        max_length=500,
+        help_text="NetBox API URL (e.g., https://netbox.example.com/api)",
+    )
+    _api_token = models.TextField(
+        db_column="api_token",
+        blank=False,
+        help_text="Encrypted NetBox API token (required)",
+    )
+    sync_frequency = models.CharField(
+        max_length=20,
+        choices=SYNC_FREQUENCY_CHOICES,
+        default="manual",
+        help_text="How often to sync from NetBox",
+    )
+    enabled = models.BooleanField(
+        default=True,
+        help_text="Whether automatic sync is enabled",
+    )
+    # Filter options
+    site_filter = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Only sync devices from these NetBox sites (comma-separated slugs)",
+    )
+    tenant_filter = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Only sync devices from these NetBox tenants (comma-separated slugs)",
+    )
+    role_filter = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Only sync devices with these roles (comma-separated slugs)",
+    )
+    status_filter = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        default="active",
+        help_text="Device status filter (e.g., 'active', 'staged')",
+    )
+    # Field mappings
+    field_mappings = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Custom field mappings from NetBox to webnet (JSON)",
+    )
+    # Default credential for synced devices
+    default_credential = models.ForeignKey(
+        "devices.Credential",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="netbox_configs",
+        help_text="Default credential to assign to synced devices",
+    )
+    # Sync status
+    last_sync_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text="Last successful sync timestamp",
+    )
+    last_sync_status = models.CharField(
+        max_length=20,
+        blank=True,
+        null=True,
+        help_text="Status of last sync attempt (success, failed, partial)",
+    )
+    last_sync_message = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Message or error from last sync attempt",
+    )
+    last_sync_stats = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Stats from last sync (created, updated, skipped counts)",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "NetBox Configuration"
+        verbose_name_plural = "NetBox Configurations"
+
+    def __str__(self) -> str:  # pragma: no cover
+        return f"{self.customer.name} - {self.name}"
+
+    @property
+    def api_token(self) -> str | None:
+        """Decrypt and return the API token."""
+        return decrypt_text(self._api_token)
+
+    @api_token.setter
+    def api_token(self, value: str | None) -> None:
+        """Encrypt and store the API token."""
+        if value is None:
+            raise ValueError("API token cannot be None")
+        self._api_token = encrypt_text(value)
+
+    def has_api_token(self) -> bool:
+        """Check if an API token is configured."""
+        return bool(self._api_token)
+
+    def get_site_filters(self) -> list[str]:
+        """Return list of site slugs to filter by."""
+        if not self.site_filter:
+            return []
+        return [s.strip() for s in self.site_filter.split(",") if s.strip()]
+
+    def get_tenant_filters(self) -> list[str]:
+        """Return list of tenant slugs to filter by."""
+        if not self.tenant_filter:
+            return []
+        return [s.strip() for s in self.tenant_filter.split(",") if s.strip()]
+
+    def get_role_filters(self) -> list[str]:
+        """Return list of role slugs to filter by."""
+        if not self.role_filter:
+            return []
+        return [s.strip() for s in self.role_filter.split(",") if s.strip()]
+
+
+class NetBoxSyncLog(models.Model):
+    """Log of NetBox sync operations for audit trail."""
+
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("running", "Running"),
+        ("success", "Success"),
+        ("partial", "Partial Success"),
+        ("failed", "Failed"),
+    ]
+
+    config = models.ForeignKey(
+        NetBoxConfig,
+        on_delete=models.CASCADE,
+        related_name="sync_logs",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default="pending",
+    )
+    devices_created = models.IntegerField(default=0)
+    devices_updated = models.IntegerField(default=0)
+    devices_skipped = models.IntegerField(default=0)
+    devices_failed = models.IntegerField(default=0)
+    message = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Summary message or error details",
+    )
+    details = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Detailed sync results per device",
+    )
+    started_at = models.DateTimeField(auto_now_add=True)
+    finished_at = models.DateTimeField(
+        blank=True,
+        null=True,
+    )
+
+    class Meta:
+        ordering = ["-started_at"]
+        indexes = [
+            models.Index(fields=["config"]),
+            models.Index(fields=["status"]),
+            models.Index(fields=["started_at"]),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover
+        return f"Sync {self.id} for {self.config_id} - {self.status}"
+
+
 class Credential(models.Model):
     customer = models.ForeignKey(
         "customers.Customer", on_delete=models.CASCADE, related_name="credentials"

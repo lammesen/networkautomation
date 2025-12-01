@@ -289,6 +289,75 @@ def scheduled_config_backup() -> None:
     return
 
 
+@shared_task(name="netbox_sync_job")
+def netbox_sync_job(config_id: int, full_sync: bool = False) -> dict:
+    """Sync devices from NetBox.
+
+    Args:
+        config_id: NetBoxConfig ID
+        full_sync: If True, update all devices. If False, only create new ones.
+
+    Returns:
+        Dict with sync result details
+    """
+    from webnet.devices.models import NetBoxConfig
+    from webnet.devices.netbox_service import NetBoxService
+
+    try:
+        config = NetBoxConfig.objects.get(pk=config_id)
+    except NetBoxConfig.DoesNotExist:
+        logger.warning("NetBoxConfig %s not found", config_id)
+        return {"success": False, "error": "Config not found"}
+
+    service = NetBoxService(config)
+    result = service.sync_devices(full_sync=full_sync)
+
+    return {
+        "success": result.success,
+        "message": result.message,
+        "created": result.created,
+        "updated": result.updated,
+        "skipped": result.skipped,
+        "failed": result.failed,
+        "errors": result.errors,
+    }
+
+
+@shared_task(name="scheduled_netbox_sync")
+def scheduled_netbox_sync() -> None:
+    """Scheduled task to sync from NetBox for all enabled configurations.
+
+    This task runs periodically and triggers syncs based on each config's
+    sync_frequency setting.
+    """
+    from webnet.devices.models import NetBoxConfig
+    from django.utils import timezone
+    from datetime import timedelta
+
+    now = timezone.now()
+
+    for config in NetBoxConfig.objects.filter(enabled=True).exclude(sync_frequency="manual"):
+        # Determine if sync is due based on frequency
+        last_sync = config.last_sync_at
+        should_sync = False
+
+        if not last_sync:
+            should_sync = True
+        elif config.sync_frequency == "hourly":
+            should_sync = now - last_sync >= timedelta(hours=1)
+        elif config.sync_frequency == "daily":
+            should_sync = now - last_sync >= timedelta(days=1)
+        elif config.sync_frequency == "weekly":
+            should_sync = now - last_sync >= timedelta(weeks=1)
+
+        if should_sync:
+            # Update last_sync_at immediately to prevent duplicate syncs if this task
+            # runs again before the sync job completes
+            config.last_sync_at = now
+            config.save(update_fields=["last_sync_at"])
+            netbox_sync_job.delay(config.id, full_sync=False)
+
+
 @shared_task(name="check_reachability_job")
 def check_reachability_job(job_id: int, targets: dict | None = None) -> None:
     js = JobService()

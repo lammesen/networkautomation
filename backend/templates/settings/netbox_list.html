@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}NetBox Integration{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-base-content">NetBox Integration</h1>
+            <p class="text-sm text-base-content/60 mt-1">
+                Sync device inventory from NetBox
+            </p>
+        </div>
+        <a href="{% url 'netbox-settings-create' %}" class="btn btn-primary">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Configure NetBox
+        </a>
+    </div>
+
+    <div class="overflow-x-auto">
+        <table class="table table-zebra w-full">
+            <thead>
+                <tr>
+                    <th>Customer</th>
+                    <th>Name</th>
+                    <th>API URL</th>
+                    <th>Sync Frequency</th>
+                    <th>Status</th>
+                    <th>Last Sync</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for config in configs %}
+                <tr>
+                    <td>{{ config.customer.name }}</td>
+                    <td>
+                        <a href="{% url 'netbox-settings-detail' config.id %}" class="link link-primary font-medium">
+                            {{ config.name }}
+                        </a>
+                    </td>
+                    <td class="text-sm text-base-content/60 truncate max-w-xs">{{ config.api_url }}</td>
+                    <td>
+                        <span class="badge badge-outline">{{ config.get_sync_frequency_display }}</span>
+                    </td>
+                    <td>
+                        {% if config.enabled %}
+                        <span class="badge badge-success">Enabled</span>
+                        {% else %}
+                        <span class="badge badge-ghost">Disabled</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if config.last_sync_at %}
+                        <span class="text-sm text-base-content/60">{{ config.last_sync_at|date:"Y-m-d H:i" }}</span>
+                        <br>
+                        {% if config.last_sync_status == 'success' %}
+                        <span class="badge badge-success badge-xs">Success</span>
+                        {% elif config.last_sync_status == 'partial' %}
+                        <span class="badge badge-warning badge-xs">Partial</span>
+                        {% elif config.last_sync_status == 'failed' %}
+                        <span class="badge badge-error badge-xs">Failed</span>
+                        {% endif %}
+                        {% else %}
+                        <span class="text-sm text-base-content/40">Never</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{% url 'netbox-settings-detail' config.id %}" class="btn btn-xs btn-ghost">
+                            Configure
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="text-center py-12 text-base-content/60">
+                        <svg class="w-12 h-12 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/>
+                        </svg>
+                        <p class="text-lg font-medium">No NetBox configurations</p>
+                        <p class="mt-1">Configure a NetBox instance to sync devices.</p>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

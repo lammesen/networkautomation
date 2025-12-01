@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}New Template{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="flex items-center gap-4 mb-6">
+        <a href="{% url 'templates-list' %}" class="btn btn-ghost btn-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+            </svg>
+            Back
+        </a>
+        <div>
+            <h1 class="text-2xl font-bold text-base-content">New Configuration Template</h1>
+            <p class="text-sm text-base-content/60 mt-1">
+                Create a Jinja2 template for device configuration
+            </p>
+        </div>
+    </div>
+
+    <div class="max-w-4xl">
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body">
+                {% include "templates/_form.html" %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
