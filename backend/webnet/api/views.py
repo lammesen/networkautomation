@@ -912,7 +912,7 @@ class SSHHostKeyViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
 
         # Get device and verify customer access
         try:
-            device = Device.objects.get(id=device_id)
+            device = Device.objects.select_related("customer").get(id=device_id)
         except Device.DoesNotExist:
             return Response({"error": "Device not found"}, status=status.HTTP_404_NOT_FOUND)
 
@@ -931,15 +931,20 @@ class SSHHostKeyViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
             return Response(SSHHostKeySerializer(host_key).data, status=status.HTTP_201_CREATED)
         except ValueError as e:
             logger.warning("SSH host key import failed: %s", e)
-            return Response({"error": "Invalid known_hosts line"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Invalid known_hosts line"}, status=status.HTTP_400_BAD_REQUEST
+            )
 
     @action(detail=False, methods=["get"], url_path="stats")
     def stats(self, request):
         """Get statistics about SSH host keys for the current customer."""
         qs = self.get_queryset()
+
+        # Use single aggregation query for efficiency
+        # Count with filter requires Django 2.2+
         total = qs.count()
         verified = qs.filter(verified=True).count()
-        unverified = qs.filter(verified=False).count()
+        unverified = total - verified
         by_type = dict(qs.values_list("key_type").annotate(Count("key_type")))
 
         return Response(

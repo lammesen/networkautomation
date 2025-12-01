@@ -246,7 +246,20 @@ class SSHHostKeyImportSerializer(serializers.Serializer):
     """Serializer for importing SSH host keys from known_hosts format."""
 
     device_id = serializers.IntegerField(required=True)
-    known_hosts_line = serializers.CharField(required=True)
+    known_hosts_line = serializers.CharField(
+        required=True,
+        max_length=4096,
+        trim_whitespace=True,
+        help_text="OpenSSH known_hosts format line",
+    )
+
+    def validate_known_hosts_line(self, value):
+        parts = value.strip().split()
+        if len(parts) < 3:
+            raise serializers.ValidationError(
+                "Invalid format. Expected: hostname key_type key_data"
+            )
+        return value
 
 
 class DiscoveredDeviceSerializer(serializers.ModelSerializer):

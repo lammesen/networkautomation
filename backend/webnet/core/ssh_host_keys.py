@@ -82,25 +82,22 @@ class SSHHostKeyService:
         fingerprint = SSHHostKeyService.compute_fingerprint(key)
         public_key_data = key.export_public_key("openssh")
 
-        # Try to get existing key
-        host_key = SSHHostKey.objects.filter(
-            device=device, key_type=key_type, fingerprint_sha256=fingerprint
-        ).first()
+        # Atomically get or create the host key
+        host_key, created = SSHHostKey.objects.get_or_create(
+            device=device,
+            key_type=key_type,
+            fingerprint_sha256=fingerprint,
+            defaults={
+                "public_key": public_key_data,
+            },
+        )
 
-        if host_key:
+        if not created:
             # Update last_seen_at
             host_key.last_seen_at = timezone.now()
             host_key.save(update_fields=["last_seen_at"])
-            return host_key, False
 
-        # Create new key
-        host_key = SSHHostKey.objects.create(
-            device=device,
-            key_type=key_type,
-            public_key=public_key_data,
-            fingerprint_sha256=fingerprint,
-        )
-        return host_key, True
+        return host_key, created
 
     @staticmethod
     def verify_host_key(device: Device, key: asyncssh.SSHKey) -> bool:
@@ -255,8 +252,12 @@ class SSHHostKeyService:
         key_type = parts[1]
         key_data_b64 = parts[2]
 
-        # Decode and compute fingerprint
-        key_data = base64.b64decode(key_data_b64)
+        # Decode and compute fingerprint with error handling
+        try:
+            key_data = base64.b64decode(key_data_b64)
+        except (ValueError, base64.binascii.Error) as e:
+            raise ValueError(f"Invalid base64 encoding in public key: {e}")
+
         digest = hashlib.sha256(key_data).digest()
         fingerprint = base64.b64encode(digest).decode("ascii").rstrip("=")
 
@@ -265,22 +266,19 @@ class SSHHostKeyService:
 
         from webnet.devices.models import SSHHostKey
 
-        # Check for existing key
-        existing = SSHHostKey.objects.filter(
-            device=device, key_type=key_type, fingerprint_sha256=fingerprint
-        ).first()
-
-        if existing:
-            return existing
-
-        # Create new key
-        host_key = SSHHostKey.objects.create(
+        # Atomically get or create to avoid race condition
+        host_key, created = SSHHostKey.objects.get_or_create(
             device=device,
             key_type=key_type,
-            public_key=public_key,
             fingerprint_sha256=fingerprint,
+            defaults={
+                "public_key": public_key,
+            },
         )
-        logger.info("Imported host key for device %s from known_hosts", device.hostname)
+
+        if created:
+            logger.info("Imported host key for device %s from known_hosts", device.hostname)
+
         return host_key
 
 

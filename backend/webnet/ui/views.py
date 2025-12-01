@@ -2233,10 +2233,14 @@ class SSHHostKeyListView(TenantScopedView):
         elif verified_filter == "false":
             qs = qs.filter(verified=False)
 
-        # Get statistics
-        total = qs.count()
-        verified = qs.filter(verified=True).count()
-        unverified = qs.filter(verified=False).count()
+        # Get statistics with single aggregation query
+        from django.db.models import Count, Q
+
+        stats_agg = qs.aggregate(
+            total=Count("id"),
+            verified=Count("id", filter=Q(verified=True)),
+            unverified=Count("id", filter=Q(verified=False)),
+        )
 
         # Get devices for filter dropdown
         devices = (
@@ -2251,9 +2255,9 @@ class SSHHostKeyListView(TenantScopedView):
             "selected_device": device_filter,
             "selected_verified": verified_filter,
             "stats": {
-                "total": total,
-                "verified": verified,
-                "unverified": unverified,
+                "total": stats_agg["total"],
+                "verified": stats_agg["verified"],
+                "unverified": stats_agg["unverified"],
             },
         }
 
@@ -2267,6 +2271,10 @@ class SSHHostKeyVerifyView(TenantScopedView):
     """View for verifying/unverifying SSH host keys."""
 
     def post(self, request, pk):
+        check = self.ensure_can_write()
+        if check:
+            return check
+
         host_key = get_object_or_404(SSHHostKey.objects.select_related("device__customer"), pk=pk)
         check = self.ensure_customer_access(host_key.device.customer_id)
         if check:
@@ -2288,6 +2296,10 @@ class SSHHostKeyDeleteView(TenantScopedView):
     """View for deleting SSH host keys."""
 
     def delete(self, request, pk):
+        check = self.ensure_can_write()
+        if check:
+            return check
+
         host_key = get_object_or_404(SSHHostKey.objects.select_related("device__customer"), pk=pk)
         check = self.ensure_customer_access(host_key.device.customer_id)
         if check:
@@ -2314,6 +2326,10 @@ class SSHHostKeyImportView(TenantScopedView):
         return render(request, self.template_name, {"devices": devices})
 
     def post(self, request):
+        check = self.ensure_can_write()
+        if check:
+            return check
+
         device_id = request.POST.get("device_id")
         known_hosts_line = request.POST.get("known_hosts_line")
 
@@ -2333,5 +2349,10 @@ class SSHHostKeyImportView(TenantScopedView):
             # Return the new row
             return render(request, "ssh/_host_key_row.html", {"key": host_key})
         except ValueError as e:
-            logger.error("SSHHostKey import failed for device_id=%s, known_hosts_line=%s: %s", device_id, known_hosts_line, repr(e))
+            logger.error(
+                "SSHHostKey import failed for device_id=%s, known_hosts_line=%s: %s",
+                device_id,
+                known_hosts_line,
+                repr(e),
+            )
             return HttpResponseBadRequest("Could not import SSH host key. Please check your input.")
