@@ -1,0 +1,41 @@
+name: API Doc Generation
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  generate-openapi:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    env:
+      DEBUG: "true"
+      SECRET_KEY: dev-secret-key
+      ENCRYPTION_KEY: dGhpcy1pcy1hLWZha2UtZW5jcnlwdGlvbi1rZXk=
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e "backend/.[dev]"
+      - name: Run migrations (sqlite)
+        run: |
+          cd backend
+          python manage.py migrate --noinput
+      - name: Generate OpenAPI schema
+        run: |
+          mkdir -p docs/generated
+          cd backend
+          python manage.py generateschema --format openapi -o ../docs/generated/openapi-schema.json
+      - name: Upload schema artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-schema
+          path: docs/generated/openapi-schema.json

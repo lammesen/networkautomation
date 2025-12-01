@@ -1,0 +1,714 @@
+<!-- Enhanced Add Device Wizard Modal -->
+<div id="add-device-modal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true">
+  <!-- Backdrop -->
+  <div class="fixed inset-0 bg-background/80 backdrop-blur-sm" onclick="closeAddDeviceModal()"></div>
+  
+  <!-- Modal -->
+  <div class="fixed left-[50%] top-[50%] z-50 w-full max-w-3xl translate-x-[-50%] translate-y-[-50%] max-h-[90vh] overflow-hidden">
+    <div class="rounded-xl border bg-background shadow-2xl flex flex-col max-h-[90vh]">
+      <!-- Header with close button -->
+      <div class="flex items-center justify-between px-6 py-4 border-b bg-muted/30">
+        <div class="flex items-center gap-3">
+          <div class="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+          </div>
+          <div>
+            <h2 class="text-lg font-semibold leading-none tracking-tight">Add New Device</h2>
+            <p class="text-sm text-muted-foreground mt-0.5">Configure a new network device</p>
+          </div>
+        </div>
+        <button onclick="closeAddDeviceModal()" class="rounded-md p-2 hover:bg-muted transition-colors">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+          <span class="sr-only">Close</span>
+        </button>
+      </div>
+
+      <!-- Mode Toggle (Manual vs Import) -->
+      <div class="px-6 py-3 border-b bg-background">
+        <div class="inline-flex items-center rounded-lg bg-muted p-1 text-muted-foreground">
+          <button type="button" id="mode-manual" onclick="switchWizardMode('manual')"
+                  class="inline-flex items-center justify-center whitespace-nowrap rounded-md px-4 py-2 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 bg-background text-foreground shadow-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+            Manual Entry
+          </button>
+          <button type="button" id="mode-import" onclick="switchWizardMode('import')"
+                  class="inline-flex items-center justify-center whitespace-nowrap rounded-md px-4 py-2 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 text-muted-foreground hover:text-foreground">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            Import CSV
+          </button>
+        </div>
+      </div>
+
+      <!-- MANUAL ENTRY WIZARD -->
+      <div id="wizard-manual" class="flex-1 overflow-hidden flex flex-col">
+        <!-- Progress Steps -->
+        <div class="px-6 py-4 border-b">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center flex-1">
+              <div id="step-indicator-1" class="flex items-center gap-2">
+                <div class="h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-medium">1</div>
+                <span class="text-sm font-medium hidden sm:inline">Basic Info</span>
+              </div>
+              <div class="flex-1 h-0.5 mx-3 bg-muted" id="step-line-1">
+                <div class="h-full bg-primary transition-all duration-300" style="width: 0%"></div>
+              </div>
+            </div>
+            <div class="flex items-center flex-1">
+              <div id="step-indicator-2" class="flex items-center gap-2">
+                <div class="h-8 w-8 rounded-full bg-muted text-muted-foreground flex items-center justify-center text-sm font-medium">2</div>
+                <span class="text-sm font-medium text-muted-foreground hidden sm:inline">Device Type</span>
+              </div>
+              <div class="flex-1 h-0.5 mx-3 bg-muted" id="step-line-2">
+                <div class="h-full bg-primary transition-all duration-300" style="width: 0%"></div>
+              </div>
+            </div>
+            <div class="flex items-center flex-1">
+              <div id="step-indicator-3" class="flex items-center gap-2">
+                <div class="h-8 w-8 rounded-full bg-muted text-muted-foreground flex items-center justify-center text-sm font-medium">3</div>
+                <span class="text-sm font-medium text-muted-foreground hidden sm:inline">Location</span>
+              </div>
+              <div class="flex-1 h-0.5 mx-3 bg-muted" id="step-line-3">
+                <div class="h-full bg-primary transition-all duration-300" style="width: 0%"></div>
+              </div>
+            </div>
+            <div id="step-indicator-4" class="flex items-center gap-2">
+              <div class="h-8 w-8 rounded-full bg-muted text-muted-foreground flex items-center justify-center text-sm font-medium">4</div>
+              <span class="text-sm font-medium text-muted-foreground hidden sm:inline">Review</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Form Content -->
+        <form id="add-device-form" method="post" action="/devices/new" 
+              hx-post="/devices/new" 
+              hx-target="#devices-table" 
+              hx-swap="innerHTML"
+              hx-on::after-request="if(event.detail.successful && event.detail.xhr.status < 400) { closeAddDeviceModal(); window.webnet?.showToast?.('Device created successfully', 'success'); }"
+              class="flex-1 overflow-y-auto">
+          {% csrf_token %}
+          
+          <!-- Step 1: Basic Info -->
+          <div id="step-content-1" class="wizard-step p-6 space-y-6">
+            <div class="text-center mb-6">
+              <h3 class="text-lg font-semibold">Basic Device Information</h3>
+              <p class="text-sm text-muted-foreground mt-1">Enter the hostname and management IP address</p>
+            </div>
+            
+            <div class="grid gap-6 max-w-lg mx-auto">
+              <div class="space-y-2">
+                <label for="wizard_customer" class="text-sm font-medium leading-none">
+                  Customer <span class="text-destructive">*</span>
+                </label>
+                <div data-island="FormSelect" data-props='{"name":"customer","placeholder":"Select a customer","options":[{% for choice in form.customer.field.choices %}{"value":"{{ choice.0 }}","label":"{{ choice.1|escapejs }}"}{% if not forloop.last %},{% endif %}{% endfor %}]}'></div>
+                <input type="hidden" name="customer" id="wizard_customer" required />
+                <p class="text-xs text-muted-foreground">The customer this device belongs to</p>
+              </div>
+              
+              <div class="space-y-2">
+                <label for="wizard_hostname" class="text-sm font-medium leading-none">
+                  Hostname <span class="text-destructive">*</span>
+                </label>
+                <input type="text" name="hostname" id="wizard_hostname" required
+                       class="flex h-11 w-full rounded-lg border border-input bg-background px-4 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                       placeholder="e.g., switch-core-01" />
+                <p class="text-xs text-muted-foreground">Unique identifier for this device</p>
+              </div>
+              
+              <div class="space-y-2">
+                <label for="wizard_mgmt_ip" class="text-sm font-medium leading-none">
+                  Management IP <span class="text-destructive">*</span>
+                </label>
+                <input type="text" name="mgmt_ip" id="wizard_mgmt_ip" required
+                       class="flex h-11 w-full rounded-lg border border-input bg-background px-4 py-2 text-sm font-mono ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                       placeholder="e.g., 192.168.1.1" 
+                       pattern="^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$" />
+                <p class="text-xs text-muted-foreground">IPv4 address used to manage this device</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 2: Device Type -->
+          <div id="step-content-2" class="wizard-step p-6 space-y-6 hidden">
+            <div class="text-center mb-6">
+              <h3 class="text-lg font-semibold">Device Type</h3>
+              <p class="text-sm text-muted-foreground mt-1">Select the vendor and platform</p>
+            </div>
+            
+            <div class="grid gap-6 max-w-lg mx-auto">
+              <!-- Vendor Selection with Icons -->
+              <div class="space-y-3">
+                <label class="text-sm font-medium leading-none">
+                  Vendor <span class="text-destructive">*</span>
+                </label>
+                <div class="grid grid-cols-3 gap-3">
+                  <button type="button" onclick="selectVendor('cisco')" 
+                          class="vendor-btn flex flex-col items-center justify-center p-4 rounded-lg border-2 border-muted hover:border-primary hover:bg-primary/5 transition-all"
+                          data-vendor="cisco">
+                    <div class="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center mb-2">
+                      <span class="text-blue-600 font-bold text-sm">C</span>
+                    </div>
+                    <span class="text-sm font-medium">Cisco</span>
+                  </button>
+                  <button type="button" onclick="selectVendor('juniper')"
+                          class="vendor-btn flex flex-col items-center justify-center p-4 rounded-lg border-2 border-muted hover:border-primary hover:bg-primary/5 transition-all"
+                          data-vendor="juniper">
+                    <div class="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center mb-2">
+                      <span class="text-green-600 font-bold text-sm">J</span>
+                    </div>
+                    <span class="text-sm font-medium">Juniper</span>
+                  </button>
+                  <button type="button" onclick="selectVendor('arista')"
+                          class="vendor-btn flex flex-col items-center justify-center p-4 rounded-lg border-2 border-muted hover:border-primary hover:bg-primary/5 transition-all"
+                          data-vendor="arista">
+                    <div class="h-10 w-10 rounded-full bg-purple-100 flex items-center justify-center mb-2">
+                      <span class="text-purple-600 font-bold text-sm">A</span>
+                    </div>
+                    <span class="text-sm font-medium">Arista</span>
+                  </button>
+                  <button type="button" onclick="selectVendor('paloalto')"
+                          class="vendor-btn flex flex-col items-center justify-center p-4 rounded-lg border-2 border-muted hover:border-primary hover:bg-primary/5 transition-all"
+                          data-vendor="paloalto">
+                    <div class="h-10 w-10 rounded-full bg-orange-100 flex items-center justify-center mb-2">
+                      <span class="text-orange-600 font-bold text-sm">PA</span>
+                    </div>
+                    <span class="text-sm font-medium">Palo Alto</span>
+                  </button>
+                  <button type="button" onclick="selectVendor('fortinet')"
+                          class="vendor-btn flex flex-col items-center justify-center p-4 rounded-lg border-2 border-muted hover:border-primary hover:bg-primary/5 transition-all"
+                          data-vendor="fortinet">
+                    <div class="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center mb-2">
+                      <span class="text-red-600 font-bold text-sm">F</span>
+                    </div>
+                    <span class="text-sm font-medium">Fortinet</span>
+                  </button>
+                  <button type="button" onclick="selectVendor('other')"
+                          class="vendor-btn flex flex-col items-center justify-center p-4 rounded-lg border-2 border-muted hover:border-primary hover:bg-primary/5 transition-all"
+                          data-vendor="other">
+                    <div class="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center mb-2">
+                      <span class="text-gray-600 font-bold text-sm">?</span>
+                    </div>
+                    <span class="text-sm font-medium">Other</span>
+                  </button>
+                </div>
+                <input type="hidden" name="vendor" id="wizard_vendor" />
+              </div>
+              
+              <div class="space-y-2">
+                <label for="wizard_platform" class="text-sm font-medium leading-none">
+                  Platform
+                </label>
+                <input type="text" name="platform" id="wizard_platform"
+                       class="flex h-11 w-full rounded-lg border border-input bg-background px-4 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                       placeholder="e.g., ios, iosxe, nxos, junos, eos" />
+                <p class="text-xs text-muted-foreground">Operating system or firmware type</p>
+              </div>
+              
+              <div class="space-y-2">
+                <label for="wizard_credential" class="text-sm font-medium leading-none">
+                  Credential <span class="text-destructive">*</span>
+                </label>
+                <div data-island="FormSelect" data-props='{"name":"credential","placeholder":"Select credentials","options":[{% for choice in form.credential.field.choices %}{"value":"{{ choice.0 }}","label":"{{ choice.1|escapejs }}"}{% if not forloop.last %},{% endif %}{% endfor %}]}'></div>
+                <input type="hidden" name="credential" id="wizard_credential" required />
+                <p class="text-xs text-muted-foreground">SSH/API credentials for device access</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 3: Location & Tags -->
+          <div id="step-content-3" class="wizard-step p-6 space-y-6 hidden">
+            <div class="text-center mb-6">
+              <h3 class="text-lg font-semibold">Location & Classification</h3>
+              <p class="text-sm text-muted-foreground mt-1">Optional location and role information</p>
+            </div>
+            
+            <div class="grid gap-6 max-w-lg mx-auto">
+              <div class="space-y-2">
+                <label for="wizard_site" class="text-sm font-medium leading-none">Site</label>
+                <input type="text" name="site" id="wizard_site"
+                       class="flex h-11 w-full rounded-lg border border-input bg-background px-4 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                       placeholder="e.g., DC-NYC, Branch-LA" />
+                <p class="text-xs text-muted-foreground">Physical location or data center</p>
+              </div>
+              
+              <div class="space-y-3">
+                <label class="text-sm font-medium leading-none">Device Role</label>
+                <div class="grid grid-cols-2 gap-3">
+                  <button type="button" onclick="selectRole('core')"
+                          class="role-btn flex items-center gap-3 p-3 rounded-lg border-2 border-muted hover:border-primary hover:bg-primary/5 transition-all text-left"
+                          data-role="core">
+                    <div class="h-8 w-8 rounded bg-primary/10 flex items-center justify-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+                      </svg>
+                    </div>
+                    <div>
+                      <span class="text-sm font-medium">Core</span>
+                      <p class="text-xs text-muted-foreground">Backbone router/switch</p>
+                    </div>
+                  </button>
+                  <button type="button" onclick="selectRole('distribution')"
+                          class="role-btn flex items-center gap-3 p-3 rounded-lg border-2 border-muted hover:border-primary hover:bg-primary/5 transition-all text-left"
+                          data-role="distribution">
+                    <div class="h-8 w-8 rounded bg-primary/10 flex items-center justify-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <span class="text-sm font-medium">Distribution</span>
+                      <p class="text-xs text-muted-foreground">Aggregation layer</p>
+                    </div>
+                  </button>
+                  <button type="button" onclick="selectRole('access')"
+                          class="role-btn flex items-center gap-3 p-3 rounded-lg border-2 border-muted hover:border-primary hover:bg-primary/5 transition-all text-left"
+                          data-role="access">
+                    <div class="h-8 w-8 rounded bg-primary/10 flex items-center justify-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                      </svg>
+                    </div>
+                    <div>
+                      <span class="text-sm font-medium">Access</span>
+                      <p class="text-xs text-muted-foreground">End-user connectivity</p>
+                    </div>
+                  </button>
+                  <button type="button" onclick="selectRole('firewall')"
+                          class="role-btn flex items-center gap-3 p-3 rounded-lg border-2 border-muted hover:border-primary hover:bg-primary/5 transition-all text-left"
+                          data-role="firewall">
+                    <div class="h-8 w-8 rounded bg-primary/10 flex items-center justify-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <span class="text-sm font-medium">Firewall</span>
+                      <p class="text-xs text-muted-foreground">Security appliance</p>
+                    </div>
+                  </button>
+                </div>
+                <input type="hidden" name="role" id="wizard_role" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 4: Review -->
+          <div id="step-content-4" class="wizard-step p-6 space-y-6 hidden">
+            <div class="text-center mb-6">
+              <h3 class="text-lg font-semibold">Review & Create</h3>
+              <p class="text-sm text-muted-foreground mt-1">Verify the device configuration before creating</p>
+            </div>
+            
+            <div class="max-w-lg mx-auto">
+              <div class="rounded-lg border bg-muted/30 p-6 space-y-4">
+                <div class="flex items-start gap-4">
+                  <div class="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                    </svg>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <h4 id="review-hostname" class="font-semibold text-lg truncate">-</h4>
+                    <code id="review-ip" class="text-sm text-muted-foreground bg-muted px-2 py-0.5 rounded font-mono">-</code>
+                  </div>
+                </div>
+                
+                <div class="border-t pt-4 grid grid-cols-2 gap-4">
+                  <div>
+                    <span class="text-xs text-muted-foreground uppercase tracking-wider">Vendor</span>
+                    <p id="review-vendor" class="font-medium mt-0.5">-</p>
+                  </div>
+                  <div>
+                    <span class="text-xs text-muted-foreground uppercase tracking-wider">Platform</span>
+                    <p id="review-platform" class="font-medium mt-0.5">-</p>
+                  </div>
+                  <div>
+                    <span class="text-xs text-muted-foreground uppercase tracking-wider">Site</span>
+                    <p id="review-site" class="font-medium mt-0.5">-</p>
+                  </div>
+                  <div>
+                    <span class="text-xs text-muted-foreground uppercase tracking-wider">Role</span>
+                    <p id="review-role" class="font-medium mt-0.5">-</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="rounded-lg border border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/30 p-4 mt-4">
+                <div class="flex gap-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div>
+                    <p class="text-sm font-medium text-green-800 dark:text-green-200">Ready to create</p>
+                    <p class="text-xs text-green-700 dark:text-green-300 mt-1">The device will be created and available for automation tasks immediately.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </form>
+
+        <!-- Footer with navigation -->
+        <div class="px-6 py-4 border-t bg-muted/30 flex items-center justify-between">
+          <button type="button" id="btn-prev" onclick="prevStep()" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 px-4 border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground invisible">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+            </svg>
+            Back
+          </button>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="closeAddDeviceModal()" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 px-4 border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground">
+              Cancel
+            </button>
+            <button type="button" id="btn-next" onclick="nextStep()" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 px-6 bg-primary text-primary-foreground shadow hover:bg-primary/90">
+              Next
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+            <button type="submit" form="add-device-form" id="btn-create" class="hidden inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 px-6 bg-primary text-primary-foreground shadow hover:bg-primary/90">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+              </svg>
+              Create Device
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- CSV IMPORT PANEL -->
+      <div id="wizard-import" class="flex-1 overflow-hidden hidden">
+        <div class="p-6 space-y-6 overflow-y-auto max-h-[60vh]">
+          <!-- Info Alert -->
+          <div class="rounded-lg border border-primary/20 bg-primary/5 p-4">
+            <div class="flex gap-3">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="h-5 w-5 text-primary shrink-0 mt-0.5">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" stroke="currentColor" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+              <div>
+                <h3 class="font-semibold text-sm">CSV Format Requirements</h3>
+                <div class="mt-2 text-sm text-muted-foreground space-y-1">
+                  <p><strong>Required columns:</strong> <code class="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">hostname, mgmt_ip, credential</code></p>
+                  <p><strong>Optional columns:</strong> <code class="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">vendor, platform, role, site, tags</code></p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <form method="post" action="/devices/import" enctype="multipart/form-data"
+                hx-post="/devices/import"
+                hx-target="#import-results"
+                hx-swap="innerHTML"
+                hx-encoding="multipart/form-data">
+            {% csrf_token %}
+
+            <div class="space-y-4">
+              <div class="space-y-2">
+                <label class="text-sm font-medium leading-none">
+                  Customer <span class="text-destructive">*</span>
+                </label>
+                <div data-island="FormSelect" data-props='{"name":"customer","placeholder":"Select a customer","options":[{% for choice in form.customer.field.choices %}{"value":"{{ choice.0 }}","label":"{{ choice.1|escapejs }}"}{% if not forloop.last %},{% endif %}{% endfor %}]}'></div>
+                <input type="hidden" name="customer" id="import_customer" required />
+              </div>
+
+              <!-- Drag & Drop File Upload -->
+              <div class="space-y-2">
+                <label class="text-sm font-medium leading-none">
+                  CSV File <span class="text-destructive">*</span>
+                </label>
+                <div id="drop-zone" class="relative border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center hover:border-primary/50 transition-colors cursor-pointer"
+                     ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)"
+                     onclick="document.getElementById('import_file').click()">
+                  <input type="file" name="file" id="import_file" accept=".csv" class="sr-only" onchange="handleFileSelect(this)" required />
+                  <div id="drop-zone-content">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 mx-auto text-muted-foreground/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                    <p class="mt-2 text-sm text-muted-foreground">
+                      <span class="font-medium text-primary">Click to upload</span> or drag and drop
+                    </p>
+                    <p class="mt-1 text-xs text-muted-foreground">CSV files only</p>
+                  </div>
+                  <div id="file-selected" class="hidden">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 mx-auto text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <p id="file-name" class="mt-2 text-sm font-medium"></p>
+                    <button type="button" onclick="clearFile(event)" class="mt-1 text-xs text-destructive hover:underline">Remove file</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div id="import-results" class="mt-4"></div>
+
+            <div class="flex justify-end gap-2 mt-6 pt-4 border-t">
+              <button type="button" onclick="closeAddDeviceModal()" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 px-4 border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground">
+                Cancel
+              </button>
+              <button type="submit" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring h-10 px-6 bg-primary text-primary-foreground shadow hover:bg-primary/90">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+                Import Devices
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentStep = 1;
+const totalSteps = 4;
+
+function openAddDeviceModal() {
+  document.getElementById('add-device-modal').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  currentStep = 1;
+  updateStepUI();
+  switchWizardMode('manual');
+}
+
+function closeAddDeviceModal() {
+  document.getElementById('add-device-modal').classList.add('hidden');
+  document.body.style.overflow = '';
+  document.getElementById('import-results').innerHTML = '';
+  resetWizard();
+}
+
+function switchWizardMode(mode) {
+  const manualBtn = document.getElementById('mode-manual');
+  const importBtn = document.getElementById('mode-import');
+  const manualPanel = document.getElementById('wizard-manual');
+  const importPanel = document.getElementById('wizard-import');
+  
+  if (mode === 'manual') {
+    manualBtn.classList.add('bg-background', 'text-foreground', 'shadow-sm');
+    manualBtn.classList.remove('text-muted-foreground', 'hover:text-foreground');
+    importBtn.classList.remove('bg-background', 'text-foreground', 'shadow-sm');
+    importBtn.classList.add('text-muted-foreground', 'hover:text-foreground');
+    manualPanel.classList.remove('hidden');
+    importPanel.classList.add('hidden');
+  } else {
+    importBtn.classList.add('bg-background', 'text-foreground', 'shadow-sm');
+    importBtn.classList.remove('text-muted-foreground', 'hover:text-foreground');
+    manualBtn.classList.remove('bg-background', 'text-foreground', 'shadow-sm');
+    manualBtn.classList.add('text-muted-foreground', 'hover:text-foreground');
+    importPanel.classList.remove('hidden');
+    manualPanel.classList.add('hidden');
+  }
+}
+
+function nextStep() {
+  if (currentStep < totalSteps) {
+    if (!validateStep(currentStep)) return;
+    currentStep++;
+    updateStepUI();
+    if (currentStep === totalSteps) {
+      updateReviewPanel();
+    }
+  }
+}
+
+function prevStep() {
+  if (currentStep > 1) {
+    currentStep--;
+    updateStepUI();
+  }
+}
+
+function validateStep(step) {
+  if (step === 1) {
+    const hostname = document.getElementById('wizard_hostname').value.trim();
+    const ip = document.getElementById('wizard_mgmt_ip').value.trim();
+    const customer = document.getElementById('wizard_customer').value;
+    if (!hostname || !ip || !customer) {
+      window.webnet?.showToast?.('Please fill in all required fields', 'error') || alert('Please fill in all required fields');
+      return false;
+    }
+  }
+  if (step === 2) {
+    const credential = document.getElementById('wizard_credential').value;
+    if (!credential) {
+      window.webnet?.showToast?.('Please select credentials', 'error') || alert('Please select credentials');
+      return false;
+    }
+  }
+  return true;
+}
+
+function updateStepUI() {
+  // Update step content visibility
+  for (let i = 1; i <= totalSteps; i++) {
+    const content = document.getElementById('step-content-' + i);
+    const indicator = document.getElementById('step-indicator-' + i);
+    const indicatorDiv = indicator.querySelector('div');
+    const indicatorSpan = indicator.querySelector('span');
+    
+    if (i === currentStep) {
+      content.classList.remove('hidden');
+      indicatorDiv.classList.remove('bg-muted', 'text-muted-foreground');
+      indicatorDiv.classList.add('bg-primary', 'text-primary-foreground');
+      if (indicatorSpan) {
+        indicatorSpan.classList.remove('text-muted-foreground');
+        indicatorSpan.classList.add('text-foreground');
+      }
+    } else if (i < currentStep) {
+      content.classList.add('hidden');
+      indicatorDiv.classList.remove('bg-muted', 'text-muted-foreground', 'bg-primary', 'text-primary-foreground');
+      indicatorDiv.classList.add('bg-green-500', 'text-white');
+      indicatorDiv.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>';
+      if (indicatorSpan) {
+        indicatorSpan.classList.remove('text-muted-foreground');
+        indicatorSpan.classList.add('text-foreground');
+      }
+    } else {
+      content.classList.add('hidden');
+      indicatorDiv.classList.remove('bg-primary', 'text-primary-foreground', 'bg-green-500', 'text-white');
+      indicatorDiv.classList.add('bg-muted', 'text-muted-foreground');
+      indicatorDiv.textContent = i;
+      if (indicatorSpan) {
+        indicatorSpan.classList.add('text-muted-foreground');
+        indicatorSpan.classList.remove('text-foreground');
+      }
+    }
+    
+    // Update progress lines
+    if (i < totalSteps) {
+      const line = document.getElementById('step-line-' + i);
+      if (line) {
+        const progress = line.querySelector('div');
+        progress.style.width = i < currentStep ? '100%' : '0%';
+      }
+    }
+  }
+  
+  // Update navigation buttons
+  const prevBtn = document.getElementById('btn-prev');
+  const nextBtn = document.getElementById('btn-next');
+  const createBtn = document.getElementById('btn-create');
+  
+  prevBtn.style.visibility = currentStep === 1 ? 'hidden' : 'visible';
+  
+  if (currentStep === totalSteps) {
+    nextBtn.classList.add('hidden');
+    createBtn.classList.remove('hidden');
+  } else {
+    nextBtn.classList.remove('hidden');
+    createBtn.classList.add('hidden');
+  }
+}
+
+function updateReviewPanel() {
+  document.getElementById('review-hostname').textContent = document.getElementById('wizard_hostname').value || '-';
+  document.getElementById('review-ip').textContent = document.getElementById('wizard_mgmt_ip').value || '-';
+  document.getElementById('review-vendor').textContent = document.getElementById('wizard_vendor').value || 'Not specified';
+  document.getElementById('review-platform').textContent = document.getElementById('wizard_platform').value || 'Not specified';
+  document.getElementById('review-site').textContent = document.getElementById('wizard_site').value || 'Not specified';
+  document.getElementById('review-role').textContent = document.getElementById('wizard_role').value || 'Not specified';
+}
+
+function selectVendor(vendor) {
+  document.querySelectorAll('.vendor-btn').forEach(btn => {
+    btn.classList.remove('border-primary', 'bg-primary/5');
+    btn.classList.add('border-muted');
+  });
+  const btn = document.querySelector(`.vendor-btn[data-vendor="${vendor}"]`);
+  if (btn) {
+    btn.classList.add('border-primary', 'bg-primary/5');
+    btn.classList.remove('border-muted');
+  }
+  document.getElementById('wizard_vendor').value = vendor === 'other' ? '' : vendor;
+}
+
+function selectRole(role) {
+  document.querySelectorAll('.role-btn').forEach(btn => {
+    btn.classList.remove('border-primary', 'bg-primary/5');
+    btn.classList.add('border-muted');
+  });
+  const btn = document.querySelector(`.role-btn[data-role="${role}"]`);
+  if (btn) {
+    btn.classList.add('border-primary', 'bg-primary/5');
+    btn.classList.remove('border-muted');
+  }
+  document.getElementById('wizard_role').value = role;
+}
+
+function resetWizard() {
+  currentStep = 1;
+  document.getElementById('add-device-form').reset();
+  document.querySelectorAll('.vendor-btn, .role-btn').forEach(btn => {
+    btn.classList.remove('border-primary', 'bg-primary/5');
+    btn.classList.add('border-muted');
+  });
+  // Reset step indicators
+  for (let i = 1; i <= totalSteps; i++) {
+    const indicator = document.getElementById('step-indicator-' + i);
+    const indicatorDiv = indicator.querySelector('div');
+    indicatorDiv.classList.remove('bg-green-500', 'text-white', 'bg-primary', 'text-primary-foreground');
+    indicatorDiv.classList.add('bg-muted', 'text-muted-foreground');
+    indicatorDiv.textContent = i;
+  }
+  updateStepUI();
+}
+
+// File upload handlers
+function handleDrop(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  document.getElementById('drop-zone').classList.remove('border-primary', 'bg-primary/5');
+  const files = e.dataTransfer.files;
+  if (files.length > 0) {
+    document.getElementById('import_file').files = files;
+    showSelectedFile(files[0].name);
+  }
+}
+
+function handleDragOver(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  document.getElementById('drop-zone').classList.add('border-primary', 'bg-primary/5');
+}
+
+function handleDragLeave(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  document.getElementById('drop-zone').classList.remove('border-primary', 'bg-primary/5');
+}
+
+function handleFileSelect(input) {
+  if (input.files.length > 0) {
+    showSelectedFile(input.files[0].name);
+  }
+}
+
+function showSelectedFile(name) {
+  document.getElementById('drop-zone-content').classList.add('hidden');
+  document.getElementById('file-selected').classList.remove('hidden');
+  document.getElementById('file-name').textContent = name;
+}
+
+function clearFile(e) {
+  e.stopPropagation();
+  document.getElementById('import_file').value = '';
+  document.getElementById('drop-zone-content').classList.remove('hidden');
+  document.getElementById('file-selected').classList.add('hidden');
+}
+
+// Keyboard navigation
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && !document.getElementById('add-device-modal').classList.contains('hidden')) {
+    closeAddDeviceModal();
+  }
+});
+</script>

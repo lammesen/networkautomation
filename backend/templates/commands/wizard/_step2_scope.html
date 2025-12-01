@@ -1,0 +1,115 @@
+<!-- Step 2: Scope Selection -->
+<div class="space-y-4">
+  <div class="flex items-center justify-between mb-4">
+    <div>
+      <h3 class="text-lg font-medium text-foreground">Select Target Devices</h3>
+      <p class="text-sm text-muted-foreground">Choose which devices to run the task on</p>
+    </div>
+    <span class="text-xs text-muted-foreground">Step 2 of 4</span>
+  </div>
+
+  <!-- Scope Options -->
+  <div class="space-y-3">
+    <!-- Selected Devices -->
+    <div class="rounded-lg border-2 border-primary bg-primary/5 p-4">
+      <div class="flex items-start gap-3">
+        <input type="radio" name="scope" value="selected" checked class="mt-1 h-4 w-4 text-primary focus:ring-primary" />
+        <div class="flex-1">
+          <label class="font-medium text-foreground cursor-pointer">
+            Selected Devices
+            <span class="badge badge-primary ml-2" id="selected-count-badge">0</span>
+          </label>
+          <p class="text-xs text-muted-foreground mt-1">Run task on devices you've selected from the table</p>
+          <div id="selected-devices-list" class="mt-2 flex flex-wrap gap-1">
+            <!-- Will be populated dynamically -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- All Devices -->
+    <div class="rounded-lg border-2 border-border bg-card p-4 hover:border-primary transition-colors">
+      <div class="flex items-start gap-3">
+        <input type="radio" name="scope" value="all" class="mt-1 h-4 w-4 text-primary focus:ring-primary" />
+        <div class="flex-1">
+          <label class="font-medium text-foreground cursor-pointer">All Devices</label>
+          <p class="text-xs text-muted-foreground mt-1">Run task on all devices in your inventory</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Device Group -->
+    <div class="rounded-lg border-2 border-border bg-card p-4 hover:border-primary transition-colors">
+      <div class="flex items-start gap-3">
+        <input type="radio" name="scope" value="group" class="mt-1 h-4 w-4 text-primary focus:ring-primary" />
+        <div class="flex-1">
+          <label class="font-medium text-foreground cursor-pointer">Device Group</label>
+          <p class="text-xs text-muted-foreground mt-1">Run task on a specific group of devices</p>
+          <div class="mt-2">
+            <div data-island="FormSelect" data-props='{"name":"group","placeholder":"Select a group...","options":[{"value":"core-switches","label":"Core Switches"},{"value":"edge-routers","label":"Edge Routers"},{"value":"site-a","label":"Site A"},{"value":"site-b","label":"Site B"}]}'>
+            </div>
+            <input type="hidden" name="group" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filter-based -->
+    <div class="rounded-lg border-2 border-border bg-card p-4 hover:border-primary transition-colors">
+      <div class="flex items-start gap-3">
+        <input type="radio" name="scope" value="filter" class="mt-1 h-4 w-4 text-primary focus:ring-primary" />
+        <div class="flex-1">
+          <label class="font-medium text-foreground cursor-pointer">Filter-based Selection</label>
+          <p class="text-xs text-muted-foreground mt-1">Use filters to dynamically select devices</p>
+          <div class="mt-2 grid grid-cols-2 gap-2">
+            <div data-island="FormSelect" data-props='{"name":"vendor_filter","placeholder":"Vendor...","options":[{"value":"","label":"All"},{"value":"cisco","label":"Cisco"},{"value":"arista","label":"Arista"},{"value":"juniper","label":"Juniper"}]}'></div>
+            <div data-island="FormSelect" data-props='{"name":"site_filter","placeholder":"Site...","options":[{"value":"","label":"All"},{"value":"site-a","label":"Site A"},{"value":"site-b","label":"Site B"}]}'></div>
+            <input type="hidden" name="vendor_filter" />
+            <input type="hidden" name="site_filter" />
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="flex justify-between gap-2 pt-4 border-t">
+    <button type="button" onclick="loadWizardStep('task-type')" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-4">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+      </svg>
+      Back
+    </button>
+    <div class="flex gap-2">
+      <button type="button" onclick="closeRunTaskWizard()" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-4">
+        Cancel
+      </button>
+      <button type="button" onclick="loadWizardStep('parameters')" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4">
+        Next
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+        </svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+// Populate selected devices
+const selectedDevices = getSelectedDeviceIds();
+const selectedCountBadge = document.getElementById('selected-count-badge');
+const selectedDevicesList = document.getElementById('selected-devices-list');
+
+selectedCountBadge.textContent = selectedDevices.length;
+
+selectedDevices.forEach(deviceId => {
+  const checkbox = document.querySelector(`.device-checkbox[data-device-id="${deviceId}"]`);
+  if (checkbox) {
+    const hostname = checkbox.dataset.deviceHostname;
+    const badge = document.createElement('span');
+    badge.className = 'badge badge-muted text-xs';
+    badge.textContent = hostname;
+    selectedDevicesList.appendChild(badge);
+  }
+});
+</script>

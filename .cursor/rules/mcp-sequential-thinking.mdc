@@ -1,0 +1,37 @@
+---
+description: When/how/why to use sequential-thinking MCP
+globs: 
+alwaysApply: true
+---
+
+# Sequential Thinking MCP
+
+**When to use:**
+- **MANDATORY** for ALL non-trivial tasks (per core principles)
+- Complex problems requiring step-by-step analysis
+- Multi-step implementations needing planning
+- Debugging complex issues
+- Architecture decisions
+
+**How to use:**
+```typescript
+mcp_sequential-thinking_sequentialthinking({
+  thought: "Current thinking step",
+  thoughtNumber: 1,
+  totalThoughts: 5,
+  nextThoughtNeeded: true
+})
+```
+
+**Why:**
+- Structures problem-solving process
+- Prevents jumping to solutions without analysis
+- Documents reasoning chain
+- Helps identify edge cases early
+
+**Pattern:**
+1. Start with `totalThoughts` estimate
+2. Build thoughts incrementally
+3. Revise if needed (`isRevision: true`)
+4. Generate solution hypothesis
+5. Verify before implementing

@@ -1,0 +1,43 @@
+---
+description: When/how/why to use Context7 MCP for library docs
+globs: ["**/*.py", "**/*.ts", "**/*.tsx", "**/*.js"]
+alwaysApply: false
+---
+
+# Context7 MCP - Library Documentation
+
+**When to use:**
+- Need library/framework documentation
+- Unfamiliar API or syntax
+- Best practices for specific libraries
+- Code examples for libraries
+- Before implementing with new libraries
+
+**How to use:**
+```typescript
+// Step 1: Resolve library name to ID
+mcp_context7_resolve-library-id({ libraryName: "django-rest-framework" })
+
+// Step 2: Get documentation
+mcp_context7_get-library-docs({
+  context7CompatibleLibraryID: "/encode/django-rest-framework",
+  mode: "code",  // or "info" for conceptual guides
+  topic: "viewsets",  // optional focus
+  page: 1  // pagination
+})
+```
+
+**Why:**
+- Up-to-date documentation
+- Real code examples
+- Faster than manual search
+- Context-aware (topic filtering)
+
+**Common libraries:**
+- Django, DRF, Channels, Celery
+- React, TypeScript, HTMX
+- Nornir, Netmiko, NAPALM
+
+**Don't use for:**
+- Project-specific code (use codebase_search)
+- Simple syntax questions (use standard tools)

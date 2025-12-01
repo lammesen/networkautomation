@@ -10,10 +10,12 @@ PIP_BIN     := $(VENV_DIR)/bin/pip
 RUFF        := $(VENV_DIR)/bin/ruff
 BLACK       := $(VENV_DIR)/bin/black
 UVICORN     := $(VENV_DIR)/bin/uvicorn
+DAPHNE      := $(VENV_DIR)/bin/daphne
 CELERY      := $(VENV_DIR)/bin/celery
 
-BUN         ?= bun
+NPM         ?= npm
 DOCKER      ?= docker
+DOCKER_COMPOSE ?= docker compose
 KUBECTL     ?= kubectl
 K8S_NAMESPACE ?= default
 K8S_MANIFESTS := \
@@ -21,19 +23,23 @@ K8S_MANIFESTS := \
 	k8s/postgres.yaml \
 	k8s/redis.yaml \
 	k8s/services.yaml \
+	k8s/secrets.yaml \
 	k8s/backend.yaml \
-	k8s/frontend.yaml \
 	k8s/worker.yaml \
-	k8s/linux-device.yaml
+	k8s/linux-device.yaml \
+	k8s/ingress.yaml
 K8S_DELETE_MANIFESTS := \
+	k8s/ingress.yaml \
 	k8s/linux-device.yaml \
 	k8s/worker.yaml \
-	k8s/frontend.yaml \
 	k8s/backend.yaml \
+	k8s/secrets.yaml \
 	k8s/services.yaml \
 	k8s/redis.yaml \
 	k8s/postgres.yaml \
 	k8s/pvc.yaml
+
+TEST_DATABASE_URL ?= sqlite:///db.sqlite3
 
 # -------------------------------------------------------------------
 # Convenience targets
@@ -45,30 +51,47 @@ help:
 	@echo "Dev Environment:"
 	@echo "  venv                 Create Python virtual environment"
 	@echo "  backend-install      Install backend deps (dev)"
-	@echo "  frontend-install     Install frontend deps via Bun"
-	@echo "  bootstrap            Install both backend & frontend deps"
+	@echo "  backend-npm-install  Install backend npm deps (React, shadcn, esbuild)"
+	@echo "  backend-build-css    Build Tailwind CSS"
+	@echo "  backend-build-js     Build React islands bundle"
+	@echo "  backend-collectstatic     Collect Django static assets"
+	@echo "  backend-build-static Build CSS + JS + collectstatic"
+	@echo "  backend-watch        Watch mode for CSS + JS development"
+	@echo "  bootstrap            Install backend and npm deps"
+
 	@echo
 	@echo "Quality & Tests:"
 	@echo "  backend-lint         Run Ruff + Black check"
+	@echo "  backend-typecheck    Run mypy against Django apps"
+	@echo "  backend-format       Auto-format with Ruff+Black"
 	@echo "  backend-test         Run backend pytest suite"
+	@echo "  backend-js-check     Typecheck React islands (tsc --noEmit)"
+	@echo "  backend-verify       Run lint + mypy + tests"
 	@echo "  ssh-test             Run SSH service + websocket tests"
-	@echo "  frontend-build       Build frontend (vite)"
-	@echo "  dev-backend          Start FastAPI locally (requires .env)"
+	@echo "  dev-backend          Start Daphne ASGI server (WebSocket support, requires .env)"
+	@echo "  dev-backend-simple   Start Django runserver (no WebSocket, requires .env)"
 	@echo "  dev-worker           Start Celery worker (requires .env)"
 	@echo "  dev-beat             Start Celery beat (requires .env)"
-	@echo "  dev-frontend         Start frontend dev server"
-	@echo "  dev-migrate          Run Alembic migrations locally"
+	@echo "  dev-migrate          Run Django migrations locally"
 	@echo "  dev-seed             Seed admin user locally"
-	@echo "  dev-services         Start all services in tmux (no migrations)"
-	@echo "  dev-all              Migrate, seed, and start all services in tmux"
-	@echo "  test                 Run backend tests + frontend build"
+	@echo "  dev-services         Start backend/worker/beat in tmux (Daphne + Celery)"
+	@echo "  dev-login-ready      Install deps, build static, migrate, create superuser, run Daphne"
+	@echo "  dev-login-ready-services Install deps, build static, migrate, seed, start Daphne/worker/beat"
+	@echo "  dev-all              Migrate, seed, and start backend/worker/beat in tmux"
+
+	@echo "  test                 Run backend tests"
+	@echo "  k8s-apply            Apply backend/worker/infra manifests (no frontend)"
+	@echo "  k8s-delete           Delete backend/worker/infra manifests"
 	@echo
 	@echo "Runtime:"
-	@echo "  dev                  Backend tests + frontend build (quick confidence)"
+	@echo "  dev                  Backend tests"
 	@echo "  docker-build         Build all Docker images"
 	@echo "  dev-up               Build images then apply k8s manifests"
 	@echo "  dev-down             Tear down k8s manifests"
 	@echo "  deploy               Build images and redeploy k8s manifests"
+	@echo "  compose-up           Start local stack (Django + Celery + Postgres + Redis)"
+	@echo "  compose-down         Stop local stack and remove volumes"
+	@echo "  compose-logs         Tail local stack logs"
 	@echo "  migrate              Run Alembic migrations"
 	@echo "  seed-admin           Seed admin user via init_db.py"
 	@echo
@@ -97,99 +120,136 @@ backend-install: venv
 	$(PIP_BIN) install --upgrade pip
 	$(PIP_BIN) install -e "backend/.[dev]"
 
-.PHONY: frontend-install
-frontend-install:
-	cd frontend && $(BUN) install
+.PHONY: backend-npm-install
+backend-npm-install:
+	cd backend && $(NPM) install
 
 .PHONY: bootstrap
-bootstrap: backend-install frontend-install
+bootstrap: backend-install backend-npm-install
 
 # -------------------------------------------------------------------
 # Backend quality gates
 # -------------------------------------------------------------------
 .PHONY: backend-lint
 backend-lint: venv
-	$(RUFF) check backend/app
-	$(BLACK) --check backend/app
+	$(RUFF) check backend/webnet
+	$(BLACK) --check backend/webnet
+
+.PHONY: backend-typecheck
+backend-typecheck: venv
+	cd backend && DJANGO_SETTINGS_MODULE=webnet.settings ../$(PYTHON_BIN) -m mypy webnet
+
+.PHONY: backend-format
+backend-format: venv
+	$(RUFF) check backend/webnet --fix
+	$(BLACK) backend/webnet
 
 .PHONY: backend-test
 backend-test: venv
-	cd backend && ../$(PYTHON_BIN) -m pytest
+	cd backend && DATABASE_URL=$(TEST_DATABASE_URL) DEBUG=true ../$(PYTHON_BIN) -m pytest
+
+.PHONY: backend-js-check
+backend-js-check:
+	cd backend && npm run lint
+
+.PHONY: backend-verify
+backend-verify: backend-lint backend-typecheck backend-test
 
 .PHONY: ssh-test
 ssh-test: venv
 	cd backend && ../$(PYTHON_BIN) -m pytest \
-		app/tests/services/test_ssh_manager.py \
-		app/tests/test_websocket.py
+		webnet/tests/test_ssh_manager.py \
+		webnet/tests/test_websocket.py
 
 .PHONY: migrate
-migrate:
-	$(KUBECTL) exec deploy/backend -n $(K8S_NAMESPACE) -- python -m alembic upgrade head
+migrate: venv
+	cd backend && ../$(PYTHON_BIN) manage.py migrate
 
 .PHONY: seed-admin
-seed-admin:
-	$(KUBECTL) exec deploy/backend -n $(K8S_NAMESPACE) -- python init_db.py
+seed-admin: venv
+	cd backend && ../$(PYTHON_BIN) manage.py createsuperuser --no-input || true
 
 # -------------------------------------------------------------------
-# Frontend tasks
+# Frontend tasks (HTMX + React Islands + shadcn/ui)
 # -------------------------------------------------------------------
-.PHONY: frontend-build
-frontend-build:
-	cd frontend && $(BUN) run build
+.PHONY: backend-build-css
+backend-build-css:
+	cd backend && $(NPM) run build:css
 
-.PHONY: frontend-dev
-frontend-dev:
-	cd frontend && $(BUN) run dev
+.PHONY: backend-build-js
+backend-build-js:
+	cd backend && $(NPM) run build:js
+
+.PHONY: backend-watch
+backend-watch:
+	cd backend && $(NPM) run watch
+
+.PHONY: backend-collectstatic
+backend-collectstatic: venv
+	cd backend && ../$(PYTHON_BIN) manage.py collectstatic --noinput
+
+.PHONY: backend-build-static
+backend-build-static: backend-build-css backend-build-js backend-collectstatic
 
 # -------------------------------------------------------------------
 # Local dev runtime
 # -------------------------------------------------------------------
 .PHONY: dev-backend
 dev-backend: venv
-	cd backend && ../$(UVICORN) app.main:app --reload --host 0.0.0.0 --port 8000
+	cd backend && ../$(DAPHNE) -b 0.0.0.0 -p 8000 webnet.asgi:application
+
+.PHONY: dev-backend-simple
+dev-backend-simple: venv
+	cd backend && ../$(PYTHON_BIN) manage.py runserver 0.0.0.0:8000
 
 .PHONY: dev-worker
 dev-worker: venv
-	cd backend && ../$(CELERY) -A app.celery_app:celery_app worker -l info
+	cd backend && ../$(CELERY) -A webnet.core.celery:celery_app worker -l info
 
 .PHONY: dev-beat
 dev-beat: venv
-	cd backend && rm -f celerybeat-schedule* && ../$(CELERY) -A app.celery_app:celery_app beat -l info
+	cd backend && rm -f celerybeat-schedule* && ../$(CELERY) -A webnet.core.celery:celery_app beat -l info
 
 .PHONY: dev-services
 dev-services: venv
-	# Start backend, worker, and beat in background tmux session "netauto"
+	# Start backend (Daphne), worker, and beat in background tmux session "netauto"
+	# Daphne is used for WebSocket support (SSH terminal, job updates, etc.)
 	# If tmux is not installed, fall back to spawning background processes.
 	if command -v tmux >/dev/null 2>&1; then \
 		tmux kill-session -t netauto >/dev/null 2>&1 || true; \
-		tmux new-session -d -s netauto "cd backend && ../$(UVICORN) app.main:app --reload --host 0.0.0.0 --port 8000"; \
-		tmux split-window -h -t netauto:0 "cd backend && ../$(CELERY) -A app.celery_app:celery_app worker -l info"; \
+		tmux new-session -d -s netauto "cd backend && ../$(DAPHNE) -b 0.0.0.0 -p 8000 webnet.asgi:application"; \
+		tmux split-window -h -t netauto:0 "cd backend && ../$(CELERY) -A webnet.core.celery:celery_app worker -l info"; \
 		tmux select-pane -t netauto:0.0; \
-		tmux split-window -v -t netauto:0 "cd backend && rm -f celerybeat-schedule* && ../$(CELERY) -A app.celery_app:celery_app beat -l info"; \
-		tmux select-pane -t netauto:0.1; \
-		tmux split-window -v -t netauto:0 "cd frontend && $(BUN) run dev -- --port 5173"; \
+		tmux split-window -v -t netauto:0 "cd backend && rm -f celerybeat-schedule* && ../$(CELERY) -A webnet.core.celery:celery_app beat -l info"; \
 		tmux select-layout -t netauto even-vertical; \
 		tmux set-option -t netauto mouse on; \
 		tmux attach -t netauto; \
 	else \
-		( cd backend && ../$(UVICORN) app.main:app --reload --host 0.0.0.0 --port 8000 & echo $$! > /tmp/netauto-api.pid ); \
-		( cd backend && ../$(CELERY) -A app.celery_app:celery_app worker -l info & echo $$! > /tmp/netauto-worker.pid ); \
-		( cd backend && rm -f celerybeat-schedule* && ../$(CELERY) -A app.celery_app:celery_app beat -l info & echo $$! > /tmp/netauto-beat.pid ); \
-		( cd frontend && $(BUN) run dev -- --port 5173 & echo $$! > /tmp/netauto-frontend.pid ); \
-		echo "Started api/worker/beat/frontend without tmux. PIDs stored in /tmp/netauto-*.pid"; \
+		( cd backend && ../$(DAPHNE) -b 0.0.0.0 -p 8000 webnet.asgi:application & echo $$! > /tmp/netauto-api.pid ); \
+		( cd backend && ../$(CELERY) -A webnet.core.celery:celery_app worker -l info & echo $$! > /tmp/netauto-worker.pid ); \
+		( cd backend && rm -f celerybeat-schedule* && ../$(CELERY) -A webnet.core.celery:celery_app beat -l info & echo $$! > /tmp/netauto-beat.pid ); \
+		echo "Started Daphne/worker/beat without tmux. PIDs stored in /tmp/netauto-*.pid"; \
 	fi
 
 .PHONY: dev-frontend
 dev-frontend:
-	cd frontend && $(BUN) run dev -- --port 5173
+	cd frontend && $(NPM) run dev -- --port 5173
 
 .PHONY: dev-migrate
 dev-migrate: venv
-	cd backend && ../$(PYTHON_BIN) -m alembic upgrade head
+	cd backend && ../$(PYTHON_BIN) manage.py migrate
 
 .PHONY: dev-seed
 dev-seed: venv
-	cd backend && ../$(PYTHON_BIN) init_db.py
+	cd backend && ../$(PYTHON_BIN) manage.py createsuperuser --no-input || true
+
+.PHONY: dev-login-ready
+dev-login-ready: backend-install backend-npm-install backend-build-static dev-migrate dev-seed dev-services
+	@echo "Daphne + worker + beat running (tmux 'netauto' or background); superuser seeded from .env"
+
+.PHONY: dev-login-ready-services
+dev-login-ready-services: backend-install backend-npm-install backend-build-static dev-migrate dev-seed dev-services
+	@echo "Daphne + worker + beat running (tmux 'netauto' or background); superuser seeded from .env"
 
 .PHONY: dev-all
 dev-all: venv dev-migrate dev-seed dev-services
@@ -199,10 +259,10 @@ dev-all: venv dev-migrate dev-seed dev-services
 # Combined convenience
 # -------------------------------------------------------------------
 .PHONY: test
-test: backend-test frontend-build
+test: backend-test
 
 .PHONY: dev
-dev: backend-test frontend-build
+dev: backend-test
 
 .PHONY: all
 all: bootstrap test
@@ -228,6 +288,21 @@ dev-down:
 
 .PHONY: deploy
 deploy: docker-build k8s-redeploy
+
+# -------------------------------------------------------------------
+# Docker Compose (local stack)
+# -------------------------------------------------------------------
+.PHONY: compose-up
+compose-up:
+	$(DOCKER_COMPOSE) up -d --build
+
+.PHONY: compose-down
+compose-down:
+	$(DOCKER_COMPOSE) down -v
+
+.PHONY: compose-logs
+compose-logs:
+	$(DOCKER_COMPOSE) logs -f backend worker beat
 
 # -------------------------------------------------------------------
 # Kubernetes workflow

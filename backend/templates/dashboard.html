@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - webnet{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Dashboard</h1>
+      <p class="page-subtitle">Overview of devices, jobs, compliance, and health</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <a href="/devices/" class="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">View Inventory</a>
+      <a href="/jobs/" class="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground">View Jobs</a>
+    </div>
+  </div>
+
+  <!-- KPI Cards -->
+  <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div class="kpi-card">
+      <div class="text-sm text-muted-foreground">Total Devices</div>
+      <div class="text-2xl font-semibold">{{ devices_total }}</div>
+      <div class="text-xs text-muted-foreground">Reachable: {{ devices_reachable }} | Unreachable: {{ devices_unreachable }}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="text-sm text-muted-foreground">Reachable Devices</div>
+      <div class="text-2xl font-semibold text-success">{{ devices_reachable }}</div>
+      <div class="text-xs text-muted-foreground">Updated live from inventory</div>
+    </div>
+    <div class="kpi-card">
+      <div class="text-sm text-muted-foreground">Jobs (last 24h)</div>
+      <div class="text-2xl font-semibold">{{ jobs_24h }}</div>
+      <div class="text-xs text-muted-foreground">Recently requested automation jobs</div>
+    </div>
+    <div class="kpi-card">
+      <div class="text-sm text-muted-foreground">Compliance Score</div>
+      {% if compliance_score is not None %}
+      <div class="text-2xl font-semibold">{{ compliance_score }}%</div>
+      {% else %}
+      <div class="text-2xl font-semibold text-muted-foreground">--</div>
+      {% endif %}
+      <div class="text-xs text-muted-foreground">Pass rate across latest results</div>
+    </div>
+  </div>
+
+  <!-- Main Grid -->
+  <div class="grid gap-4 lg:grid-cols-3">
+    <!-- Recent Jobs -->
+    <div class="card-section lg:col-span-2">
+      <div class="flex items-center justify-between border-b px-4 py-3">
+        <div>
+          <p class="text-sm font-semibold">Recent Jobs</p>
+          <p class="text-xs text-muted-foreground">Latest activity across the network</p>
+        </div>
+        <a href="/jobs/" class="text-sm font-medium text-primary hover:underline">View all</a>
+      </div>
+      <div class="table-wrapper border-0">
+        <table class="table-grid">
+          <thead>
+            <tr class="table-head-row">
+              <th class="table-head-cell">Job</th>
+              <th class="table-head-cell">Type</th>
+              <th class="table-head-cell">Status</th>
+              <th class="table-head-cell">Requested</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for job in recent_jobs %}
+            <tr class="table-row">
+              <td class="table-cell"><a href="/jobs/{{ job.id }}/" class="text-primary hover:underline">#{{ job.id }}</a></td>
+              <td class="table-cell text-muted-foreground">{{ job.job_type }}</td>
+              <td class="table-cell">
+                {% if job.status == "success" or job.status == "completed" %}
+                  <span class="badge badge-success">{{ job.status|capfirst }}</span>
+                {% elif job.status == "failed" %}
+                  <span class="badge badge-destructive">{{ job.status|capfirst }}</span>
+                {% elif job.status == "running" %}
+                  <span class="badge badge-info">Running</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ job.status|capfirst }}</span>
+                {% endif %}
+              </td>
+              <td class="table-cell text-muted-foreground">{{ job.requested_at }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="4" class="table-cell text-center text-muted-foreground">No recent jobs</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Inventory health -->
+    <div class="card-section">
+      <div class="border-b px-4 py-3">
+        <p class="text-sm font-semibold">Inventory health</p>
+        <p class="text-xs text-muted-foreground">Unreachable by site</p>
+      </div>
+      <div class="p-4 space-y-2">
+        {% if unreachable_sites %}
+          {% for site in unreachable_sites %}
+          <div class="flex items-center justify-between text-sm">
+            <span class="text-foreground">{{ site.site }}</span>
+            <span class="badge badge-warning">{{ site.count }} unreachable</span>
+          </div>
+          {% endfor %}
+        {% else %}
+          <p class="text-sm text-muted-foreground">All sites look healthy.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

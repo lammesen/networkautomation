@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Topology - webnet{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-bold tracking-tight">Network Topology</h1>
+    <p class="text-muted-foreground">Discovered network links and connections</p>
+  </div>
+</div>
+
+<!-- Topology Table -->
+<div class="rounded-lg border bg-card">
+  <div id="topology-table" hx-get="/topology/" hx-trigger="load" hx-target="#topology-table">
+    {% include "topology/_table.html" %}
+  </div>
+</div>
+{% endblock %}

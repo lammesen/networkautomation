@@ -1,0 +1,238 @@
+- 2025-11-27 00:00Z – Added migration plan draft in migration.md outlining Django/HTMX/DRF migration phases.
+- 2025-11-27 00:02Z – Updated AGENTS.md to mandate progress logging in progress.md for all agents.
+- 2025-11-27 00:08Z – Began plan execution: updated backend/pyproject.toml dependencies to Django/DRF/Channels/Celery stack and pytest-django dev tools.
+- 2025-11-27 00:18Z – Scaffolded Django project structure (manage.py, settings, ASGI/WSGI/routing, stub apps and models, placeholder template).
+- 2025-11-27 00:20Z – Updated setuptools package list to include new webnet apps.
+- 2025-11-27 00:26Z – Added encryption utilities, encrypted Credential fields, APIKey model, ENCRYPTION_KEY setting, Celery app bootstrap.
+- 2025-11-27 00:35Z – Added DRF skeleton (permissions, serializers, views, API urls) and ConfigSnapshot hashing helper.
+- 2025-11-27 00:42Z – Updated Makefile for Django runserver, Celery, migrations, lint paths.
+- 2025-11-27 00:44Z – Initialized migrations packages for new webnet apps.
+- 2025-11-27 00:49Z – Added JobService skeleton and Celery task stubs for automation flows.
+- 2025-11-27 00:55Z – Installed Django/DRF stack in venv, generated initial migrations for new apps, created static dir.
+- 2025-11-27 01:02Z – Implemented JWT login/refresh endpoints in DRF AuthViewSet.
+- 2025-11-27 01:05Z – Applied initial migrations to SQLite (development default) to validate model graph.
+- 2025-11-27 01:18Z – Implemented JobService dispatch, DRF job retry/cancel, command/config/compliance job creation endpoints, JWT auth wired, job logs limits.
+- 2025-11-27 01:22Z – Added reachability job dispatch mapping in JobService.
+- 2025-11-27 01:24Z – Implemented topology clear endpoint to delete discovered links.
+- 2025-11-27 01:26Z – Wired reachability endpoint to check_reachability job type.
+- 2025-11-27 01:36Z – Implemented API key issuance, CSV device import, config diff, job log limits, customer resolution; no migration changes needed.
+- 2025-11-27 01:45Z – Added runnable Celery task scaffolds that update job status/logs for commands/config/compliance/topology.
+- 2025-11-27 01:55Z – Implemented job log Channels consumer, routing, and broadcast from JobService; added internal JobLog serializer.
+- 2025-11-27 02:05Z – Added SSH websocket consumer placeholder, hooked routing; implemented API key creation, customer IP range/user management, device job filter fix.
+- 2025-11-27 02:16Z – Integrated SSH consumer with asyncssh session manager; configured known_hosts None; wired job log consumer to shared serializer; no migration changes.
+- 2025-11-27 02:26Z – Added API key revocation endpoint, topology graph endpoint, reachability task updates.
+- 2025-11-27 02:38Z – Created initial HTMX/Tailwind server-rendered devices list view, templates, and routing.
+- 2025-11-27 02:41Z – Ran collectstatic and Django system check (clean).
+- 2025-11-27 02:50Z – Updated Dockerfile.backend for Django/daphne, refreshed k8s backend/worker manifests for webnet settings and Celery command.
+- 2025-11-27 03:00Z – Wired reachability task to job-specific execution and added inventory-building hooks in Celery tasks for future Nornir integration.
+- 2025-11-27 03:12Z – Updated docs for Django/HTMX stack, backend Dockerfile/k8s manifests, added device HTMX UI, and documentation refresh.
+- 2025-11-27 03:25Z – Implemented Nornir-backed Celery tasks for commands, backup, deploy, reachability, topology with host-level logging and inventory hooks.
+- 2025-11-27 03:33Z – Added CDP-based topology discovery parsing and link persistence via Celery topology task.
+- 2025-11-27 03:45Z – Added pytest-django setup with auth and HTMX devices smoke tests (passing).
+- 2025-11-27 03:58Z – Added HTMX jobs list/logs UI, updated nav/urls, expanded tests to cover jobs UI (tests passing).
+- 2025-11-27 04:10Z – Added HTMX config snapshots list UI and tests; all backend tests passing (4 tests).
+- 2025-11-27 04:22Z – Added compliance HTMX lists (policies/results), nav links, and tests; all backend tests passing (5 tests).
+- 2025-11-27 04:30Z – Added job detail HTMX page; fixed import; backend tests passing (5 tests).
+- 2025-11-27 04:45Z – Added backend Tailwind pipeline (package.json, config, Makefile targets) and ensured tests still pass (5 tests).
+- 2025-11-27 05:00Z – Added job logs API test and Makefile help for Tailwind build; backend tests passing (6 tests).
+- 2025-11-27 05:15Z – Added config diff HTMX view, compliance nav/UI, job detail links, and new tests (7 passing).
+- 2025-11-27 05:35Z – Added job logs websocket tests, switched consumer to AsyncJsonWebsocketConsumer; backend tests passing (9 tests).
+- 2025-11-27 05:55Z – Added SSH WS auth test, introduced k8s/webnet-secrets manifest with envFrom, updated README/getting-started for Tailwind build; backend tests passing (10 tests).
+- 2025-11-27 06:10Z – Added SSH WS success test with fake manager, made SSH consumer injectible, fixed session handling; backend tests passing (11 tests).
+- 2025-11-27 06:25Z – Added Tailwind build in backend Dockerfile, hardened settings with CORS/CSRF toggles, added k8s secrets envFrom and SSH WS tests; backend tests passing (11 tests).
+- 2025-11-27 06:40Z – Removed Tailwind CDN fallback, added RBAC test for commands run, backend tests passing (12 tests).
+- 2025-11-27 06:55Z – Switched job timestamps to timezone-aware UTC; backend tests passing (12 tests).
+- 2025-11-27 07:10Z – Added HTMX commands run form (non-enqueue), CORS/CSRF env toggles, Tailwind-only CSS; backend tests passing (12 tests).
+- 2025-11-27 07:25Z – Replaced Bun with npm (Makefile, docs), added node/npm install in backend Dockerfile, Tailwind build via npm; backend tests passing (12 tests).
+- 2025-11-27 07:40Z – Added resource limits to k8s backend/worker, secrets placeholders for CORS/CSRF, updated docs/README; backend tests passing (12 tests).
+- 2025-11-27 08:00Z – Archived legacy FastAPI/React into tech-dept, removed frontend from k8s/apply, switched to npm-only, and cleaned Makefile; backend tests passing (12 tests).
+- 2025-11-27 08:05Z – Moved remaining Bun config (bunfig.toml) into tech-dept legacy-frontend archive.
+- 2025-11-27 08:20Z – Removed frontend from k8s manifests/apply, updated docs to note archived frontend and Tailwind build, kept backend tests passing (12).
+- 2025-11-27 08:35Z – Added HTMX reachability and compliance run forms with nav links; all backend tests passing (12).
+- 2025-11-27 08:50Z – Added ingress manifest, k8s resources, compliance run button in policies table; frontend fully archived; tests passing (12).
+- 2025-11-27 09:05Z – Added ingress host placeholders, status badge on job detail; tests passing (12).
+- 2025-11-27 12:41Z – Reviewed migration plan, created execution todo list, starting RBAC/tenant scoping tasks.
+- 2025-11-27 12:53Z – Added tenant-scoped mixins for DRF and HTMX views, tightened customer access checks, and blocked viewer writes.
+- 2025-11-27 12:53Z – Added RBAC/tenant scoping tests (API + HTMX) and ran full backend pytest suite successfully.
+- 2025-11-27 13:00Z – Added Nornir fallback stubs, customer-scoped inventory builder, Celery task enqueue fixes, and persistence tests for commands/config backup; full backend tests passing.
+- 2025-11-27 13:03Z – Added websocket negative-path tests (job logs tenancy, SSH wrong customer/invalid payload) and reran full backend test suite (passing).
+- 2025-11-27 13:09Z – Built HTMX device detail/topology/compliance overview pages with scoped partials and added coverage tests; full backend tests passing.
+- 2025-11-27 13:13Z – Added collectstatic/Tailwind build targets, documented CI steps and production env defaults, backend tests still passing.
+- 2025-11-27 13:19Z – Expanded DRF API coverage (devices CRUD/import, jobs retry/cancel, config deploy/diff, compliance run, topology clear) with new tests; full backend tests passing.
+- 2025-11-27 13:20Z – Fixed job cancel timezone, ordered topology links to quiet pagination warnings; full backend tests passing.
+- 2025-11-27 13:31Z – Added dev-login-ready Make target, updated .env.example for superuser defaults, documented static pipeline; full backend tests passing.
+- 2025-11-27 13:32Z – Added dev-login-ready-services target to install/build/migrate/seed and start backend+worker+beat; backend tests still passing.
+- 2025-11-27 14:16Z – Added Django login/logout routes with template and settings; full backend tests passing.
+- 2025-11-27 14:23Z – Switched UI to DaisyUI (Tailwind plugin), refreshed base nav + login form with Daisy components.
+- 2025-11-27 15:11Z – Allowed logout through auth middleware exemptions; backend tests still passing.
+- 2025-11-27 15:17Z – Added explicit logout view/template, navbar auth state, and logout test; full backend tests passing.
+- 2025-11-27 15:54Z – Enhanced devices list with DaisyUI actions (add/import), rebuilt Tailwind/collectstatic; backend tests passing.
+- 2025-11-27 15:55Z – Improved device create UX: Daisy form, default customer seeding for admins, broadened credential/customer queryset; tests passing.
+- 2025-11-27 16:00Z – Fixed auth templates (login/logout) to use auth_content block for proper base.html integration; updated compliance overview test for capitalized badge text; all 33 backend tests passing.
+- 2025-11-27 16:10Z – Updated all 7 table templates to DaisyUI "Table with border and background" style (rounded-box border, hover states, removed zebra striping); all 33 backend tests passing.
+- 2025-11-27 16:15Z – Removed manual refresh buttons from jobs list and compliance policies pages.
+- 2025-11-27 16:45Z – Implemented WebSocket push updates for real-time UI refresh:
+  - Added UpdatesConsumer at /ws/updates/ for unified entity updates (jobs, devices, config, compliance, topology)
+  - Created broadcasts.py with helper functions for broadcasting entity changes
+  - Added Django signals to auto-broadcast on Device, ConfigSnapshot, ComplianceResult, TopologyLink changes
+  - Wired JobService to broadcast job creation and status changes
+  - Added client-side WebSocket handler in base.html that auto-refreshes tables when relevant entities change
+  - Removed polling from job detail page (logs now use WebSocket push)
+  - Added 5 new WebSocket tests; all 38 backend tests passing.
+- 2025-11-27 17:00Z – Converted "Add Device" from separate page to DaisyUI modal dialog:
+  - Created _add_modal.html partial with form inside modal
+  - Updated devices list.html to include modal and trigger via button
+  - Modified DeviceListView to pass form to template
+  - Updated DeviceCreateView to handle HTMX POST and return table partial on success
+  - All 38 backend tests passing.
+- 2025-11-28 10:00Z – Created migration plan: DaisyUI → shadcn/ui with HTMX + React Islands architecture:
+  - Documented hybrid architecture: 95% server-rendered HTMX, 5% React islands for complex components
+  - Planned esbuild bundler setup for fast React builds (~50ms)
+  - Identified 22+ DaisyUI components to migrate, prioritized by usage frequency
+  - Defined island hydration pattern with HTMX afterSwap re-hydration
+  - Estimated 6-day migration timeline across 5 phases
+  - Updated AGENTS.md with new frontend architecture documentation
+- 2025-11-28 11:00Z – Completed DaisyUI → shadcn/ui template migration:
+  - Migrated all 33 HTML templates from DaisyUI classes to shadcn/ui Tailwind patterns
+  - Converted tables (9 templates): jobs, config, topology, compliance, devices partials
+  - Converted forms (7 templates): devices create/import, commands run/reachability, config diff, compliance run
+  - Converted list pages (6 templates): jobs, config, topology, compliance policies/results/overview
+  - Converted detail pages (4 templates): jobs detail/logs, devices detail
+  - Converted modals: devices add modal with custom JS open/close functions
+  - Converted auth templates: login/logout with shadcn form styling
+  - Key pattern changes: badge→inline-flex rounded-full, btn→shadcn button classes, input→shadcn input classes
+  - Removed DaisyUI from package.json and tailwind.config.js (already done)
+  - All 38 backend tests passing, static assets rebuilt
+- 2025-11-28 12:00Z – Visual QA verification of shadcn/ui migration:
+  - Verified login page: centered card, form inputs, primary button styling
+  - Verified devices list: sidebar navigation, table headers, empty state, search bar, action buttons
+  - Verified Add Device modal: backdrop overlay, form fields, required indicators, close button
+  - Verified jobs list: table with job data, status badges, timestamps, nav highlighting
+  - Verified Run Command form: card container, input fields, helper text, code examples
+  - All pages rendering correctly with shadcn/ui Tailwind patterns
+- 2025-11-28 12:20Z – Authored frontend redesign/refactor plan aligning UI with Nornir/Napalm/Netmiko workflows:
+  - Documented navigation model, page wireframes, and task wizard flows
+  - Mapped inventory, jobs, configs, compliance, tools, scheduling, admin to concrete UI components
+  - Ready for prioritization and execution phases
+- 2025-11-28 12:45Z – Started execution of frontend redesign: created task list (layout shell, reusable patterns, dashboard shell, inventory refactor) and set up sequential thinking workflow
+- 2025-11-28 13:05Z – Updated global layout shell: added top bar with environment badge, refreshed sidebar IA (Dashboard, Inventory, Jobs, Configurations, Compliance, Tools, Scheduling placeholders, Admin) and aligned mobile nav
+- 2025-11-28 13:20Z – Added reusable UI patterns (filter bar, table kit, status badges, KPI card utility) and refactored Devices list/table to new patterns
+- 2025-11-28 13:35Z – Added Dashboard view: counts for devices/reachability/jobs 24h, compliance score placeholder, recent jobs table, unreachable sites widget; wired routes to new dashboard
+- 2025-11-28 13:50Z – Enhanced Inventory devices page with vendor/platform/site/role filters; wired filtering in view; HTMX reload keeps query params; todos completed for inventory/table patterns
+- 2025-11-28 14:15Z – Implemented bulk actions on Inventory:
+  - Added checkbox column to device table with select-all header checkbox
+  - Created floating action bar (shows when devices selected) with count and action buttons
+  - Added bulk action buttons: Run Task, Backup Configs, Run Compliance
+  - Implemented JavaScript for selection state management and preservation across HTMX swaps
+  - Built Run Task Wizard with 4-step modal flow:
+    - Step 1: Task Type Selection (NAPALM/Netmiko/Nornir cards with common task shortcuts)
+    - Step 2: Scope Selection (selected devices, all devices, device groups, filter-based)
+    - Step 3: Task Parameters (dynamic form with execution options and scheduling)
+    - Step 4: Preview & Confirm (summary cards with device list and command preview)
+  - Added wizard step views and routing in UI layer
+  - All wizard templates use shadcn/ui patterns for consistency
+  - Static assets rebuilt successfully
+- 2025-11-28 15:00Z – Investigated TenantScopedView NameError during dev-login-ready-services migrate; planning fix.
+- 2025-11-28 15:08Z – Moved DashboardView below TenantScopedView to resolve NameError before migrations.
+- 2025-11-28 15:12Z – Ran backend manage.py check after fix; no issues reported.
+- 2025-11-28 15:25Z – Planned React islands rollout (DataTable first) and set todos.
+- 2025-11-28 15:50Z – Built DataTable React island, registered in islands.tsx, and wired devices table to data-island props.
+- 2025-11-28 15:55Z – Ran make backend-build-js to compile React islands bundle (esbuild success).
+- 2025-11-28 16:10Z – Added DataTable device delete action (API DELETE with CSRF), reload, and toast stub; expanded props with apiUrl.
+- 2025-11-28 16:15Z – Added JobsTable React island, wired jobs props in UI view, and mounted jobs table with noscript fallback.
+- 2025-11-28 16:20Z – Rebuilt islands bundle via make backend-build-js after new islands/actions.
+- 2025-11-28 16:35Z – Implemented global toast handler (webnet:toast listener) in base.html with dismiss and auto-hide; added shared CSRF helper.
+- 2025-11-28 16:38Z – Wired DataTable to use global CSRF/toast helpers and rebuilt islands bundle.
+- 2025-11-28 16:55Z – Added WebSocket-driven job success/failure toasts and converted config snapshots table to SnapshotsTable island with props + noscript fallback; rebuilt bundle.
+- 2025-11-28 17:20Z – Added islands for compliance policies/results and topology (with props, noscript fallbacks) and rebuilt bundle.
+- 2025-11-28 17:40Z – Added JobLogs island (auto-scroll, websocket refresh), mounted in job detail, and refreshed websocket handler; rebuilt bundle.
+- 2025-11-28 18:00Z – Began replacing native selects with shadcn Select; inventoried dropdown targets.
+- 2025-11-28 18:20Z – Implemented FormSelect island and replaced dropdowns in devices filters, compliance run, device create/import/modal, and wizard scope; rebuilt bundle.
+- 2025-11-28 19:00Z – Completed Phase 2 frontend infrastructure:
+  - Fixed esbuild config to support @/ path aliases with extension resolution
+  - Created use-mobile hook for responsive sidebar behavior
+  - Fixed sonner.tsx to work without next-themes dependency
+  - Registered AppSidebar, AppHeader, CommandPalette, Toaster in islands.tsx
+  - Added Toaster and CommandPalette islands to base.html
+  - Cmd+K now opens command palette for quick navigation
+  - All 38 backend tests passing, static assets rebuilt
+- 2025-11-28 19:30Z – Completed Phase 3 reusable components:
+  - Created BaseDataTable with TanStack Table (sorting, filtering, pagination, row selection)
+  - Created FilterBar component with search and select filters, URL sync support
+  - Created BulkActionBar component with floating action bar and useBulkSelection hook
+  - Created ConfirmDialog with variants (default, destructive, warning) and useConfirmDialog hook
+  - Registered all new components in islands.tsx
+  - All 38 backend tests passing, bundle rebuilt successfully
+- 2025-11-28 20:00Z – Integration testing and bug fixes:
+  - Fixed static file serving issue (whitenoise caching stale bundle) by restarting server
+  - Verified Command Palette (Cmd+K) works - dialog opens with navigation groups
+  - Fixed FormSelect component to handle empty options and filter out empty values
+  - Fixed template escaping: removed `escapejs` filter from 7 templates where props come from json.dumps()
+  - Templates fixed: devices/_table.html, jobs/_table.html, jobs/_logs.html, config/_table.html, 
+    topology/_table.html, compliance/_policies_table.html, compliance/_results_table.html, devices/list.html
+  - Jobs table working with sortable columns and data display
+  - Toaster island (Sonner) initialized and available for notifications
+  - All 38 backend tests passing
+- 2025-11-28 21:00Z – Implemented SSH Terminal React island with xterm.js:
+  - Installed @xterm/xterm, @xterm/addon-fit, @xterm/addon-web-links npm packages
+  - Created SSHTerminal.tsx React island component with:
+    - xterm.js terminal emulator with Tokyo Night color theme
+    - WebSocket connection to /ws/devices/{id}/ssh/ endpoint
+    - Command-response protocol handling (buffers input until Enter)
+    - Connection state management (disconnected/connecting/connected/error)
+    - Collapsible card UI with Connect/Disconnect buttons
+    - Keyboard handling (Enter, Backspace, Ctrl+C, Ctrl+U)
+    - Auto-fit terminal to container with ResizeObserver
+  - Added xterm.css to esbuild config and base.html
+  - Integrated terminal into device detail page as first card
+  - Verified terminal renders correctly with xterm.js styling
+  - All 38 backend tests passing, bundle rebuilt (829KB)
+- 2025-11-28 21:30Z – Updated Makefile to use Daphne ASGI server for WebSocket support:
+  - Changed `dev-backend` target from Django runserver to Daphne (WebSocket enabled)
+  - Added `dev-backend-simple` target for runserver fallback (no WebSocket)
+  - Updated `dev-services` tmux commands to use Daphne
+  - Updated `dev-login-ready` and `dev-login-ready-services` messages
+  - Added `/ws/` to LOGIN_EXEMPT_PREFIXES for WebSocket paths (auth handled by Channels)
+  - Verified all 38 backend tests passing including 13 WebSocket tests
+  - Daphne correctly routes WebSocket upgrades to Channels consumers
+- 2025-11-28 22:15Z – Fixed DataTable React island rendering issue:
+  - Diagnosed WhiteNoise middleware caching stale JS bundle in memory
+  - Identified that served file hash differed from disk file despite collectstatic
+  - Root cause: Daphne server kept running with old bundle loaded in WhiteNoise's file cache
+  - Fix: Full process kill (pkill -9 -f daphne) required to clear in-memory static file cache
+  - Verified DataTable now renders complete table with:
+    - All 7 devices displayed with hostname, IP, vendor, platform, site, status columns
+    - Clickable column headers with sort indicators (ascending/descending)
+    - Checkbox selection with indeterminate "select all" state
+    - Floating bulk action bar appears on selection (Run Task, Backup Configs, Run Compliance)
+    - Action dropdown menu (kebab) on each row
+    - Site badges and enabled/disabled status badges render correctly
+  - Documented that static file changes require full server restart when using WhiteNoise
+- 2025-11-28 22:45Z – Wired bulk action buttons and API endpoints:
+  - Added `/api/v1/devices/bulk-backup/` endpoint to DeviceViewSet for bulk config backup
+  - Added `/api/v1/devices/bulk-compliance/` endpoint for bulk compliance checks
+  - Both endpoints group jobs by customer and return job IDs with device counts
+  - Updated devices list.html JavaScript to call correct API endpoints with CSRF tokens
+  - Replaced confirm/alert dialogs with toast notifications via window.webnet helpers
+  - Added 2 new API tests for bulk-backup and bulk-compliance endpoints
+  - All 40 backend tests passing
+- 2025-11-28 23:59Z – Initiated full codebase audit (security, performance, architecture, quality) and attempted codebase-auditor subagent dispatch; preparing report.
+- 2025-11-29 00:25Z – Applied audit fixes: enforced tenant scoping on job logs, added API key authentication with expiration/last-used updates, hid key hashes from serializers, hardened security defaults (secure cookies, HSTS/redirect), switched to manifest static storage, and added JobLog job+ts index; added regression tests for job logs scoping and API key auth.
+- 2025-11-29 00:55Z – Installed backend Python/npm deps, ran full backend pytest suite (43 passed), and built frontend assets via npm run build.
+- 2025-11-29 02:10Z – Added pre-commit config, devcontainer, CODEOWNERS, PR review/CodeQL/gitleaks/doc-gen/branch-protection workflows, request ID + Prometheus metrics middleware with /metrics endpoint and integration test, and ensured readiness criteria coverage.
+- 2025-12-01 14:41Z – Ran `/init` command: analyzed codebase structure, discovered 10 Django apps, 12 skills, 6 droids, 6 MCP servers; updated AGENTS.md with complete Django apps table, added missing skills (ai-data-analyst, product-management, skill-development, vibe-coding), verified all patterns and file locations are accurate.
+- 2025-12-01 14:56Z – Enhanced AGENTS.md with comprehensive codebase analysis: expanded Core Commands section with all Makefile targets (build-css, build-js, dev-backend, dev-worker, dev-beat, etc.), added Architecture details (PostgreSQL/SQLite, Redis, Nornir/NAPALM/Netmiko, WebSockets), expanded Key Patterns with code examples (tenant scoping, permissions, HTMX partials, React Islands, Celery tasks, WebSocket consumers), detailed File Locations table with all key paths, and enhanced Verification Checklist with static assets, migrations, WebSocket, and React island checks.
+- 2025-12-01 15:10Z – Token efficiency review of .factory/ completed:
+  - Verified 6 agents already condensed (50-70 lines each, ~70% token reduction from originals)
+  - Verified 6 commands already minimal (13-18 lines each)
+  - Verified 12 skills already optimized (50-85 lines each with tables, minimal examples, references/)
+  - All functionality preserved; no further condensing needed
+- 2025-12-01 16:30Z – Started .opencode token efficiency pass (skills/agents/commands).
+- 2025-12-01 17:10Z – Condensed .opencode skills/agents/commands to minimal context while preserving rules and checklists.
+- 2025-12-01 16:57:30 UTC – Streamlined .factory commands, droids, and hooks for token efficiency while keeping protections and formatting behaviors.
+- 2025-12-01 16:57:30 UTC – Condensed .factory skills and references (django, frontend, service/internal/product/skill development, etc.) into lightweight checklists while retaining key guidance.
+- 2025-12-01 17:07Z – Initiated best-practice refactor execution: settings/CI/tooling hardening and DX streamlining.
+- 2025-12-01 17:09Z – Improved tooling: aligned pytest paths/options, added type stub dev deps, refreshed pre-commit (ruff/black/merge-conflict/mypy config), and expanded Makefile with format/typecheck/verify targets.
+- 2025-12-01 17:09Z – Added CI workflow (ruff/black/mypy/pytest) for backend and tightened mypy config exclusions.
+- 2025-12-01 17:10Z – Forced Make backend-test to use SQLite default for tests and reran full backend pytest suite (44 passed).
+- 2025-12-01 17:13Z – Added docker-compose stack (backend/worker/beat + Postgres + Redis), compose Make targets, backend JS typecheck script/target, updated .env.example defaults, and verified TypeScript lint (npm run lint).

@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Config Diff - webnet{% endblock %}
+
+{% block content %}
+<!-- Breadcrumb -->
+<nav class="flex mb-4" aria-label="Breadcrumb">
+  <ol class="inline-flex items-center space-x-1 md:space-x-2 text-sm">
+    <li class="inline-flex items-center">
+      <a href="/config/" class="text-muted-foreground hover:text-foreground">Config Snapshots</a>
+    </li>
+    <li class="flex items-center">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mx-1 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+      </svg>
+      <span class="font-medium">Compare</span>
+    </li>
+  </ol>
+</nav>
+
+<!-- Page Header -->
+<div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-bold tracking-tight">Configuration Diff</h1>
+    <p class="text-muted-foreground">Compare two configuration snapshots side by side</p>
+  </div>
+</div>
+
+<!-- Diff Form -->
+<div class="rounded-lg border bg-card p-6 mb-6">
+  <form hx-get="" hx-target="#diff-output" hx-push-url="true" class="flex flex-wrap items-end gap-4">
+    <div class="space-y-2 flex-1 min-w-[200px]">
+      <label for="from" class="text-sm font-medium leading-none">From Snapshot ID</label>
+      <input type="text" name="from" id="from" value="{{ snap_from.id|default:'' }}" placeholder="e.g., 1" 
+             class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
+    </div>
+    <div class="space-y-2 flex-1 min-w-[200px]">
+      <label for="to" class="text-sm font-medium leading-none">To Snapshot ID</label>
+      <input type="text" name="to" id="to" value="{{ snap_to.id|default:'' }}" placeholder="e.g., 2"
+             class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
+    </div>
+    <button type="submit" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 px-4 py-2 bg-primary text-primary-foreground shadow hover:bg-primary/90">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+      </svg>
+      Show Diff
+    </button>
+  </form>
+</div>
+
+<!-- Diff Output -->
+<div class="rounded-lg border bg-card p-6">
+  <div class="flex items-center gap-2 mb-4">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+    </svg>
+    <h2 class="font-semibold">Diff Output</h2>
+  </div>
+  <div class="border-t pt-4">
+    <div id="diff-output" class="rounded-lg bg-muted p-4 overflow-x-auto">
+      {% if error %}
+        <div class="flex items-center gap-2 text-destructive">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span class="text-sm font-mono">{{ error }}</span>
+        </div>
+      {% elif diff %}
+        <pre class="text-sm font-mono whitespace-pre-wrap">{{ diff }}</pre>
+      {% else %}
+        <p class="text-muted-foreground text-sm font-mono">$ Enter snapshot IDs above to view differences</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

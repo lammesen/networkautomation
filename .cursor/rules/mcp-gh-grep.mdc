@@ -1,0 +1,44 @@
+---
+description: When/how/why to use gh-grep MCP for GitHub code search
+globs: ["**/*.py", "**/*.ts", "**/*.tsx"]
+alwaysApply: false
+---
+
+# GitHub Grep MCP - Real-World Code Examples
+
+**When to use:**
+- Need real-world code examples
+- Unfamiliar API usage patterns
+- Best practices from production code
+- How libraries are used together
+- Complex implementation patterns
+
+**How to use:**
+```typescript
+mcp_gh-grep_searchGitHub({
+  query: "useState(",  // Search for actual code patterns
+  language: ["TypeScript", "TSX"],
+  repo: "vercel/next.js",  // optional filter
+  path: "src/components",  // optional filter
+  useRegexp: false,
+  matchCase: false
+})
+```
+
+**Why:**
+- Real production code examples
+- See how others solve problems
+- Discover common patterns
+- Learn library integration
+
+**Search tips:**
+- ✅ Good: `useState(`, `getServerSession`, `ErrorBoundary`
+- ❌ Bad: "react tutorial", "best practices"
+- Use actual code syntax, not keywords
+- Use regex for complex patterns: `(?s)useEffect\\(.*=>.*\\{.*await`
+
+**Common searches:**
+- Django patterns: `get_queryset`, `perform_create`
+- DRF patterns: `ModelViewSet`, `serializers.ModelSerializer`
+- React patterns: `useState`, `useEffect`, `ErrorBoundary`
+- HTMX patterns: `hx-get`, `hx-swap`

@@ -1,0 +1,52 @@
+---
+description: When/how/why to use Chrome DevTools MCP
+globs: ["**/*.html", "**/templates/**", "**/static/**"]
+alwaysApply: false
+---
+
+# Chrome DevTools MCP - Browser Inspection
+
+**When to use:**
+- Debugging frontend issues
+- Inspecting DOM structure
+- Testing HTMX interactions
+- Verifying React Island rendering
+- Performance analysis
+- Network request debugging
+
+**How to use:**
+```typescript
+// Navigate to page
+mcp_chrome-devtools_navigate_page({ url: "http://localhost:8000" })
+
+// Take snapshot (better than screenshot)
+mcp_chrome-devtools_take_snapshot({ verbose: false })
+
+// Interact with elements
+mcp_chrome-devtools_click({ uid: "element-uid" })
+mcp_chrome-devtools_fill({ uid: "input-uid", value: "text" })
+
+// Check console/network
+mcp_chrome-devtools_list_console_messages({ types: ["error"] })
+mcp_chrome-devtools_list_network_requests()
+
+// Performance analysis
+mcp_chrome-devtools_performance_start_trace({ reload: true, autoStop: true })
+```
+
+**Why:**
+- Real browser environment testing
+- Debug HTMX swaps
+- Verify React Island hydration
+- Check network requests
+- Performance profiling
+
+**Use cases:**
+- Debugging HTMX template issues
+- Verifying React Island props/data
+- Testing WebSocket connections
+- Performance optimization
+
+**Prefer over:**
+- Screenshots (use snapshots for accessibility tree)
+- Manual browser testing (automated inspection)

@@ -12,34 +12,31 @@ A production-grade web application for network automation using NAPALM, Netmiko,
 - **Job Tracking**: Real-time job monitoring with live log streaming
 - **Role-Based Access Control**: Viewer, Operator, and Admin roles
 
-## Technology Stack
+## Technology Stack (Django/HTMX/DRF)
 
 ### Backend
-- **FastAPI**: Modern Python web framework
-- **SQLAlchemy + Alembic**: ORM and database migrations
+- **Django + DRF + Channels**: Server-rendered HTML (HTMX) and APIs with websockets
+- **Celery + Redis**: Background jobs for automation
 - **PostgreSQL**: Primary database
-- **Celery + Redis**: Distributed task queue
-- **Nornir**: Network automation orchestration
-- **NAPALM**: Multi-vendor network device abstraction
-- **Netmiko**: SSH/Telnet connection library
+- **Nornir / NAPALM / Netmiko**: Network automation drivers
 
 ### Frontend
-- **React + TypeScript**: UI framework
-- **Vite**: Build tool
-- **React Router**: Navigation
-- **TanStack Query**: Data fetching
-- **Axios**: HTTP client
+- **Django templates + HTMX + Tailwind** (primary UI)
+- Legacy React SPA remains in `frontend/` (deprecated)
 
 ## Quick Start
+
+See [`docs/getting-started.md`](docs/getting-started.md) for setup. Run `make backend-tailwind-build` to compile CSS before packaging. Set secrets in `k8s/secrets.yaml` (SECRET_KEY, ENCRYPTION_KEY, optional CORS/CSRF origins) before deploy.
 
 ### Prerequisites
 - Docker Desktop with Kubernetes enabled (or another local Kubernetes cluster)
 - `kubectl` 1.28+
 - GNU Make
-- Bun
+- Node.js + npm
 - Git
 
-### Installation
+
+### Installation (Django stack)
 
 1. Clone the repository:
 ```bash
@@ -47,35 +44,34 @@ git clone https://github.com/lammesen/networkautomation.git
 cd networkautomation
 ```
 
-2. Install project dependencies:
+2. Install project dependencies (backend venv):
 ```bash
 make bootstrap
 ```
 
-3. Build images and deploy to Kubernetes (Docker Desktop shares its image cache with the cluster):
+3. Build images and deploy to Kubernetes (backend + worker + redis/postgres):
 ```bash
 make dev-up
 make k8s-status
 kubectl wait --for=condition=available deployment/backend --timeout=120s
-kubectl wait --for=condition=available deployment/frontend --timeout=120s
+kubectl wait --for=condition=available deployment/backend-worker --timeout=120s
 ```
 
-4. Port-forward services (run each command in its own terminal):
+4. Port-forward backend (HTML, API, websockets):
 ```bash
-make k8s-port-forward-backend   # exposes FastAPI on http://localhost:8000
-make k8s-port-forward-frontend  # exposes React on http://localhost:3000
+make k8s-port-forward-backend   # exposes Django on http://localhost:8000
 ```
 
-5. Run migrations and seed the default admin/device data inside the backend pod:
+5. Run migrations and create superuser inside the backend:
 ```bash
 make migrate
-make seed-admin
+make seed-admin   # createsuperuser --no-input; set credentials via env
 ```
 
 6. Access the application:
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:8000
-- API Documentation: http://localhost:8000/docs
+- UI: http://localhost:8000 (HTMX pages)
+- APIs: http://localhost:8000/api/v1/
+- WebSockets: ws://localhost:8000/ws/jobs/<id>/, ws://localhost:8000/ws/devices/<id>/ssh/
 
 ### Required Environment
 
@@ -89,43 +85,21 @@ make seed-admin
 
 ```
 networkautomation/
-├── backend/                    # Backend application
-│   ├── app/
-│   │   ├── api/               # API endpoints
-│   │   ├── automation/        # Nornir/NAPALM/Netmiko tasks
-│   │   ├── compliance/        # Compliance checking
-│   │   ├── config_backup/     # Config backup logic
-│   │   ├── config_deploy/     # Config deployment
-│   │   ├── core/              # Core configuration and auth
-│   │   ├── db/                # Database models
-│   │   ├── jobs/              # Job system and Celery tasks
-│   │   ├── schemas/           # Pydantic schemas
-│   │   ├── celery_app.py      # Celery configuration
-│   │   └── main.py            # FastAPI application
-│   ├── alembic/               # Database migrations
-│   └── pyproject.toml         # Python dependencies
-├── frontend/                   # React frontend
-│   ├── src/
-│   │   ├── api/               # API client
-│   │   ├── components/        # React components
-│   │   ├── pages/             # Page components
-│   │   ├── features/          # Feature modules
-│   │   └── App.tsx            # Main app component
-│   └── package.json           # Node dependencies
-├── deploy/                     # Container build assets
-│   ├── Dockerfile.backend
+├── backend/                 # Django project `webnet`
+│   ├── webnet/              # Django apps (users, devices, jobs, compliance, etc.)
+│   ├── manage.py            # Django management entrypoint
+│   ├── templates/           # Django templates (HTMX)
+│   └── pyproject.toml       # Python dependencies
+├── frontend/                # Legacy React SPA (deprecated)
+├── deploy/                  # Container build assets
+│   ├── Dockerfile.backend   # Django/Channels/daphne
 │   ├── Dockerfile.frontend
 │   └── Dockerfile.linux-device
-├── k8s/                        # Kubernetes manifests
-│   ├── backend.yaml
-│   ├── frontend.yaml
-│   ├── linux-device.yaml
-│   ├── postgres.yaml
-│   ├── pvc.yaml
-│   ├── redis.yaml
-│   ├── services.yaml
-│   └── worker.yaml
-└── docs/                       # Documentation
+├── k8s/                     # Kubernetes manifests
+│   ├── backend.yaml         # Django ASGI service
+│   ├── worker.yaml          # Celery worker
+│   ├── postgres.yaml, redis.yaml, pvc.yaml, services.yaml, linux-device.yaml
+└── docs/                    # Documentation
 ```
 
 ## Usage
@@ -186,9 +160,7 @@ curl -X POST http://localhost:8000/api/v1/config/backup \
   }'
 ```
 
-## Development
-
-### Backend Development
+## Development (Django)
 
 1. Setup Python environment:
 ```bash
@@ -200,36 +172,25 @@ pip install -e ".[dev]"
 
 2. Run migrations:
 ```bash
-alembic upgrade head
+python manage.py migrate
 ```
 
 3. Start the development server:
 ```bash
-uvicorn app.main:app --reload
+python manage.py runserver 0.0.0.0:8000
 ```
 
-4. Run tests:
+4. Start Celery worker (separate shell):
+```bash
+celery -A webnet.core.celery:celery_app worker -l info
+```
+
+5. Run tests:
 ```bash
 pytest
 ```
 
-### Frontend Development
-
-1. Install dependencies:
-```bash
-cd frontend
-npm install
-```
-
-2. Start development server:
-```bash
-npm run dev
-```
-
-3. Build for production:
-```bash
-npm run build
-```
+(React frontend is deprecated; primary UI is Django templates + HTMX.)
 
 ## API Documentation
 

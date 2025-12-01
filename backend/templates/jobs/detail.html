@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Job #{{ job.id }} - webnet{% endblock %}
+
+{% block content %}
+<div id="job-detail">
+<!-- Breadcrumb -->
+<nav class="flex mb-4" aria-label="Breadcrumb">
+  <ol class="inline-flex items-center space-x-1 md:space-x-2 text-sm">
+    <li class="inline-flex items-center">
+      <a href="/jobs/" class="text-muted-foreground hover:text-foreground">Jobs</a>
+    </li>
+    <li class="flex items-center">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mx-1 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+      </svg>
+      <span class="font-medium">Job #{{ job.id }}</span>
+    </li>
+  </ol>
+</nav>
+
+<!-- Page Header -->
+<div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between mb-6">
+  <div class="flex items-start gap-4">
+    <div class="bg-primary/10 p-3 rounded-lg hidden sm:block">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+      </svg>
+    </div>
+    <div>
+      <div class="flex items-center gap-3">
+        <h1 class="text-2xl font-bold tracking-tight">Job #{{ job.id }}</h1>
+        {% if job.status == 'success' %}
+          <span class="inline-flex items-center gap-1 rounded-full bg-success/10 px-3 py-1 text-sm font-semibold text-success">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+            {{ job.status }}
+          </span>
+        {% elif job.status == 'running' %}
+          <span class="inline-flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 text-sm font-semibold text-primary">
+            <svg class="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            {{ job.status }}
+          </span>
+        {% elif job.status == 'failed' %}
+          <span class="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-3 py-1 text-sm font-semibold text-destructive">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            {{ job.status }}
+          </span>
+        {% elif job.status == 'pending' %}
+          <span class="inline-flex items-center gap-1 rounded-full bg-warning/10 px-3 py-1 text-sm font-semibold text-warning">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            {{ job.status }}
+          </span>
+        {% else %}
+          <span class="inline-flex items-center rounded-full border px-3 py-1 text-sm font-semibold">{{ job.status }}</span>
+        {% endif %}
+      </div>
+      <div class="flex flex-wrap items-center gap-2 mt-2 text-sm text-muted-foreground">
+        <span class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold">{{ job.type }}</span>
+        <span class="text-muted-foreground/40">|</span>
+        <span>Requested {{ job.requested_at|date:"Y-m-d H:i:s" }}</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Job Stats -->
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+  <div class="rounded-lg border bg-card p-4">
+    <div class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Type</div>
+    <div class="text-lg font-semibold mt-1">{{ job.type }}</div>
+  </div>
+  <div class="rounded-lg border bg-card p-4">
+    <div class="text-xs font-medium text-muted-foreground uppercase tracking-wider">User</div>
+    <div class="text-lg font-semibold mt-1">{{ job.user.username }}</div>
+  </div>
+  <div class="rounded-lg border bg-card p-4">
+    <div class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Customer</div>
+    <div class="text-lg font-semibold mt-1">{{ job.customer.name }}</div>
+  </div>
+</div>
+
+<!-- Logs Card -->
+<div class="rounded-lg border bg-card p-6">
+  <div class="flex items-center gap-2 mb-4">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+    </svg>
+    <h2 class="font-semibold">Job Logs</h2>
+    {% if job.status == 'running' %}
+      <span class="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
+        <svg class="h-3 w-3 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        Live
+      </span>
+    {% endif %}
+  </div>
+    <div class="border-t pt-4">
+      <div id="job-logs">
+        {% include "jobs/_logs.html" %}
+      </div>
+    </div>
+
+</div>
+</div>
+{% endblock %}

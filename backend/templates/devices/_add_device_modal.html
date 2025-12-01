@@ -1,0 +1,208 @@
+<div id="add-device-modal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true">
+  <!-- Backdrop -->
+  <div class="fixed inset-0 bg-background/80 backdrop-blur-sm" onclick="closeAddDeviceModal()"></div>
+  
+  <!-- Modal -->
+  <div class="fixed left-[50%] top-[50%] z-50 w-full max-w-2xl translate-x-[-50%] translate-y-[-50%] max-h-[90vh] overflow-hidden">
+    <div class="rounded-lg border bg-background shadow-lg flex flex-col max-h-[90vh]">
+      <!-- Header -->
+      <div class="flex items-center justify-between p-6 border-b">
+        <div>
+          <h2 class="text-lg font-semibold leading-none tracking-tight">Add Device</h2>
+          <p class="text-sm text-muted-foreground mt-1">Create a new device manually or import from CSV</p>
+        </div>
+        <button onclick="closeAddDeviceModal()" class="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+          <span class="sr-only">Close</span>
+        </button>
+      </div>
+
+      <!-- Tabs -->
+      <div class="border-b px-6">
+        <div class="flex gap-4" role="tablist">
+          <button type="button" role="tab" id="tab-manual" aria-selected="true" aria-controls="panel-manual"
+                  onclick="switchTab('manual')"
+                  class="tab-btn relative py-3 text-sm font-medium text-foreground border-b-2 border-primary">
+            <span class="flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+              </svg>
+              Manual Entry
+            </span>
+          </button>
+          <button type="button" role="tab" id="tab-import" aria-selected="false" aria-controls="panel-import"
+                  onclick="switchTab('import')"
+                  class="tab-btn relative py-3 text-sm font-medium text-muted-foreground border-b-2 border-transparent hover:text-foreground">
+            <span class="flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+              </svg>
+              Import CSV
+            </span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Tab Panels -->
+      <div class="flex-1 overflow-y-auto p-6">
+        <!-- Manual Entry Panel -->
+        <div id="panel-manual" role="tabpanel" aria-labelledby="tab-manual">
+          <form method="post" action="/devices/new" 
+                hx-post="/devices/new" 
+                hx-target="#devices-table" 
+                hx-swap="innerHTML"
+                hx-on::after-request="if(event.detail.successful && event.detail.xhr.status < 400) { closeAddDeviceModal(); window.webnet?.showToast?.('Device created successfully', 'success'); }">
+            {% csrf_token %}
+            <div class="space-y-4">
+              {% for field in form %}
+                <div class="space-y-2">
+                  <label for="modal_{{ field.id_for_label }}" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                    {{ field.label }}
+                    {% if field.field.required %}<span class="text-destructive">*</span>{% endif %}
+                  </label>
+                  {% if field.field.widget.input_type == 'select' %}
+                    <div data-island="FormSelect" data-props='{"name":"{{ field.name }}","value":"{{ field.value|default:"" }}","placeholder":"Select {{ field.label|escapejs }}","options":[{% for choice in field.field.choices %}{"value":"{{ choice.0 }}","label":"{{ choice.1|escapejs }}"}{% if not forloop.last %},{% endif %}{% endfor %}]}'></div>
+                    <input type="hidden" name="{{ field.name }}" id="modal_{{ field.id_for_label }}" {% if field.field.required %}required{% endif %} />
+                  {% elif field.field.widget.input_type == 'checkbox' %}
+                    <div class="flex items-center space-x-2">
+                      <input type="checkbox" name="{{ field.name }}" id="modal_{{ field.id_for_label }}"
+                             class="h-4 w-4 rounded border border-primary text-primary shadow focus:ring-primary" 
+                             {% if field.value %}checked{% endif %} />
+                      <label for="modal_{{ field.id_for_label }}" class="text-sm font-medium leading-none">{{ field.label }}</label>
+                    </div>
+                  {% else %}
+                    <input type="{{ field.field.widget.input_type|default:'text' }}" 
+                           name="{{ field.name }}" id="modal_{{ field.id_for_label }}"
+                           value="{{ field.value|default:'' }}"
+                           class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring {% if field.errors %}border-destructive{% endif %}"
+                           placeholder="{{ field.label }}"
+                           {% if field.field.required %}required{% endif %} />
+                  {% endif %}
+                  {% if field.help_text %}
+                    <p class="text-xs text-muted-foreground">{{ field.help_text }}</p>
+                  {% endif %}
+                  {% if field.errors %}
+                    <p class="text-xs text-destructive">{{ field.errors|striptags }}</p>
+                  {% endif %}
+                </div>
+              {% endfor %}
+            </div>
+
+            <div class="flex justify-end gap-2 mt-6 pt-4 border-t">
+              <button type="button" onclick="closeAddDeviceModal()" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 px-4 py-2 border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground">
+                Cancel
+              </button>
+              <button type="submit" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 px-4 py-2 bg-primary text-primary-foreground shadow hover:bg-primary/90">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                </svg>
+                Create Device
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Import CSV Panel -->
+        <div id="panel-import" role="tabpanel" aria-labelledby="tab-import" class="hidden">
+          <!-- Info Alert -->
+          <div class="rounded-lg border border-primary/20 bg-primary/5 p-4 mb-6">
+            <div class="flex gap-3">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="h-5 w-5 text-primary shrink-0 mt-0.5">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" stroke="currentColor" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+              <div>
+                <h3 class="font-semibold text-sm">CSV Format</h3>
+                <p class="text-sm text-muted-foreground mt-1">Required columns: <code class="rounded bg-muted px-1 py-0.5 text-xs font-mono">hostname, mgmt_ip, credential</code></p>
+                <p class="text-sm text-muted-foreground mt-1">Optional columns: <code class="rounded bg-muted px-1 py-0.5 text-xs font-mono">vendor, platform, role, site, tags</code></p>
+              </div>
+            </div>
+          </div>
+
+          <form method="post" action="/devices/import" enctype="multipart/form-data"
+                hx-post="/devices/import"
+                hx-target="#import-results"
+                hx-swap="innerHTML"
+                hx-encoding="multipart/form-data">
+            {% csrf_token %}
+
+            <div class="space-y-4">
+              <div class="space-y-2">
+                <label for="import_customer" class="text-sm font-medium leading-none">
+                  Customer <span class="text-destructive">*</span>
+                </label>
+                <div data-island="FormSelect" data-props='{"name":"customer","placeholder":"Select a customer","options":[{% for choice in form.customer.field.choices %}{"value":"{{ choice.0 }}","label":"{{ choice.1|escapejs }}"}{% if not forloop.last %},{% endif %}{% endfor %}]}'></div>
+                <input type="hidden" name="customer" id="import_customer" required />
+              </div>
+
+              <div class="space-y-2">
+                <label for="import_file" class="text-sm font-medium leading-none">
+                  CSV File <span class="text-destructive">*</span>
+                </label>
+                <input type="file" name="file" id="import_file" accept=".csv" 
+                       class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" 
+                       required />
+                <p class="text-xs text-muted-foreground">Only .csv files are accepted</p>
+              </div>
+            </div>
+
+            <div id="import-results" class="mt-4"></div>
+
+            <div class="flex justify-end gap-2 mt-6 pt-4 border-t">
+              <button type="button" onclick="closeAddDeviceModal()" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 px-4 py-2 border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground">
+                Cancel
+              </button>
+              <button type="submit" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 px-4 py-2 bg-primary text-primary-foreground shadow hover:bg-primary/90">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+                Import Devices
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function openAddDeviceModal() {
+  document.getElementById('add-device-modal').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  switchTab('manual');
+}
+
+function closeAddDeviceModal() {
+  document.getElementById('add-device-modal').classList.add('hidden');
+  document.body.style.overflow = '';
+  document.getElementById('import-results').innerHTML = '';
+}
+
+function switchTab(tab) {
+  const tabs = ['manual', 'import'];
+  tabs.forEach(t => {
+    const tabBtn = document.getElementById('tab-' + t);
+    const panel = document.getElementById('panel-' + t);
+    
+    if (t === tab) {
+      tabBtn.setAttribute('aria-selected', 'true');
+      tabBtn.classList.remove('text-muted-foreground', 'border-transparent');
+      tabBtn.classList.add('text-foreground', 'border-primary');
+      panel.classList.remove('hidden');
+    } else {
+      tabBtn.setAttribute('aria-selected', 'false');
+      tabBtn.classList.add('text-muted-foreground', 'border-transparent');
+      tabBtn.classList.remove('text-foreground', 'border-primary');
+      panel.classList.add('hidden');
+    }
+  });
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && !document.getElementById('add-device-modal').classList.contains('hidden')) {
+    closeAddDeviceModal();
+  }
+});
+</script>

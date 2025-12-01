@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Jobs - webnet{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-bold tracking-tight">Jobs</h1>
+    <p class="text-muted-foreground">Monitor and track automation job execution</p>
+  </div>
+</div>
+
+<!-- Jobs Table -->
+<div class="rounded-lg border bg-card">
+  <div id="jobs-table">
+    {% include "jobs/_table.html" %}
+  </div>
+</div>
+{% endblock %}

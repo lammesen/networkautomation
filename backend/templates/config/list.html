@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Config Snapshots - webnet{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-bold tracking-tight">Configuration Snapshots</h1>
+    <p class="text-muted-foreground">View and compare device configuration snapshots</p>
+  </div>
+  <div class="flex items-center gap-2">
+    <form hx-get="" hx-target="#config-table" hx-push-url="true" class="flex gap-2">
+      <input type="text" name="device_id" value="{{ device_id|default:'' }}" placeholder="Filter by Device ID"
+             class="flex h-9 w-48 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
+      <button type="submit" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 px-4 py-2 bg-primary text-primary-foreground shadow hover:bg-primary/90">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+        </svg>
+        Filter
+      </button>
+    </form>
+    <a href="/config/diff" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 px-4 py-2 border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+      </svg>
+      Compare
+    </a>
+  </div>
+</div>
+
+<!-- Snapshots Table -->
+<div class="rounded-lg border bg-card">
+  <div id="config-table">
+    {% include "config/_table.html" %}
+  </div>
+</div>
+{% endblock %}

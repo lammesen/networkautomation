@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Add Device - webnet{% endblock %}
+
+{% block content %}
+<!-- Breadcrumb -->
+<nav class="flex mb-4" aria-label="Breadcrumb">
+  <ol class="inline-flex items-center space-x-1 md:space-x-2 text-sm">
+    <li class="inline-flex items-center">
+      <a href="/devices/" class="text-muted-foreground hover:text-foreground">Devices</a>
+    </li>
+    <li class="flex items-center">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mx-1 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+      </svg>
+      <span class="font-medium">Add Device</span>
+    </li>
+  </ol>
+</nav>
+
+<div class="max-w-2xl">
+  <!-- Page Header -->
+  <div class="mb-6">
+    <h1 class="text-2xl font-bold tracking-tight">Add Device</h1>
+    <p class="text-muted-foreground">Create a new device and assign credentials</p>
+  </div>
+
+  <!-- Form Card -->
+  <div class="rounded-lg border bg-card p-6">
+    <form method="post" class="space-y-4">
+      {% csrf_token %}
+      {% for field in form %}
+        <div class="space-y-2">
+          <label for="{{ field.id_for_label }}" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+            {{ field.label }}
+            {% if field.field.required %}<span class="text-destructive">*</span>{% endif %}
+          </label>
+          {% if field.field.widget.input_type == 'select' %}
+            <div data-island="FormSelect" data-props='{"name":"{{ field.name }}","value":"{{ field.value|default:"" }}","placeholder":"Select {{ field.label|escapejs }}","options":[{% for choice in field.field.choices %}{"value":"{{ choice.0 }}","label":"{{ choice.1|escapejs }}"}{% if not forloop.last %},{% endif %}{% endfor %}]}'></div>
+            <input type="hidden" name="{{ field.name }}" id="{{ field.id_for_label }}" {% if field.field.required %}required{% endif %} />
+          {% elif field.field.widget.input_type == 'checkbox' %}
+            <div class="flex items-center space-x-2">
+              <input type="checkbox" name="{{ field.name }}" id="{{ field.id_for_label }}"
+                     class="h-4 w-4 rounded border border-primary text-primary shadow focus:ring-primary" 
+                     {% if field.value %}checked{% endif %} />
+              <label for="{{ field.id_for_label }}" class="text-sm font-medium leading-none">{{ field.label }}</label>
+            </div>
+          {% elif field.field.widget.input_type == 'textarea' %}
+            <textarea name="{{ field.name }}" id="{{ field.id_for_label }}"
+                      class="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring {% if field.errors %}border-destructive{% endif %}"
+                      placeholder="{{ field.label }}"
+                      {% if field.field.required %}required{% endif %}>{{ field.value|default:'' }}</textarea>
+          {% else %}
+            <input type="{{ field.field.widget.input_type|default:'text' }}" 
+                   name="{{ field.name }}" id="{{ field.id_for_label }}"
+                   value="{{ field.value|default:'' }}"
+                   class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring {% if field.errors %}border-destructive{% endif %}"
+                   placeholder="{{ field.label }}"
+                   {% if field.field.required %}required{% endif %} />
+          {% endif %}
+          {% if field.help_text %}
+            <p class="text-xs text-muted-foreground">{{ field.help_text }}</p>
+          {% endif %}
+          {% if field.errors %}
+            <p class="text-xs text-destructive">{{ field.errors|striptags }}</p>
+          {% endif %}
+        </div>
+      {% endfor %}
+
+      <div class="border-t pt-4 mt-6">
+        <div class="flex justify-end gap-2">
+          <a href="/devices/" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 px-4 py-2 border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground">
+            Cancel
+          </a>
+          <button type="submit" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 px-4 py-2 bg-primary text-primary-foreground shadow hover:bg-primary/90">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+            Create Device
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

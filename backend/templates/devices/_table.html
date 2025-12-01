@@ -1,0 +1,90 @@
+<div
+  data-island="DataTable"
+  data-props='{{ devices_table_props }}'
+  class="relative w-full overflow-auto"
+>
+  <div class="py-6 text-center text-sm text-muted-foreground">
+    Loading devices table...
+  </div>
+</div>
+
+<noscript>
+  <div class="relative w-full overflow-auto">
+    <table class="table-grid">
+      <thead>
+        <tr class="table-head-row">
+          <th class="table-head-cell w-12">
+            <input type="checkbox" id="select-all-devices"
+                   class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                   onchange="toggleAllDevices(this.checked)" />
+          </th>
+          <th class="table-head-cell">Hostname</th>
+          <th class="table-head-cell">Management IP</th>
+          <th class="table-head-cell">Vendor</th>
+          <th class="table-head-cell">Platform</th>
+          <th class="table-head-cell">Site</th>
+          <th class="table-head-cell">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for device in devices %}
+        <tr class="table-row">
+          <td class="table-cell">
+            <input type="checkbox"
+                   class="device-checkbox h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                   data-device-id="{{ device.id }}"
+                   data-device-hostname="{{ device.hostname }}"
+                   onchange="updateBulkActionBar()" />
+          </td>
+          <td class="table-cell">
+            <a href="/devices/{{ device.id }}/" class="font-medium text-primary hover:underline">
+              {{ device.hostname }}
+            </a>
+          </td>
+          <td class="table-cell">
+            <code class="text-xs bg-muted px-2 py-1 rounded font-mono">{{ device.mgmt_ip }}</code>
+          </td>
+          <td class="table-cell">{{ device.vendor }}</td>
+          <td class="table-cell">{{ device.platform }}</td>
+          <td class="table-cell">
+            {% if device.site %}
+              <span class="badge badge-muted">{{ device.site }}</span>
+            {% else %}
+              <span class="text-muted-foreground">-</span>
+            {% endif %}
+          </td>
+          <td class="table-cell">
+            {% if device.enabled %}
+              <span class="badge badge-success inline-flex items-center gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                </svg>
+                Enabled
+              </span>
+            {% else %}
+              <span class="badge badge-destructive inline-flex items-center gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                Disabled
+              </span>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="7" class="p-4 text-center py-12">
+            <div class="flex flex-col items-center gap-2 text-muted-foreground empty-state">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+              </svg>
+              <p class="font-medium">No devices found</p>
+              <p class="text-sm">Try adjusting your search or add a new device.</p>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</noscript>

@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Sign In - webnet{% endblock %}
+{% block auth_content %}
+<div class="w-full max-w-md">
+  <div class="text-center mb-8">
+    <div class="flex justify-center mb-4">
+      <div class="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+        </svg>
+      </div>
+    </div>
+    <h1 class="text-2xl font-bold tracking-tight">Welcome back</h1>
+    <p class="text-muted-foreground mt-2">Sign in to the network automation console</p>
+  </div>
+
+  <div class="rounded-lg border bg-card text-card-foreground shadow-sm">
+    <div class="p-6">
+      {% if form.errors %}
+      <div class="mb-4 flex items-center gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <span>Invalid username or password. Please try again.</span>
+      </div>
+      {% endif %}
+
+      <form method="post" action="{% url 'login' %}" class="space-y-4">
+        {% csrf_token %}
+
+        <div class="space-y-2">
+          <label class="text-sm font-medium leading-none" for="id_username">Username</label>
+          <div class="relative">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground">
+              <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM12.735 14c.618 0 1.093-.561.872-1.139a6.002 6.002 0 0 0-11.215 0c-.22.578.254 1.139.872 1.139h9.47Z" />
+            </svg>
+            <input type="text" name="username" id="id_username" class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 pl-10 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" placeholder="Enter username" autofocus required />
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <label class="text-sm font-medium leading-none" for="id_password">Password</label>
+          <div class="relative">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground">
+              <path fill-rule="evenodd" d="M14 6a4 4 0 0 1-4.899 3.899l-1.955 1.955a.5.5 0 0 1-.353.146H5v1.5a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1-.5-.5v-2.293a.5.5 0 0 1 .146-.353l3.955-3.955A4 4 0 1 1 14 6Zm-4-2a.75.75 0 0 0 0 1.5.5.5 0 0 1 .5.5.75.75 0 0 0 1.5 0 2 2 0 0 0-2-2Z" clip-rule="evenodd" />
+            </svg>
+            <input type="password" name="password" id="id_password" class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 pl-10 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" placeholder="Enter password" required />
+          </div>
+        </div>
+
+        {% if next %}<input type="hidden" name="next" value="{{ next }}" />{% endif %}
+
+        <button type="submit" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 w-full">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+          </svg>
+          Sign in
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <p class="text-center text-muted-foreground text-sm mt-6">
+    webnet - Network Automation Console
+  </p>
+</div>
+{% endblock auth_content %}

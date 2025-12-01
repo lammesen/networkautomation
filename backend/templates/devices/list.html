@@ -1,0 +1,305 @@
+{% extends "base.html" %}
+{% block title %}Devices - webnet{% endblock %}
+
+{% block content %}
+<!-- Page Header with improved design -->
+<div class="mb-6">
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight">Devices</h1>
+      <p class="text-muted-foreground mt-1">Manage and monitor your network infrastructure</p>
+    </div>
+    <button type="button" onclick="openAddDeviceModal()" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 shadow-sm">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+      </svg>
+      Add Device
+    </button>
+  </div>
+</div>
+
+<!-- Stats Cards -->
+{% include "devices/_stats_cards.html" %}
+
+<!-- Filters Card -->
+<div class="rounded-xl border bg-card mb-6">
+  <div class="p-4">
+    <form id="devices-filter-form" hx-get="" hx-target="#devices-table" hx-push-url="true" class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <div class="flex flex-wrap gap-3 items-center">
+        <!-- Search Input -->
+        <div class="relative flex-1 min-w-[250px] max-w-md">
+          <svg xmlns="http://www.w3.org/2000/svg" class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input type="text" name="search" value="{{ search }}" placeholder="Search devices..."
+                 class="flex h-10 w-full rounded-lg border border-input bg-background pl-10 pr-4 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" />
+        </div>
+        
+        <!-- Filter Pills -->
+        <div class="flex flex-wrap gap-2">
+          <div data-island="FormSelect" data-props='{{ vendor_select }}'></div>
+          <div data-island="FormSelect" data-props='{{ platform_select }}'></div>
+          <div data-island="FormSelect" data-props='{{ site_select }}'></div>
+          <div data-island="FormSelect" data-props='{{ role_select }}'></div>
+        </div>
+      </div>
+      
+      <!-- Action Buttons -->
+      <div class="flex items-center gap-2">
+        {% if search or vendor or platform or site or role %}
+        <a href="/devices/" class="inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg text-sm font-medium transition-colors h-9 px-3 text-muted-foreground hover:text-foreground hover:bg-muted">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+          Clear filters
+        </a>
+        {% endif %}
+        <button type="submit" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-input bg-background text-sm font-medium h-9 px-4 hover:bg-accent hover:text-accent-foreground shadow-sm">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+          </svg>
+          Apply
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Devices Table Card -->
+<div class="rounded-xl border bg-card overflow-hidden">
+  <div id="devices-table" hx-get="" hx-trigger="change from:select" hx-target="#devices-table" hx-push-url="true">
+    {% include "devices/_table.html" %}
+  </div>
+</div>
+
+<!-- Floating Bulk Action Bar - Enhanced Design -->
+<div id="bulk-action-bar" class="fixed bottom-6 left-1/2 -translate-x-1/2 hidden z-40">
+  <div class="bg-card/95 backdrop-blur-lg border shadow-2xl rounded-2xl px-5 py-3.5 flex items-center gap-4 animate-in slide-in-from-bottom-4 fade-in duration-300">
+    <div class="flex items-center gap-2">
+      <div class="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      </div>
+      <span id="selected-count" class="text-sm font-semibold text-foreground">0 selected</span>
+    </div>
+    <div class="h-6 w-px bg-border"></div>
+    <div class="flex items-center gap-2">
+      <button type="button" onclick="openRunTaskWizard()" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 shadow-sm">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+        </svg>
+        Run Task
+      </button>
+      <button type="button" onclick="bulkBackupConfigs()" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-3">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+        </svg>
+        Backup
+      </button>
+      <button type="button" onclick="bulkRunCompliance()" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-3">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        Compliance
+      </button>
+      <div class="h-6 w-px bg-border"></div>
+      <button type="button" onclick="clearSelection()" class="inline-flex items-center justify-center whitespace-nowrap rounded-lg text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 text-muted-foreground hover:text-foreground hover:bg-muted h-9 w-9" title="Clear selection">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Enhanced Add Device Wizard Modal -->
+{% include "devices/_add_device_wizard.html" %}
+
+<!-- Run Task Wizard Modal -->
+<div id="run-task-wizard-modal" class="fixed inset-0 bg-black/50 z-50 hidden items-center justify-center">
+  <div class="bg-card rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+    <div class="p-6 border-b">
+      <h2 class="text-xl font-semibold text-foreground">Run Task</h2>
+      <p class="text-sm text-muted-foreground mt-1">Configure and execute tasks on selected devices</p>
+    </div>
+    <div id="wizard-content" class="p-6">
+      <!-- Wizard steps will be dynamically loaded here -->
+    </div>
+  </div>
+</div>
+
+<script>
+// Track selected devices
+let selectedDevices = new Set();
+
+function toggleAllDevices(checked) {
+  const checkboxes = document.querySelectorAll('.device-checkbox');
+  checkboxes.forEach(cb => {
+    cb.checked = checked;
+    if (checked) {
+      selectedDevices.add(cb.dataset.deviceId);
+    } else {
+      selectedDevices.delete(cb.dataset.deviceId);
+    }
+  });
+  updateBulkActionBar();
+}
+
+function updateBulkActionBar() {
+  const checkboxes = document.querySelectorAll('.device-checkbox');
+  selectedDevices.clear();
+  
+  checkboxes.forEach(cb => {
+    if (cb.checked) {
+      selectedDevices.add(cb.dataset.deviceId);
+    }
+  });
+  
+  const bulkActionBar = document.getElementById('bulk-action-bar');
+  const selectedCount = document.getElementById('selected-count');
+  const selectAllCheckbox = document.getElementById('select-all-devices');
+  
+  if (selectedDevices.size > 0) {
+    bulkActionBar.classList.remove('hidden');
+    bulkActionBar.classList.add('flex');
+    selectedCount.textContent = `${selectedDevices.size} device${selectedDevices.size > 1 ? 's' : ''} selected`;
+  } else {
+    bulkActionBar.classList.add('hidden');
+    bulkActionBar.classList.remove('flex');
+  }
+  
+  // Update select-all checkbox state
+  const totalCheckboxes = checkboxes.length;
+  const checkedCheckboxes = Array.from(checkboxes).filter(cb => cb.checked).length;
+  selectAllCheckbox.checked = totalCheckboxes > 0 && checkedCheckboxes === totalCheckboxes;
+  selectAllCheckbox.indeterminate = checkedCheckboxes > 0 && checkedCheckboxes < totalCheckboxes;
+}
+
+function clearSelection() {
+  document.querySelectorAll('.device-checkbox').forEach(cb => cb.checked = false);
+  document.getElementById('select-all-devices').checked = false;
+  selectedDevices.clear();
+  updateBulkActionBar();
+}
+
+function getSelectedDeviceIds() {
+  return Array.from(selectedDevices);
+}
+
+function openRunTaskWizard() {
+  const modal = document.getElementById('run-task-wizard-modal');
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+  loadWizardStep('task-type');
+}
+
+function closeRunTaskWizard() {
+  const modal = document.getElementById('run-task-wizard-modal');
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
+}
+
+function loadWizardStep(step) {
+  const wizardContent = document.getElementById('wizard-content');
+  const stepMap = {
+    'task-type': '/commands/wizard/step1',
+    'scope': '/commands/wizard/step2',
+    'parameters': '/commands/wizard/step3',
+    'confirm': '/commands/wizard/step4'
+  };
+  
+  if (stepMap[step]) {
+    htmx.ajax('GET', stepMap[step], {
+      target: '#wizard-content',
+      swap: 'innerHTML'
+    });
+  }
+}
+
+function bulkBackupConfigs() {
+  const deviceIds = getSelectedDeviceIds();
+  if (deviceIds.length === 0) return;
+  
+  if (confirm(`Backup configurations for ${deviceIds.length} device(s)?`)) {
+    const csrfToken = window.webnet?.getCsrfToken?.() || document.querySelector('[name=csrfmiddlewaretoken]')?.value;
+    fetch('/api/v1/devices/bulk-backup/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken
+      },
+      body: JSON.stringify({ device_ids: deviceIds.map(id => parseInt(id)) })
+    })
+    .then(response => {
+      if (!response.ok) throw new Error('Failed to queue backup jobs');
+      return response.json();
+    })
+    .then(data => {
+      const jobCount = data.jobs?.length || 0;
+      const deviceCount = data.total_devices || deviceIds.length;
+      window.webnet?.showToast?.(`Backup jobs queued for ${deviceCount} device(s)`, 'success') 
+        || alert(`Backup jobs queued for ${deviceCount} device(s)`);
+      clearSelection();
+    })
+    .catch(error => {
+      console.error('Backup error:', error);
+      window.webnet?.showToast?.(error.message, 'error') || alert('Error: ' + error.message);
+    });
+  }
+}
+
+function bulkRunCompliance() {
+  const deviceIds = getSelectedDeviceIds();
+  if (deviceIds.length === 0) return;
+  
+  if (confirm(`Run compliance checks on ${deviceIds.length} device(s)?`)) {
+    const csrfToken = window.webnet?.getCsrfToken?.() || document.querySelector('[name=csrfmiddlewaretoken]')?.value;
+    fetch('/api/v1/devices/bulk-compliance/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken
+      },
+      body: JSON.stringify({ device_ids: deviceIds.map(id => parseInt(id)) })
+    })
+    .then(response => {
+      if (!response.ok) throw new Error('Failed to queue compliance jobs');
+      return response.json();
+    })
+    .then(data => {
+      const jobCount = data.jobs?.length || 0;
+      const deviceCount = data.total_devices || deviceIds.length;
+      window.webnet?.showToast?.(`Compliance jobs queued for ${deviceCount} device(s)`, 'success')
+        || alert(`Compliance jobs queued for ${deviceCount} device(s)`);
+      clearSelection();
+    })
+    .catch(error => {
+      console.error('Compliance error:', error);
+      window.webnet?.showToast?.(error.message, 'error') || alert('Error: ' + error.message);
+    });
+  }
+}
+
+// Close modal on background click
+document.getElementById('run-task-wizard-modal')?.addEventListener('click', function(e) {
+  if (e.target === this) {
+    closeRunTaskWizard();
+  }
+});
+
+// Preserve selection state after HTMX swaps
+document.addEventListener('htmx:afterSwap', function(event) {
+  if (event.detail.target.id === 'devices-table') {
+    // Re-check previously selected devices
+    selectedDevices.forEach(deviceId => {
+      const checkbox = document.querySelector(`.device-checkbox[data-device-id="${deviceId}"]`);
+      if (checkbox) {
+        checkbox.checked = true;
+      }
+    });
+    updateBulkActionBar();
+  }
+});
+</script>
+{% endblock %}

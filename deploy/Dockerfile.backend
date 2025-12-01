@@ -1,25 +1,32 @@
 FROM python:3.11-slim
 
+ENV PYTHONUNBUFFERED=1 \
+    DJANGO_SETTINGS_MODULE=webnet.settings
+
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies (includes node/npm for Tailwind build)
 RUN apt-get update && apt-get install -y \
     gcc \
     postgresql-client \
     libpq-dev \
+    nodejs \
+    npm \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
+# Copy project metadata and code
 COPY backend/pyproject.toml /app/
-
-# Copy application code
 COPY backend/ /app/
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -e .
 
-# Expose port
+# Build Tailwind CSS (npm)
+RUN cd /app && npm install && npm run build:css || true
+# Collect static assets
+RUN python manage.py collectstatic --noinput || true
+
 EXPOSE 8000
 
-# Default command
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run Django ASGI with daphne (Channels-compatible)
+CMD ["python", "-m", "daphne", "-b", "0.0.0.0", "-p", "8000", "webnet.asgi:application"]

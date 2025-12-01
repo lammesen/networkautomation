@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}{{ device.hostname }} - webnet{% endblock %}
+
+{% block content %}
+<div id="device-detail">
+<!-- Breadcrumb -->
+<nav class="flex mb-4" aria-label="Breadcrumb">
+  <ol class="inline-flex items-center space-x-1 md:space-x-2 text-sm">
+    <li class="inline-flex items-center">
+      <a href="/devices/" class="text-muted-foreground hover:text-foreground">Devices</a>
+    </li>
+    <li class="flex items-center">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mx-1 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+      </svg>
+      <span class="font-medium">{{ device.hostname }}</span>
+    </li>
+  </ol>
+</nav>
+
+<!-- Page Header -->
+<div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between mb-6">
+  <div class="flex items-start gap-4">
+    <div class="bg-primary/10 p-3 rounded-lg hidden sm:block">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+      </svg>
+    </div>
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight">{{ device.hostname }}</h1>
+      <div class="flex flex-wrap items-center gap-2 mt-2">
+        <code class="text-sm bg-muted px-2 py-1 rounded font-mono">{{ device.mgmt_ip }}</code>
+        <span class="text-muted-foreground/40">|</span>
+        <span class="text-sm text-muted-foreground">{{ device.vendor }} {{ device.platform }}</span>
+        {% if device.site %}
+          <span class="text-muted-foreground/40">|</span>
+          <span class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold">{{ device.site }}</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <span class="inline-flex items-center gap-1 rounded-full border px-3 py-1 text-sm font-semibold">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+    </svg>
+    {{ device.customer.name }}
+  </span>
+</div>
+
+<!-- Content Cards -->
+<div class="grid gap-6">
+  <!-- SSH Terminal Card -->
+  <div data-island="SSHTerminal" data-props='{"deviceId": {{ device.id }}, "hostname": "{{ device.hostname }}"}'>
+    <!-- SSR fallback - shown before React hydrates -->
+    <div class="rounded-lg border bg-card p-6">
+      <div class="flex items-center gap-2">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+        <h2 class="font-semibold">SSH Terminal</h2>
+        <span class="text-sm text-muted-foreground">Loading...</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Snapshots Card -->
+  <div class="rounded-lg border bg-card p-6">
+    <div class="flex items-center gap-2 mb-4">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+      <h2 class="font-semibold">Configuration Snapshots</h2>
+    </div>
+    <div hx-get="/devices/{{ device.id }}/snapshots" hx-trigger="load" hx-target="#snapshots" id="snapshots">
+      <div class="flex justify-center py-8">
+        <svg class="h-6 w-6 animate-spin text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- Jobs Card -->
+  <div class="rounded-lg border bg-card p-6">
+    <div class="flex items-center gap-2 mb-4">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+      </svg>
+      <h2 class="font-semibold">Recent Jobs</h2>
+    </div>
+    <div hx-get="/devices/{{ device.id }}/jobs" hx-trigger="load" hx-target="#device-jobs" id="device-jobs">
+      <div class="flex justify-center py-8">
+        <svg class="h-6 w-6 animate-spin text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- Topology Card -->
+  <div class="rounded-lg border bg-card p-6">
+    <div class="flex items-center gap-2 mb-4">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+      </svg>
+      <h2 class="font-semibold">Topology Links</h2>
+    </div>
+    <div hx-get="/devices/{{ device.id }}/topology" hx-trigger="load" hx-target="#device-topology" id="device-topology">
+      <div class="flex justify-center py-8">
+        <svg class="h-6 w-6 animate-spin text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+{% endblock %}

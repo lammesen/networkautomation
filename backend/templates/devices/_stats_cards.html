@@ -1,0 +1,83 @@
+<!-- Device Stats Cards -->
+<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+  <!-- Total Devices -->
+  <div class="rounded-xl border bg-card text-card-foreground shadow-sm">
+    <div class="p-6 flex flex-row items-center justify-between space-y-0 pb-2">
+      <h3 class="tracking-tight text-sm font-medium text-muted-foreground">Total Devices</h3>
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+      </svg>
+    </div>
+    <div class="p-6 pt-0">
+      <div class="text-2xl font-bold">{{ stats.total }}</div>
+      <p class="text-xs text-muted-foreground">
+        {% if stats.added_this_week > 0 %}
+          <span class="text-green-500">+{{ stats.added_this_week }}</span> this week
+        {% else %}
+          Across all sites
+        {% endif %}
+      </p>
+    </div>
+  </div>
+
+  <!-- Enabled Devices -->
+  <div class="rounded-xl border bg-card text-card-foreground shadow-sm">
+    <div class="p-6 flex flex-row items-center justify-between space-y-0 pb-2">
+      <h3 class="tracking-tight text-sm font-medium text-muted-foreground">Enabled</h3>
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    </div>
+    <div class="p-6 pt-0">
+      <div class="text-2xl font-bold text-green-600">{{ stats.enabled }}</div>
+      <div class="mt-1">
+        <div class="flex items-center gap-2">
+          <div class="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+            <div class="h-full bg-green-500 rounded-full transition-all" style="width: {{ stats.enabled_pct }}%"></div>
+          </div>
+          <span class="text-xs text-muted-foreground">{{ stats.enabled_pct }}%</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Disabled Devices -->
+  <div class="rounded-xl border bg-card text-card-foreground shadow-sm">
+    <div class="p-6 flex flex-row items-center justify-between space-y-0 pb-2">
+      <h3 class="tracking-tight text-sm font-medium text-muted-foreground">Disabled</h3>
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-destructive" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    </div>
+    <div class="p-6 pt-0">
+      <div class="text-2xl font-bold text-destructive">{{ stats.disabled }}</div>
+      <p class="text-xs text-muted-foreground">
+        {% if stats.disabled > 0 %}
+          Requires attention
+        {% else %}
+          All systems operational
+        {% endif %}
+      </p>
+    </div>
+  </div>
+
+  <!-- Top Vendor -->
+  <div class="rounded-xl border bg-card text-card-foreground shadow-sm">
+    <div class="p-6 flex flex-row items-center justify-between space-y-0 pb-2">
+      <h3 class="tracking-tight text-sm font-medium text-muted-foreground">Top Vendor</h3>
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+      </svg>
+    </div>
+    <div class="p-6 pt-0">
+      <div class="text-2xl font-bold">{{ stats.top_vendor.vendor|default:"N/A" }}</div>
+      <p class="text-xs text-muted-foreground">
+        {% if stats.top_vendor.count %}
+          {{ stats.top_vendor.count }} device{{ stats.top_vendor.count|pluralize }}
+        {% else %}
+          No devices yet
+        {% endif %}
+      </p>
+    </div>
+  </div>
+</div>

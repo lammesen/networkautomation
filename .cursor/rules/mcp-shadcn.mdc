@@ -1,0 +1,52 @@
+---
+description: When/how/why to use shadcn MCP for UI components
+globs: ["**/*.tsx", "**/*.ts", "**/static/**", "**/components/**"]
+alwaysApply: false
+---
+
+# shadcn MCP - UI Component Discovery
+
+**When to use:**
+- Building React Islands or UI components
+- Need shadcn/ui component examples
+- Finding component usage patterns
+- Installing new shadcn components
+
+**How to use:**
+```typescript
+// List available components
+mcp_shadcn_list_items_in_registries({ registries: ["@shadcn"] })
+
+// Search for components
+mcp_shadcn_search_items_in_registries({
+  registries: ["@shadcn"],
+  query: "button"
+})
+
+// Get component details
+mcp_shadcn_view_items_in_registries({
+  items: ["@shadcn/button"]
+})
+
+// Get usage examples
+mcp_shadcn_get_item_examples_from_registries({
+  registries: ["@shadcn"],
+  query: "button-demo"
+})
+
+// Get install command
+mcp_shadcn_get_add_command_for_items({
+  items: ["@shadcn/button"]
+})
+```
+
+**Why:**
+- Discover available components
+- See real usage examples
+- Get correct installation commands
+- Find component patterns
+
+**Use cases:**
+- Building React Islands (`backend/static/src/components/islands/`)
+- Adding shadcn components (`backend/static/src/components/ui/`)
+- UI component development

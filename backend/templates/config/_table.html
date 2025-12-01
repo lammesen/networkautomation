@@ -1,0 +1,54 @@
+<div
+  data-island="SnapshotsTable"
+  data-props='{{ snapshots_table_props }}'
+  class="relative w-full overflow-auto"
+>
+  <div class="py-6 text-center text-sm text-muted-foreground">
+    Loading snapshots...
+  </div>
+</div>
+
+<noscript>
+  <div class="relative w-full overflow-auto">
+    <table class="w-full caption-bottom text-sm">
+      <thead class="[&_tr]:border-b">
+        <tr class="border-b transition-colors">
+          <th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Snapshot ID</th>
+          <th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Device</th>
+          <th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Source</th>
+          <th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Created</th>
+          <th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Hash</th>
+        </tr>
+      </thead>
+      <tbody class="[&_tr:last-child]:border-0">
+        {% for snap in snapshots %}
+        <tr class="border-b transition-colors hover:bg-muted/50">
+          <td class="p-4 align-middle font-medium">#{{ snap.id }}</td>
+          <td class="p-4 align-middle">
+            <a href="/devices/{{ snap.device.id }}/" class="font-medium text-primary hover:underline">{{ snap.device.hostname }}</a>
+          </td>
+          <td class="p-4 align-middle">
+            <span class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold">{{ snap.source }}</span>
+          </td>
+          <td class="p-4 align-middle text-sm text-muted-foreground">{{ snap.created_at|date:"Y-m-d H:i:s" }}</td>
+          <td class="p-4 align-middle">
+            <code class="text-xs bg-muted px-2 py-1 rounded font-mono">{{ snap.hash|truncatechars:16 }}</code>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="5" class="p-4 text-center py-12">
+            <div class="flex flex-col items-center gap-2 text-muted-foreground">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <p class="font-medium">No snapshots found</p>
+              <p class="text-sm">Configuration snapshots will appear here after collection.</p>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</noscript>

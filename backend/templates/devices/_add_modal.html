@@ -1,0 +1,93 @@
+<div id="add-device-modal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true">
+  <!-- Backdrop -->
+  <div class="fixed inset-0 bg-background/80 backdrop-blur-sm" onclick="closeAddDeviceModal()"></div>
+  
+  <!-- Modal -->
+  <div class="fixed left-[50%] top-[50%] z-50 w-full max-w-2xl translate-x-[-50%] translate-y-[-50%]">
+    <div class="rounded-lg border bg-background p-6 shadow-lg">
+      <!-- Close button -->
+      <button onclick="closeAddDeviceModal()" class="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+        <span class="sr-only">Close</span>
+      </button>
+
+      <div class="mb-4">
+        <h2 class="text-lg font-semibold leading-none tracking-tight">Add Device</h2>
+        <p class="text-sm text-muted-foreground mt-1">Create a new device and assign credentials</p>
+      </div>
+
+      <form method="post" action="/devices/new" 
+            hx-post="/devices/new" 
+            hx-target="#devices-table" 
+            hx-swap="innerHTML"
+            hx-on::after-request="if(event.detail.successful && event.detail.xhr.status < 400) closeAddDeviceModal()">
+        {% csrf_token %}
+        <div class="space-y-4">
+          {% for field in form %}
+            <div class="space-y-2">
+              <label for="modal_{{ field.id_for_label }}" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                {{ field.label }}
+                {% if field.field.required %}<span class="text-destructive">*</span>{% endif %}
+              </label>
+              {% if field.field.widget.input_type == 'select' %}
+                <div data-island="FormSelect" data-props='{"name":"{{ field.name }}","value":"{{ field.value|default:"" }}","placeholder":"Select {{ field.label|escapejs }}","options":[{% for choice in field.field.choices %}{"value":"{{ choice.0 }}","label":"{{ choice.1|escapejs }}"}{% if not forloop.last %},{% endif %}{% endfor %}]}'></div>
+                <input type="hidden" name="{{ field.name }}" id="modal_{{ field.id_for_label }}" {% if field.field.required %}required{% endif %} />
+              {% elif field.field.widget.input_type == 'checkbox' %}
+                <div class="flex items-center space-x-2">
+                  <input type="checkbox" name="{{ field.name }}" id="modal_{{ field.id_for_label }}"
+                         class="h-4 w-4 rounded border border-primary text-primary shadow focus:ring-primary" 
+                         {% if field.value %}checked{% endif %} />
+                  <label for="modal_{{ field.id_for_label }}" class="text-sm font-medium leading-none">{{ field.label }}</label>
+                </div>
+              {% else %}
+                <input type="{{ field.field.widget.input_type|default:'text' }}" 
+                       name="{{ field.name }}" id="modal_{{ field.id_for_label }}"
+                       value="{{ field.value|default:'' }}"
+                       class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring {% if field.errors %}border-destructive{% endif %}"
+                       placeholder="{{ field.label }}"
+                       {% if field.field.required %}required{% endif %} />
+              {% endif %}
+              {% if field.help_text %}
+                <p class="text-xs text-muted-foreground">{{ field.help_text }}</p>
+              {% endif %}
+              {% if field.errors %}
+                <p class="text-xs text-destructive">{{ field.errors|striptags }}</p>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </div>
+
+        <div class="flex justify-end gap-2 mt-6">
+          <button type="button" onclick="closeAddDeviceModal()" class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 px-4 py-2 border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground">
+            Cancel
+          </button>
+          <button type="submit" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 px-4 py-2 bg-primary text-primary-foreground shadow hover:bg-primary/90">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+            Create Device
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+function openAddDeviceModal() {
+  document.getElementById('add-device-modal').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+}
+function closeAddDeviceModal() {
+  document.getElementById('add-device-modal').classList.add('hidden');
+  document.body.style.overflow = '';
+}
+// Close on escape key
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && !document.getElementById('add-device-modal').classList.contains('hidden')) {
+    closeAddDeviceModal();
+  }
+});
+</script>

@@ -1,6 +1,9 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-openai-codex-auth@4.0.0"],
+  "plugin": [
+    "opencode-openai-codex-auth@4.0.2",
+    "opencode-skills"
+  ],
   "provider": {
     "openai": {
       "options": {
@@ -197,14 +200,29 @@
     }
   },
   "mcp": {
+    "sequential-thinking": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ],
+      "enabled": true
+    },
+    "context7": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@upstash/context7-mcp",
+        "--api-key",
+        "ctx7sk-3b22d900-9002-47ce-9cc5-3f85c63898e5"
+      ],
+      "enabled": true
+    },
     "shadcn": {
       "type": "local",
       "command": ["npx", "shadcn@latest", "mcp"],
-      "enabled": true
-    },
-    "bun": {
-      "type": "remote",
-      "url": "https://bun.com/docs/mcp",
       "enabled": true
     },
     "gh_grep": {
@@ -215,6 +233,11 @@
     "chrome-devtools": {
       "type": "local",
       "command": ["npx", "-y", "chrome-devtools-mcp@latest"]
+    },
+    "playwright": {
+      "type": "local",
+      "command": ["npx", "@playwright/mcp@latest"],
+      "enabled": true
     }
   }
 }

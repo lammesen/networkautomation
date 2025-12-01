@@ -1,0 +1,70 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$DROID_PROJECT_DIR\"/.factory/hooks/session-start.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$DROID_PROJECT_DIR\"/.factory/hooks/validate-code.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Execute",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$DROID_PROJECT_DIR\"/.factory/hooks/git-workflow.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$DROID_PROJECT_DIR\"/.factory/hooks/format-code.sh",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "\"$DROID_PROJECT_DIR\"/.factory/hooks/sync-docs.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "\"$DROID_PROJECT_DIR\"/.factory/hooks/run-tests.sh",
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$DROID_PROJECT_DIR\"/.factory/hooks/log-subagent.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

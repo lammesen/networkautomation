@@ -1,0 +1,102 @@
+<!-- Step 3: Task Parameters -->
+<div class="space-y-4">
+  <div class="flex items-center justify-between mb-4">
+    <div>
+      <h3 class="text-lg font-medium text-foreground">Configure Task Parameters</h3>
+      <p class="text-sm text-muted-foreground">Specify parameters for your task</p>
+    </div>
+    <span class="text-xs text-muted-foreground">Step 3 of 4</span>
+  </div>
+
+  <!-- Task Info Banner -->
+  <div class="rounded-lg bg-primary/5 border border-primary/20 p-4">
+    <div class="flex items-start gap-3">
+      <div class="rounded-md bg-primary/10 p-2">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      </div>
+      <div class="flex-1">
+        <h4 class="font-medium text-foreground" id="task-info-title">Task: Get Facts (NAPALM)</h4>
+        <p class="text-sm text-muted-foreground mt-1" id="task-info-description">Retrieve device facts including hostname, model, serial number, and OS version</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dynamic Parameters Form -->
+  <div class="space-y-4" id="parameters-form">
+    <!-- Example: For CLI Command -->
+    <div class="form-section p-4">
+      <label class="block text-sm font-medium text-foreground mb-2">
+        Command
+        <span class="text-destructive">*</span>
+      </label>
+      <textarea name="command" rows="3" placeholder="show running-config" 
+                class="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"></textarea>
+      <p class="text-xs text-muted-foreground mt-1">Enter the CLI command to execute on target devices</p>
+    </div>
+
+    <!-- Execution Options -->
+    <div class="form-section p-4">
+      <h4 class="text-sm font-medium text-foreground mb-3">Execution Options</h4>
+      <div class="space-y-3">
+        <div class="flex items-center justify-between">
+          <div class="flex-1">
+            <label class="text-sm font-medium text-foreground">Parallel Execution</label>
+            <p class="text-xs text-muted-foreground">Run task on multiple devices simultaneously</p>
+          </div>
+          <input type="checkbox" checked class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary" />
+        </div>
+        <div class="flex items-center justify-between">
+          <div class="flex-1">
+            <label class="text-sm font-medium text-foreground">Timeout (seconds)</label>
+            <p class="text-xs text-muted-foreground">Maximum time to wait for task completion</p>
+          </div>
+          <input type="number" value="30" min="10" max="300" class="w-20 h-9 rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+        </div>
+        <div class="flex items-center justify-between">
+          <div class="flex-1">
+            <label class="text-sm font-medium text-foreground">Retry on Failure</label>
+            <p class="text-xs text-muted-foreground">Automatically retry failed tasks</p>
+          </div>
+          <input type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Scheduling -->
+    <div class="form-section p-4">
+      <h4 class="text-sm font-medium text-foreground mb-3">Scheduling</h4>
+      <div class="flex items-center gap-2">
+        <input type="radio" name="schedule" value="now" checked class="h-4 w-4 text-primary focus:ring-primary" />
+        <label class="text-sm text-foreground">Run immediately</label>
+      </div>
+      <div class="flex items-center gap-2 mt-2">
+        <input type="radio" name="schedule" value="later" class="h-4 w-4 text-primary focus:ring-primary" />
+        <label class="text-sm text-foreground">Schedule for later</label>
+        <input type="datetime-local" class="h-9 rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="flex justify-between gap-2 pt-4 border-t">
+    <button type="button" onclick="loadWizardStep('scope')" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-4">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+      </svg>
+      Back
+    </button>
+    <div class="flex gap-2">
+      <button type="button" onclick="closeRunTaskWizard()" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-4">
+        Cancel
+      </button>
+      <button type="button" onclick="loadWizardStep('confirm')" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4">
+        Next
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+        </svg>
+      </button>
+    </div>
+  </div>
+</div>

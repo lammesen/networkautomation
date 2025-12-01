@@ -1,0 +1,21 @@
+{
+  "name": "networkautomation",
+  "image": "mcr.microsoft.com/devcontainers/python:3.11",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20"
+    }
+  },
+  "postCreateCommand": "make backend-install backend-npm-install",
+  "workspaceFolder": "/workspaces/networkautomation",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-azuretools.vscode-docker",
+        "esbenp.prettier-vscode"
+      ]
+    }
+  }
+}

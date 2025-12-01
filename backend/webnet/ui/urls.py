@@ -1,0 +1,60 @@
+"""UI URL stubs for HTMX pages."""
+
+from django.urls import path
+
+from .views import (
+    DashboardView,
+    DeviceListView,
+    DeviceDetailView,
+    DeviceCreateView,
+    DeviceImportView,
+    DeviceSnapshotsPartialView,
+    DeviceJobsPartialView,
+    DeviceTopologyPartialView,
+    JobListView,
+    JobDetailView,
+    JobDetailLogsView,
+    ConfigSnapshotListView,
+    ConfigDiffView,
+    CompliancePolicyListView,
+    ComplianceResultListView,
+    ComplianceOverviewView,
+    ComplianceRunView,
+    CommandsView,
+    ReachabilityView,
+    TopologyListView,
+    WizardStep1View,
+    WizardStep2View,
+    WizardStep3View,
+    WizardStep4View,
+)
+
+urlpatterns = [
+    path("", DashboardView.as_view(), name="home"),
+    path("dashboard/", DashboardView.as_view(), name="dashboard"),
+    path("devices/", DeviceListView.as_view(), name="devices-list"),
+    path("devices/new", DeviceCreateView.as_view(), name="devices-create"),
+    path("devices/import", DeviceImportView.as_view(), name="devices-import"),
+    path("devices/<int:pk>/", DeviceDetailView.as_view(), name="devices-detail"),
+    path(
+        "devices/<int:pk>/snapshots", DeviceSnapshotsPartialView.as_view(), name="devices-snapshots"
+    ),
+    path("devices/<int:pk>/jobs", DeviceJobsPartialView.as_view(), name="devices-jobs"),
+    path("devices/<int:pk>/topology", DeviceTopologyPartialView.as_view(), name="devices-topology"),
+    path("jobs/", JobListView.as_view(), name="jobs-list"),
+    path("jobs/<int:pk>/", JobDetailView.as_view(), name="jobs-detail"),
+    path("jobs/<int:pk>/logs", JobDetailLogsView.as_view(), name="jobs-logs"),
+    path("config/", ConfigSnapshotListView.as_view(), name="config-list"),
+    path("config/diff", ConfigDiffView.as_view(), name="config-diff"),
+    path("compliance/policies", CompliancePolicyListView.as_view(), name="compliance-policies"),
+    path("compliance/results", ComplianceResultListView.as_view(), name="compliance-results"),
+    path("compliance/overview", ComplianceOverviewView.as_view(), name="compliance-overview"),
+    path("compliance/run", ComplianceRunView.as_view(), name="compliance-run"),
+    path("topology/", TopologyListView.as_view(), name="topology-list"),
+    path("commands/", CommandsView.as_view(), name="commands-run"),
+    path("commands/wizard/step1", WizardStep1View.as_view(), name="wizard-step1"),
+    path("commands/wizard/step2", WizardStep2View.as_view(), name="wizard-step2"),
+    path("commands/wizard/step3", WizardStep3View.as_view(), name="wizard-step3"),
+    path("commands/wizard/step4", WizardStep4View.as_view(), name="wizard-step4"),
+    path("reachability/", ReachabilityView.as_view(), name="reachability-run"),
+]

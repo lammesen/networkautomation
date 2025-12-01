@@ -1,204 +1,84 @@
-# Getting Started with Network Automation
+# Getting Started (Django + HTMX + DRF)
 
-This guide will help you get the Network Automation application up and running quickly.
+This guide helps you run the new server-rendered Django stack with DRF APIs and Celery workers.
 
 ## Prerequisites
-
-- Docker Desktop with Kubernetes enabled (or another local Kubernetes cluster)
-- `kubectl` 1.28+
+- Docker + Kubernetes (or Docker Compose) with `kubectl`
 - GNU Make
-- Bun (for the React frontend)
 - Git
-- 4GB+ RAM recommended
-- Network devices accessible via SSH (optional for testing)
+- Node.js + npm
+- Optional: Redis + Postgres reachable (defaults provided in k8s manifests)
+- Network devices reachable via SSH for automation testing
 
-## Quick Start (5 minutes)
-
-### 1. Clone and Navigate
-
+## Quick Start (local k8s)
+1) Clone
 ```bash
 git clone https://github.com/lammesen/networkautomation.git
 cd networkautomation
 ```
-
-### 2. Install Project Dependencies
-
+2) Install deps (backend venv + tools)
 ```bash
 make bootstrap
 ```
-
-This creates the Python virtualenv, installs backend dev requirements, and installs frontend packages via Bun.
-
-### 3. Build Images & Deploy to Kubernetes
-
+3) Build images and apply k8s manifests (backend as Django/Channels, worker as Celery)
 ```bash
 make dev-up
 ```
-
-The target builds all local container images (Docker Desktop shares its image cache with the Kubernetes cluster) and applies every manifest in `k8s/` to the `default` namespace. Check progress with:
-
-```bash
-make k8s-status
-kubectl wait --for=condition=available deployment/backend --timeout=120s
-kubectl wait --for=condition=available deployment/frontend --timeout=120s
-```
-
-### 4. Port-forward Services (two terminals)
-
-In terminal #1:
-```bash
-make k8s-port-forward-backend
-```
-
-In terminal #2:
-```bash
-make k8s-port-forward-frontend
-```
-
-### 5. Initialize Database & Seed Admin
-
+4) Migrate DB and create superuser
 ```bash
 make migrate
-make seed-admin
+make seed-admin   # createsuperuser --no-input, ensure envs provide credentials
 ```
-
-`seed-admin` runs `python init_db.py` inside the backend pod to create the default admin user. The password comes from the `ADMIN_DEFAULT_PASSWORD` environment variable (default `Admin123!`) and the command also seeds the sample linux device.
-
-### 6. Verify Services
-
+5) Port-forward backend (HTML + API + websockets)
 ```bash
-# Check API health
-curl http://localhost:8000/health
-
-# Check API docs
-open http://localhost:8000/docs  # or visit in browser
-
-# Check frontend
-open http://localhost:3000  # or visit in browser
+make k8s-port-forward-backend   # exposes 8000 locally
 ```
-
-### 7. Login
-
-1. Visit http://localhost:3000
-2. Login with:
-   - Username: `admin`
-   - Password: value of `ADMIN_DEFAULT_PASSWORD` (default `Admin123!`)
-
-3. **IMPORTANT**: Change the admin password immediately after first login!
-
-## Next Steps
-
-### Add Your First Device
-
-1. **Create Credentials**
-
-Via UI or API:
+6) Build static assets (Tailwind + collectstatic) if not already done:
 ```bash
-curl -X POST http://localhost:8000/api/v1/credentials \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "lab_creds",
-    "username": "admin",
-    "password": "your_device_password"
-  }'
+make backend-build-static
 ```
+7) Visit http://localhost:8000 for the HTMX UI; APIs under http://localhost:8000/api/v1/.
 
-2. **Add a Device**
+## Core Environment Variables
+- `SECRET_KEY`, `ENCRYPTION_KEY` (required for crypto), `DEBUG=false`, `ALLOWED_HOSTS` (comma-separated)
+- `CORS_ALLOWED_ORIGINS`, `CSRF_TRUSTED_ORIGINS` (comma-separated, required for prod)
+- `DATABASE_URL` (Postgres recommended), `REDIS_URL`
+- `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`
+- `DJANGO_SETTINGS_MODULE=webnet.settings`
 
+## Running locally without k8s
 ```bash
-curl -X POST http://localhost:8000/api/v1/devices \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "hostname": "router1",
-    "mgmt_ip": "192.168.1.1",
-    "vendor": "cisco",
-    "platform": "ios",
-    "role": "edge",
-    "site": "lab",
-    "credentials_ref": 1,
-    "enabled": true
-  }'
+make backend-install
+. backend/venv/bin/activate
+cd backend && python manage.py migrate
+cd backend && python manage.py runserver 0.0.0.0:8000
+# In another terminal:
+cd backend && ../venv/bin/celery -A webnet.core.celery:celery_app worker -l info
 ```
 
-### Run Your First Command
+## APIs (session or JWT)
+- `POST /api/v1/auth/login` → {access, refresh}
+- `POST /api/v1/auth/refresh`
+- CRUD: users (with api-keys), customers (ranges/users), credentials, devices, jobs, compliance, config, topology
+- Actions: commands/run, reachability/run, config/backup, deploy preview/commit, compliance/run
+- WebSockets: `/ws/jobs/<id>/` for logs, `/ws/devices/<id>/ssh/` for interactive SSH
 
-```bash
-curl -X POST http://localhost:8000/api/v1/commands/run \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "targets": {"site": "lab"},
-    "commands": ["show version"]
-  }'
-```
+## HTMX UI
+- Devices list: server-rendered with HTMX filters at `/devices/`
+- Additional pages (jobs/logs/config/compliance/topology) follow the same pattern with HTMX partials.
 
-Response will include a `job_id`. Check job status:
-```bash
-curl http://localhost:8000/api/v1/jobs/1 \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
+## Build / CI
+- Install Node deps once: `make backend-tailwind-install`
+- Build CSS + collect static assets: `make backend-build-static`
+- Run backend tests: `make backend-test`
+- CI runners should execute: `make backend-tailwind-install backend-build-static backend-test`
 
-### Try the Live SSH Terminal
+## Notes
+- React frontend is deprecated; Django/HTMX is the primary UI.
+- Tailwind is built via npm; ensure `make backend-build-static` before packaging images.
+- Secrets must not use defaults in production; set strong `SECRET_KEY` and `ENCRYPTION_KEY`.
 
-- The seed data includes a `linux-lab-01` device that points to the bundled
-  `linux-device` container (credentials `testuser` / `testpassword`). Click its
-  **Terminal** action to open an interactive shell.
-- For architecture details and troubleshooting steps see
-  [`docs/ssh-streaming.md`](./ssh-streaming.md).
-
-### Backup Configurations
-
-```bash
-curl -X POST http://localhost:8000/api/v1/config/backup \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "targets": {"site": "lab"},
-    "source_label": "manual"
-  }'
-```
-
-## Getting Your API Token
-
-### Via cURL
-
-```bash
-TOKEN=$(curl -X POST http://localhost:8000/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d "{\"username\":\"admin\",\"password\":\"${ADMIN_DEFAULT_PASSWORD:-Admin123!}\"}" \
-  | jq -r '.access_token')
-
-echo $TOKEN
-```
-
-Use the token in subsequent requests:
-```bash
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/devices
-```
-
-### Via Browser
-
-1. Login to the frontend at http://localhost:3000
-2. Open browser developer tools (F12)
-3. Check Application → Local Storage → auth-storage
-4. Copy the token value
-
-## Supported Device Types
-
-The application supports these platforms out of the box:
-
-| Vendor   | Platform      | NAPALM Driver | Netmiko Type    |
-|----------|---------------|---------------|-----------------|
-| Cisco    | ios           | ios           | cisco_ios       |
-| Cisco    | iosxe         | ios           | cisco_ios       |
-| Cisco    | iosxr         | iosxr         | cisco_xr        |
-| Cisco    | nxos          | nxos          | cisco_nxos      |
-| Arista   | eos           | eos           | arista_eos      |
-| Juniper  | junos         | junos         | juniper_junos   |
-
-To add more platforms, edit `backend/app/automation/inventory.py`.
+The legacy React frontend is archived under `tech-dept/legacy-frontend`; Django/HTMX is the primary UI.
 
 ## Configuration
 
@@ -217,8 +97,10 @@ The Kubernetes manifests define runtime configuration directly inside `k8s/backe
         # Optional: switch to Postgres instead of SQLite
         # - name: DATABASE_URL
         #   value: "postgresql://netauto:netauto@postgres:5432/netauto"
-        - name: CORS_ORIGINS
-          value: '["http://localhost:3000"]'
+        - name: CORS_ALLOWED_ORIGINS
+          value: "http://localhost:8000"
+        - name: CSRF_TRUSTED_ORIGINS
+          value: "http://localhost:8000"
 ```
 
 Apply changes with `make k8s-apply` (or `kubectl apply -f k8s/backend.yaml`). For one-off tweaks you can also run:

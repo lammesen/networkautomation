@@ -1,0 +1,578 @@
+<!doctype html>
+<html lang="en" class="h-full dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>{% block title %}webnet{% endblock %}</title>
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+  <script src="https://unpkg.com/htmx-ext-ws@2.0.0/ws.js"></script>
+  <link rel="stylesheet" href="/static/css/tailwind.css" />
+  <link rel="stylesheet" href="/static/js/islands.css" />
+  <script src="/static/js/islands.js" defer></script>
+  <style>
+    /* HTMX loading indicator */
+    .htmx-request .htmx-indicator { display: inline-flex; }
+    .htmx-indicator { display: none; }
+  </style>
+</head>
+<body class="h-full bg-background text-foreground" hx-indicator=".htmx-indicator">
+  {% if "/login" not in request.path and "/logout" not in request.path %}
+  <div class="flex h-full">
+    <!-- Sidebar -->
+    <aside class="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 border-r bg-card">
+      <!-- Sidebar Header -->
+      <div class="flex h-14 items-center border-b px-4">
+        <a href="/" class="flex items-center gap-2 font-semibold text-primary">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+          </svg>
+          <span class="text-lg">webnet</span>
+        </a>
+      </div>
+
+      <!-- Navigation Menu -->
+      <nav class="flex-1 overflow-y-auto p-4">
+        <div class="space-y-6">
+          <!-- Dashboard -->
+          <div>
+            <h3 class="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Home</h3>
+            <div class="space-y-1">
+              <a href="/" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium transition-colors {% if request.path == '/' %}bg-accent text-accent-foreground{% else %}hover:bg-accent hover:text-accent-foreground{% endif %}">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7m-9 14v-6h4v6m5-10l2 2m-2-2v8a2 2 0 01-2 2h-3m-4 0H7a2 2 0 01-2-2v-8m0 0l2-2" />
+                </svg>
+                Dashboard
+              </a>
+            </div>
+          </div>
+
+          <!-- Inventory Section -->
+          <div>
+            <h3 class="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Inventory</h3>
+            <div class="space-y-1">
+              <a href="/devices/" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium transition-colors {% if '/devices' in request.path %}bg-accent text-accent-foreground{% else %}hover:bg-accent hover:text-accent-foreground{% endif %}">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                </svg>
+                Devices
+              </a>
+              <a href="/topology/" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium transition-colors {% if '/topology' in request.path %}bg-accent text-accent-foreground{% else %}hover:bg-accent hover:text-accent-foreground{% endif %}">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+                Topology
+              </a>
+            </div>
+          </div>
+
+          <!-- Jobs Section -->
+          <div>
+            <h3 class="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Jobs</h3>
+            <div class="space-y-1">
+              <a href="/jobs/" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium transition-colors {% if '/jobs' in request.path %}bg-accent text-accent-foreground{% else %}hover:bg-accent hover:text-accent-foreground{% endif %}">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Jobs
+              </a>
+            </div>
+          </div>
+
+          <!-- Configurations Section -->
+          <div>
+            <h3 class="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Configurations</h3>
+            <div class="space-y-1">
+              <a href="/config/" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium transition-colors {% if request.path == '/config/' %}bg-accent text-accent-foreground{% else %}hover:bg-accent hover:text-accent-foreground{% endif %}">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Backups
+              </a>
+              <a href="/config/diff" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium transition-colors {% if '/config/diff' in request.path %}bg-accent text-accent-foreground{% else %}hover:bg-accent hover:text-accent-foreground{% endif %}">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                </svg>
+                Config Diff
+              </a>
+            </div>
+          </div>
+
+          <!-- Compliance Section -->
+          <div>
+            <h3 class="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Compliance</h3>
+            <div class="space-y-1">
+              <a href="/compliance/overview" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium transition-colors {% if '/compliance/overview' in request.path %}bg-accent text-accent-foreground{% else %}hover:bg-accent hover:text-accent-foreground{% endif %}">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                Overview
+              </a>
+              <a href="/compliance/policies" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium transition-colors {% if '/compliance/policies' in request.path %}bg-accent text-accent-foreground{% else %}hover:bg-accent hover:text-accent-foreground{% endif %}">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                </svg>
+                Policies
+              </a>
+              <a href="/compliance/results" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium transition-colors {% if '/compliance/results' in request.path %}bg-accent text-accent-foreground{% else %}hover:bg-accent hover:text-accent-foreground{% endif %}">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Results
+              </a>
+              <a href="/compliance/run" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium transition-colors {% if request.path == '/compliance/run' %}bg-accent text-accent-foreground{% else %}hover:bg-accent hover:text-accent-foreground{% endif %}">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Run Check
+              </a>
+            </div>
+          </div>
+
+          <!-- Tools Section -->
+          <div>
+            <h3 class="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Tools</h3>
+            <div class="space-y-1">
+              <a href="/commands/" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium transition-colors {% if '/commands' in request.path %}bg-accent text-accent-foreground{% else %}hover:bg-accent hover:text-accent-foreground{% endif %}">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                Run Commands
+              </a>
+              <a href="/reachability/" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium transition-colors {% if '/reachability' in request.path %}bg-accent text-accent-foreground{% else %}hover:bg-accent hover:text-accent-foreground{% endif %}">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Reachability
+              </a>
+            </div>
+          </div>
+
+          <!-- Scheduling Section (placeholder) -->
+          <div>
+            <h3 class="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Scheduling</h3>
+            <div class="space-y-1">
+              <a href="#" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium text-muted-foreground cursor-not-allowed" aria-disabled="true" title="Coming soon">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 1.567-3 3.5S10.343 15 12 15s3-1.567 3-3.5S13.657 8 12 8z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.5 19h13M4 7h16M7 4v3m10-3v3" />
+                </svg>
+                Schedules (coming soon)
+              </a>
+            </div>
+          </div>
+
+          <!-- Reports Section (placeholder) -->
+          <div>
+            <h3 class="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Reports</h3>
+            <div class="space-y-1">
+              <a href="#" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium text-muted-foreground cursor-not-allowed" aria-disabled="true" title="Coming soon">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v2H5a2 2 0 01-2-2V7a2 2 0 012-2h5v2H5v10h4zm2 2h4a2 2 0 002-2V7a2 2 0 00-2-2h-4v2h4v10h-4v2zm-2-6h6v-2H9v2z" />
+                </svg>
+                Reports (coming soon)
+              </a>
+            </div>
+          </div>
+
+          <!-- Admin Section -->
+          <div>
+            <h3 class="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Admin</h3>
+            <div class="space-y-1">
+              <a href="/admin/" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                Users & Roles
+              </a>
+              <a href="#" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium text-muted-foreground cursor-not-allowed" aria-disabled="true" title="Audit log coming soon">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Audit Log (coming soon)
+              </a>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      <!-- User Section -->
+      {% if user.is_authenticated %}
+      <div class="border-t p-4">
+        <div class="flex items-center gap-3">
+          <div class="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-medium">
+            {{ user.username|slice:":2"|upper }}
+          </div>
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-medium truncate">{{ user.username }}</p>
+            <p class="text-xs text-muted-foreground">Administrator</p>
+          </div>
+          <a href="/logout/" class="inline-flex items-center justify-center rounded-md text-sm font-medium h-9 w-9 hover:bg-accent hover:text-accent-foreground" title="Logout">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+          </a>
+        </div>
+      </div>
+      {% endif %}
+    </aside>
+
+    <!-- Mobile Header -->
+    <div class="lg:hidden fixed top-0 left-0 right-0 z-50 flex h-14 items-center gap-4 border-b bg-card px-4">
+      <button id="mobile-menu-btn" class="inline-flex items-center justify-center rounded-md text-sm font-medium h-9 w-9 hover:bg-accent hover:text-accent-foreground">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="h-5 w-5 stroke-current">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+        </svg>
+      </button>
+      <a href="/" class="font-semibold text-primary">webnet</a>
+      <div class="flex-1"></div>
+      {% if user.is_authenticated %}
+      <div class="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-medium">
+        {{ user.username|slice:":2"|upper }}
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Mobile Menu Overlay -->
+    <div id="mobile-menu" class="lg:hidden fixed inset-0 z-40 hidden">
+      <div id="mobile-menu-backdrop" class="absolute inset-0 bg-background/80 backdrop-blur-sm"></div>
+      <aside class="absolute left-0 top-0 h-full w-64 bg-card border-r shadow-lg">
+        <!-- Same nav as desktop, just copy the nav section -->
+        <div class="flex h-14 items-center border-b px-4">
+          <a href="/" class="flex items-center gap-2 font-semibold text-primary">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+            </svg>
+            <span class="text-lg">webnet</span>
+          </a>
+        </div>
+        <nav class="flex-1 overflow-y-auto p-4">
+          <div class="space-y-6">
+            <div>
+              <h3 class="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Home</h3>
+              <div class="space-y-1">
+                <a href="/" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium hover:bg-accent">Dashboard</a>
+              </div>
+            </div>
+            <div>
+              <h3 class="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Inventory</h3>
+              <div class="space-y-1">
+                <a href="/devices/" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium hover:bg-accent">Devices</a>
+                <a href="/topology/" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium hover:bg-accent">Topology</a>
+              </div>
+            </div>
+            <div>
+              <h3 class="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Jobs</h3>
+              <div class="space-y-1">
+                <a href="/jobs/" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium hover:bg-accent">Jobs</a>
+              </div>
+            </div>
+            <div>
+              <h3 class="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Configurations</h3>
+              <div class="space-y-1">
+                <a href="/config/" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium hover:bg-accent">Backups</a>
+                <a href="/config/diff" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium hover:bg-accent">Config Diff</a>
+              </div>
+            </div>
+            <div>
+              <h3 class="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Compliance</h3>
+              <div class="space-y-1">
+                <a href="/compliance/overview" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium hover:bg-accent">Overview</a>
+                <a href="/compliance/policies" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium hover:bg-accent">Policies</a>
+                <a href="/compliance/results" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium hover:bg-accent">Results</a>
+                <a href="/compliance/run" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium hover:bg-accent">Run Check</a>
+              </div>
+            </div>
+            <div>
+              <h3 class="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Tools</h3>
+              <div class="space-y-1">
+                <a href="/commands/" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium hover:bg-accent">Run Commands</a>
+                <a href="/reachability/" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium hover:bg-accent">Reachability</a>
+              </div>
+            </div>
+            <div>
+              <h3 class="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Scheduling</h3>
+              <div class="space-y-1">
+                <span class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium text-muted-foreground">Schedules (coming soon)</span>
+              </div>
+            </div>
+            <div>
+              <h3 class="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Reports</h3>
+              <div class="space-y-1">
+                <span class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium text-muted-foreground">Reports (coming soon)</span>
+              </div>
+            </div>
+            <div>
+              <h3 class="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Admin</h3>
+              <div class="space-y-1">
+                <a href="/admin/" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium hover:bg-accent">Users & Roles</a>
+                <span class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium text-muted-foreground">Audit Log (coming soon)</span>
+              </div>
+            </div>
+          </div>
+        </nav>
+      </aside>
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="flex-1 lg:pl-64">
+      <header class="sticky top-0 z-30 flex h-14 items-center justify-between border-b bg-card/80 px-4 backdrop-blur lg:px-6">
+        <div class="flex items-center gap-3">
+          {% with ENVIRONMENT_NAME|default:"LAB" as env_name %}
+          <span class="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">{{ env_name|upper }}</span>
+          {% endwith %}
+          <span class="text-sm text-muted-foreground">NetOps Automation</span>
+        </div>
+        {% if user.is_authenticated %}
+        <div class="flex items-center gap-3">
+          <button class="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground" title="Notifications">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V4a2 2 0 10-4 0v1.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+            </svg>
+          </button>
+          <div class="flex items-center gap-2 rounded-md border px-3 py-1">
+            <div class="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-semibold">
+              {{ user.username|slice:":2"|upper }}
+            </div>
+            <div class="flex flex-col">
+              <span class="text-sm font-medium leading-tight">{{ user.username }}</span>
+              <span class="text-xs text-muted-foreground">{{ user.get_full_name|default:"Administrator" }}</span>
+            </div>
+            <a href="/logout/" class="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground" title="Logout">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+            </a>
+          </div>
+        </div>
+        {% endif %}
+      </header>
+
+      <main class="min-h-screen pt-4 lg:pt-6">
+        <div class="p-4 lg:p-6">
+          <div class="mx-auto max-w-7xl">
+            {% block content %}{% endblock %}
+          </div>
+        </div>
+      </main>
+
+      <!-- Footer -->
+      <footer class="border-t py-4 text-center text-sm text-muted-foreground">
+        <p>webnet - Network Automation Console</p>
+      </footer>
+    </div>
+  </div>
+  {% else %}
+  <!-- Auth pages without sidebar -->
+  <main class="min-h-screen flex items-center justify-center p-4">
+    {% block auth_content %}{% endblock %}
+  </main>
+  {% endif %}
+
+  <!-- Toast Portal -->
+  <div id="toast-portal" class="fixed bottom-4 right-4 z-50 flex flex-col gap-3"></div>
+
+  <!-- Sonner Toaster (React Island) -->
+  <div data-island="Toaster"></div>
+
+  <!-- Command Palette (React Island) - Cmd+K to open -->
+  <div data-island="CommandPalette"></div>
+
+  <!-- Global Loading Indicator -->
+  <div class="htmx-indicator fixed top-4 right-4 z-50">
+    <svg class="h-5 w-5 animate-spin text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+    </svg>
+  </div>
+
+  <!-- Mobile menu toggle script -->
+  <script>
+    (function() {
+      const btn = document.getElementById('mobile-menu-btn');
+      const menu = document.getElementById('mobile-menu');
+      const backdrop = document.getElementById('mobile-menu-backdrop');
+      
+      if (btn && menu && backdrop) {
+        btn.addEventListener('click', function() {
+          menu.classList.toggle('hidden');
+        });
+        backdrop.addEventListener('click', function() {
+          menu.classList.add('hidden');
+        });
+      }
+    })();
+  </script>
+
+  <!-- Global helpers: CSRF + Toasts -->
+  <script>
+    (function() {
+      const toastRoot = document.getElementById('toast-portal');
+      const active = new Set();
+
+      function ensureWebnet() {
+        if (!window.webnet) window.webnet = {};
+      }
+
+      function getCsrfFromCookie() {
+        const match = document.cookie.match(/csrftoken=([^;]+)/);
+        return match ? decodeURIComponent(match[1]) : '';
+      }
+
+      function showToast(message, variant = 'success', duration = 4000) {
+        if (!toastRoot || !message) return;
+        const id = crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random());
+        const toast = document.createElement('div');
+        toast.className = [
+          'flex items-start gap-3 rounded-md border bg-card px-4 py-3 shadow-lg transition-all',
+          variant === 'error' ? 'border-destructive/40 text-destructive' : 'border-primary/40 text-foreground'
+        ].join(' ');
+        toast.setAttribute('role', 'status');
+        toast.innerHTML = `
+          <div class="mt-0.5 h-2 w-2 rounded-full ${variant === 'error' ? 'bg-destructive' : 'bg-primary'}"></div>
+          <div class="flex-1 text-sm">${message}</div>
+          <button aria-label="Dismiss" class="text-muted-foreground hover:text-foreground">×</button>
+        `;
+        const dismissBtn = toast.querySelector('button');
+        const remove = () => {
+          if (!active.has(id)) return;
+          active.delete(id);
+          toast.classList.add('opacity-0', 'translate-y-1');
+          setTimeout(() => toast.remove(), 150);
+        };
+        dismissBtn?.addEventListener('click', remove);
+        active.add(id);
+        toastRoot.appendChild(toast);
+        setTimeout(remove, duration);
+      }
+
+      ensureWebnet();
+      window.webnet.getCsrfToken = window.webnet.getCsrfToken || getCsrfFromCookie;
+      window.webnet.showToast = window.webnet.showToast || showToast;
+
+      window.addEventListener('webnet:toast', (event) => {
+        const detail = event.detail || {};
+        showToast(detail.message || '', detail.variant || 'success');
+      });
+    })();
+  </script>
+
+  {% if user.is_authenticated %}
+  <!-- WebSocket for real-time updates -->
+  <script>
+    (function() {
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = wsProtocol + '//' + window.location.host + '/ws/updates/';
+      let ws = null;
+      let reconnectAttempts = 0;
+      const maxReconnectAttempts = 10;
+      const reconnectDelay = 3000;
+
+      function connect() {
+        ws = new WebSocket(wsUrl);
+        
+        ws.onopen = function() {
+          console.log('WebSocket connected');
+          reconnectAttempts = 0;
+        };
+        
+        ws.onmessage = function(event) {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'update') {
+            handleUpdate(msg);
+          }
+        };
+        
+        ws.onclose = function(event) {
+          if (event.code !== 1000 && reconnectAttempts < maxReconnectAttempts) {
+            reconnectAttempts++;
+            console.log('WebSocket closed, reconnecting in ' + reconnectDelay + 'ms...');
+            setTimeout(connect, reconnectDelay);
+          }
+        };
+        
+        ws.onerror = function(error) {
+          console.error('WebSocket error:', error);
+        };
+      }
+
+      function handleUpdate(msg) {
+        // Dispatch custom event for page-specific handlers
+        const event = new CustomEvent('webnet:update', { detail: msg });
+        document.dispatchEvent(event);
+        
+        // Auto-refresh tables based on entity type and current page
+        const path = window.location.pathname;
+        const entity = msg.entity;
+        
+        // Map entity types to their table container IDs and paths
+        const refreshMap = {
+          'job': { path: '/jobs/', target: '#jobs-table', url: '/jobs/' },
+          'device': { path: '/devices/', target: '#devices-table', url: '/devices/' },
+          'config': { path: '/config/', target: '#config-table', url: '/config/' },
+          'compliance': { path: '/compliance/results', target: '#results-table', url: '/compliance/results' },
+          'topology': { path: '/topology/', target: '#topology-table', url: '/topology/' }
+        };
+        
+        const config = refreshMap[entity];
+         if (config && path.startsWith(config.path)) {
+           const target = document.querySelector(config.target);
+           if (target) {
+             // Use HTMX to refresh the table
+             htmx.ajax('GET', config.url, { target: config.target, swap: 'innerHTML' });
+           }
+         }
+
+         // Toasts for job updates
+         if (entity === 'job' && msg.status) {
+           if (msg.status === 'success') {
+             window.dispatchEvent(new CustomEvent('webnet:toast', {
+               detail: { message: `Job ${msg.id} succeeded`, variant: 'success' }
+             }));
+           }
+           if (msg.status === 'failed') {
+             window.dispatchEvent(new CustomEvent('webnet:toast', {
+               detail: { message: `Job ${msg.id} failed`, variant: 'error' }
+             }));
+           }
+         }
+ 
+         // Handle job detail page updates
+         if (entity === 'job' && path.match(/^\/jobs\/\d+\//)) {
+           const jobId = path.match(/\/jobs\/(\d+)\//)[1];
+           if (msg.id == jobId) {
+             // Refresh job detail
+             htmx.ajax('GET', path, { target: '#job-detail', swap: 'innerHTML' });
+             // Refresh logs island
+             htmx.ajax('GET', `/jobs/${jobId}/logs`, { target: '#job-logs', swap: 'outerHTML' });
+           }
+         }
+
+        
+        // Handle device detail page updates
+        if (entity === 'device' && path.match(/^\/devices\/\d+\//)) {
+          const deviceId = path.match(/\/devices\/(\d+)\//)[1];
+          if (msg.id == deviceId) {
+            htmx.ajax('GET', path, { target: '#device-detail', swap: 'innerHTML' });
+          }
+        }
+      }
+
+      // Connect when page loads
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', connect);
+      } else {
+        connect();
+      }
+      
+      // Clean up on page unload
+      window.addEventListener('beforeunload', function() {
+        if (ws) {
+          ws.close(1000);
+        }
+      });
+    })();
+  </script>
+  {% endif %}
+</body>
+</html>

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Signed Out - webnet{% endblock %}
+{% block auth_content %}
+<div class="w-full max-w-md text-center">
+  <div class="mb-8">
+    <div class="flex justify-center mb-4">
+      <div class="flex h-16 w-16 items-center justify-center rounded-full bg-success/10">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      </div>
+    </div>
+    <h1 class="text-2xl font-bold tracking-tight">Signed out successfully</h1>
+    <p class="text-muted-foreground mt-2">You have been securely logged out</p>
+  </div>
+
+  <div class="rounded-lg border bg-card text-card-foreground shadow-sm p-6">
+    <p class="text-sm text-muted-foreground mb-4">Thank you for using webnet. Your session has been ended.</p>
+    <a href="{% url 'login' %}" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 w-full">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+      </svg>
+      Sign in again
+    </a>
+  </div>
+
+  <p class="text-center text-muted-foreground text-sm mt-6">
+    webnet - Network Automation Console
+  </p>
+</div>
+{% endblock auth_content %}

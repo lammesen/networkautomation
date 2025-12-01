@@ -1,0 +1,25 @@
+---
+description: Development commands and checklist
+globs: 
+alwaysApply: true
+---
+
+# Commands
+
+- Lint: `make backend-lint`
+- Test: `make backend-test`
+- Build static: `make backend-build-static` (after UI changes)
+- Migrate: `make migrate` or `make dev-migrate`
+- Dev server: `make dev-backend` (Daphne ASGI for WebSocket)
+- Dev all: `make dev-login-ready-services`
+
+# Verification Checklist
+
+Before completing any task:
+- [ ] `make backend-lint` passes
+- [ ] `make backend-test` passes
+- [ ] Tenant scoping verified (no cross-customer data leaks)
+- [ ] Type hints added to new functions
+- [ ] Static assets rebuilt if UI changes (`make backend-build-static`)
+- [ ] Migrations created/applied if model changes
+- [ ] React islands registered in `islands.tsx` if new component added

@@ -1,0 +1,40 @@
+---
+description: General MCP usage guidelines
+globs: 
+alwaysApply: true
+---
+
+# MCP Server Usage Guidelines
+
+## Priority Order
+
+1. **sequential-thinking** - Use FIRST for all non-trivial tasks
+2. **codebase_search** - For project-specific code
+3. **context7** - For library documentation
+4. **gh-grep** - For real-world examples
+5. **shadcn** - For UI component discovery
+6. **chrome-devtools** / **playwright** - For browser testing
+
+## When NOT to Use MCP
+
+- Simple file operations (use standard tools)
+- Project-specific code (use `codebase_search`)
+- Git operations (use standard tools)
+- Trivial tasks (< 5 lines of code)
+
+## Best Practices
+
+- **Use MCP tools BEFORE standard tools** when relevant
+- **Cache results** - don't repeat identical queries
+- **Be specific** - narrow queries for better results
+- **Combine tools** - e.g., Context7 + gh-grep for comprehensive understanding
+
+## Tool Selection Flow
+
+```
+Need library docs? → context7
+Need real examples? → gh-grep
+Need UI components? → shadcn
+Need browser testing? → playwright/chrome-devtools
+Need structured thinking? → sequential-thinking (always)
+```

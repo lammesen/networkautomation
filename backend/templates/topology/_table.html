@@ -1,0 +1,56 @@
+<div
+  data-island="TopologyTable"
+  data-props='{{ topology_table_props }}'
+  class="relative w-full overflow-auto"
+>
+  <div class="py-6 text-center text-sm text-muted-foreground">Loading topology...</div>
+</div>
+
+<noscript>
+  <div class="relative w-full overflow-auto">
+    <table class="w-full caption-bottom text-sm">
+      <thead class="[&_tr]:border-b">
+        <tr class="border-b transition-colors">
+          <th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Local Device</th>
+          <th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Local Interface</th>
+          <th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Remote Host</th>
+          <th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Remote Interface</th>
+          <th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Protocol</th>
+        </tr>
+      </thead>
+      <tbody class="[&_tr:last-child]:border-0">
+        {% for link in links %}
+        <tr class="border-b transition-colors hover:bg-muted/50">
+          <td class="p-4 align-middle">
+            <a href="/devices/{{ link.local_device.id }}/" class="font-medium text-primary hover:underline">
+              {{ link.local_device.hostname }}
+            </a>
+          </td>
+          <td class="p-4 align-middle">
+            <code class="text-xs bg-muted px-2 py-1 rounded font-mono">{{ link.local_interface }}</code>
+          </td>
+          <td class="p-4 align-middle font-medium">{{ link.remote_hostname }}</td>
+          <td class="p-4 align-middle">
+            <code class="text-xs bg-muted px-2 py-1 rounded font-mono">{{ link.remote_interface }}</code>
+          </td>
+          <td class="p-4 align-middle">
+            <span class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold">{{ link.protocol }}</span>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="5" class="p-4 text-center py-12">
+            <div class="flex flex-col items-center gap-2 text-muted-foreground">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+              </svg>
+              <p class="font-medium">No topology links discovered</p>
+              <p class="text-sm">Links will appear here after topology discovery runs.</p>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</noscript>

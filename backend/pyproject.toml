@@ -4,42 +4,46 @@ version = "0.1.0"
 description = "Network automation web application backend"
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi>=0.115.4",
-    "uvicorn[standard]>=0.31.0",
-    "sqlalchemy>=2.0.36",
-    "alembic>=1.14.0",
-    "psycopg2-binary>=2.9.9",
-    "pydantic>=2.9.0",
-    "pydantic-settings>=2.5.2",
-    "python-jose[cryptography]>=3.3.0",
-    "passlib[bcrypt]>=1.7.4",
-    "bcrypt==4.0.1",
-    "python-multipart>=0.0.6",
+    "python-dotenv>=1.0.0",
+    "Django>=5.1",
+    "djangorestframework>=3.15.2",
+    "djangorestframework-simplejwt>=5.3.1",
+    "channels>=4.1.0",
+    "channels-redis>=4.2.0",
+    "daphne>=4.1.2",
     "celery>=5.3.6",
     "redis>=5.0.1",
+    "psycopg2-binary>=2.9.9",
+    "django-filter>=24.3",
+    "whitenoise>=6.6.0",
+    "argon2-cffi>=23.1.0",
+    "prometheus-client>=0.19.0",
+    "cryptography>=43.0.0",
+    "pyyaml>=6.0.1",
+    "jinja2>=3.1.3",
+    "python-multipart>=0.0.6",
     "napalm>=4.1.0",
     "netmiko>=4.4.0",
     "nornir>=3.4.1",
     "nornir-napalm>=0.4.0",
     "nornir-netmiko>=1.0.0",
     "asyncssh>=2.14.2",
-    "jinja2>=3.1.3",
-    "pyyaml>=6.0.1",
-    "websockets>=13.0",
-    "slowapi>=0.1.9",
-    "cryptography>=43.0.0",
-    "prometheus-client>=0.19.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.4.4",
+    "pytest-django>=4.8.0",
     "pytest-asyncio>=0.23.3",
     "pytest-cov>=4.1.0",
     "httpx>=0.26.0",
     "mypy>=1.8.0",
     "ruff>=0.1.14",
     "black>=24.1.1",
+    "django-stubs>=4.2.7",
+    "djangorestframework-stubs>=3.15.0",
+    "types-redis>=4.6.0.20241004",
+    "types-requests>=2.32.0.20241016",
 ]
 
 [build-system]
@@ -47,7 +51,19 @@ requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["app"]
+packages = [
+    "webnet",
+    "webnet.core",
+    "webnet.users",
+    "webnet.customers",
+    "webnet.devices",
+    "webnet.jobs",
+    "webnet.config_mgmt",
+    "webnet.compliance",
+    "webnet.networkops",
+    "webnet.api",
+    "webnet.ui",
+]
 
 [tool.black]
 line-length = 100
@@ -62,7 +78,5 @@ python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
+exclude = "migrations"
 
-[tool.pytest.ini_options]
-testpaths = ["app/tests"]
-asyncio_mode = "auto"
