@@ -255,7 +255,8 @@ class SSHHostKeyService:
         # Decode and compute fingerprint with error handling
         try:
             key_data = base64.b64decode(key_data_b64)
-        except (ValueError, base64.binascii.Error) as e:
+        except (ValueError, Exception) as e:
+            # binascii.Error is raised by base64.b64decode for invalid input
             raise ValueError(f"Invalid base64 encoding in public key: {e}")
 
         digest = hashlib.sha256(key_data).digest()
