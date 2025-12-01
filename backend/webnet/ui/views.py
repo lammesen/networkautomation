@@ -17,9 +17,18 @@ from django.urls import reverse
 
 from webnet.api.permissions import user_has_customer_access
 from webnet.compliance.models import CompliancePolicy, ComplianceResult
-from webnet.config_mgmt.models import ConfigSnapshot, GitRepository, GitSyncLog
+from webnet.config_mgmt.models import ConfigSnapshot, GitRepository, GitSyncLog, ConfigTemplate
 from webnet.customers.models import Customer
-from webnet.devices.models import Device, TopologyLink, Credential
+from webnet.devices.models import (
+    Device,
+    TopologyLink,
+    Credential,
+    DiscoveredDevice,
+    Tag,
+    DeviceGroup,
+    NetBoxConfig,
+    NetBoxSyncLog,
+)
 from webnet.jobs.models import Job, JobLog
 from webnet.jobs.services import JobService
 
@@ -1285,8 +1294,6 @@ class BulkOnboardingView(TenantScopedView):
     template_name = "devices/bulk_onboarding.html"
 
     def get(self, request):
-        from webnet.devices.models import DiscoveredDevice
-
         # Get customer's credentials
         customers = (
             request.user.customers.all()
@@ -1323,8 +1330,6 @@ class DiscoveryQueueView(TenantScopedView):
     customer_field = "customer_id"
 
     def get(self, request):
-        from webnet.devices.models import DiscoveredDevice
-
         status_filter = request.GET.get("status", "pending")
 
         qs = DiscoveredDevice.objects.select_related(
@@ -1373,8 +1378,6 @@ class DiscoveryQueueActionView(TenantScopedView):
     allowed_write_roles = {"operator", "admin"}
 
     def post(self, request, pk, action):
-        from webnet.devices.models import DiscoveredDevice
-
         check = self.ensure_can_write()
         if check:
             return check
@@ -1498,7 +1501,6 @@ class TagListView(TenantScopedView):
     customer_field = "customer_id"
 
     def get(self, request):
-        from webnet.devices.models import Tag
         from django.db.models import Count
 
         qs = Tag.objects.annotate(device_count=Count("devices")).order_by("category", "name")
@@ -1528,8 +1530,6 @@ class TagCreateView(TenantScopedView):
     allowed_write_roles = {"operator", "admin"}
 
     def post(self, request):
-        from webnet.devices.models import Tag
-
         check = self.ensure_can_write()
         if check:
             return check
@@ -1576,8 +1576,6 @@ class TagDeleteView(TenantScopedView):
     allowed_write_roles = {"operator", "admin"}
 
     def post(self, request, pk):
-        from webnet.devices.models import Tag
-
         check = self.ensure_can_write()
         if check:
             return check
@@ -1606,8 +1604,6 @@ class DeviceGroupListView(TenantScopedView):
     customer_field = "customer_id"
 
     def get(self, request):
-        from webnet.devices.models import DeviceGroup
-
         qs = DeviceGroup.objects.select_related("customer", "parent").order_by("name")
         qs = self.filter_by_customer(qs)
 
@@ -1645,8 +1641,6 @@ class DeviceGroupCreateView(TenantScopedView):
     allowed_write_roles = {"operator", "admin"}
 
     def post(self, request):
-        from webnet.devices.models import DeviceGroup
-
         check = self.ensure_can_write()
         if check:
             return check
@@ -1703,8 +1697,6 @@ class DeviceGroupDetailView(TenantScopedView):
     partial_name = "devices/_group_devices.html"
 
     def get(self, request, pk):
-        from webnet.devices.models import DeviceGroup
-
         group = get_object_or_404(DeviceGroup.objects.select_related("customer"), pk=pk)
         check = self.ensure_customer_access(group.customer_id)
         if check:
@@ -1730,8 +1722,6 @@ class DeviceGroupDeleteView(TenantScopedView):
     allowed_write_roles = {"operator", "admin"}
 
     def post(self, request, pk):
-        from webnet.devices.models import DeviceGroup
-
         check = self.ensure_can_write()
         if check:
             return check
@@ -1749,3 +1739,449 @@ class DeviceGroupDeleteView(TenantScopedView):
         groups_with_counts = [{"group": g, "device_count": g.device_count} for g in qs]
 
         return render(request, self.partial_name, {"groups": groups_with_counts})
+
+
+class ConfigTemplateForm(forms.ModelForm):
+    """Form for configuration templates."""
+
+    class Meta:
+        model = ConfigTemplate
+        fields = [
+            "customer",
+            "name",
+            "description",
+            "category",
+            "template_content",
+            "variables_schema",
+            "platform_tags",
+            "is_active",
+        ]
+        widgets = {
+            "template_content": forms.Textarea(attrs={"rows": 15, "class": "font-mono"}),
+            "description": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        user = kwargs.pop("user", None)
+        super().__init__(*args, **kwargs)
+        if user and getattr(user, "role", "viewer") != "admin":
+            self.fields["customer"].queryset = user.customers.all()
+        else:
+            self.fields["customer"].queryset = Customer.objects.all()
+
+
+class ConfigTemplateListView(TenantScopedView):
+    """List configuration templates."""
+
+    template_name = "templates/list.html"
+    partial_name = "templates/_table.html"
+
+    def get(self, request):
+        category = request.GET.get("category", "")
+        search = request.GET.get("search", "").strip()
+
+        qs = ConfigTemplate.objects.select_related("customer", "created_by").order_by(
+            "category", "name"
+        )
+
+        if category:
+            qs = qs.filter(category=category)
+        if search:
+            qs = qs.filter(name__icontains=search)
+
+        qs = self.filter_by_customer(qs)
+
+        context = {
+            "templates": qs,
+            "category": category,
+            "search": search,
+            "categories": ConfigTemplate.CATEGORY_CHOICES,
+        }
+
+        if request.headers.get("HX-Request"):
+            return render(request, self.partial_name, context)
+        return render(request, self.template_name, context)
+
+
+class ConfigTemplateDetailView(TenantScopedView):
+    """View/edit a configuration template."""
+
+    template_name = "templates/detail.html"
+    partial_name = "templates/_form.html"
+
+    def get(self, request, pk):
+        template = get_object_or_404(
+            ConfigTemplate.objects.select_related("customer", "created_by"), pk=pk
+        )
+        check = self.ensure_customer_access(template.customer_id)
+        if check:
+            return check
+
+        form = ConfigTemplateForm(instance=template, user=request.user)
+        return render(
+            request,
+            self.template_name,
+            {"template": template, "form": form},
+        )
+
+    def post(self, request, pk):
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        template = get_object_or_404(
+            ConfigTemplate.objects.select_related("customer", "created_by"), pk=pk
+        )
+        check = self.ensure_customer_access(template.customer_id)
+        if check:
+            return check
+
+        form = ConfigTemplateForm(request.POST, instance=template, user=request.user)
+        if form.is_valid():
+            form.save()
+            if request.headers.get("HX-Request"):
+                return render(
+                    request,
+                    self.partial_name,
+                    {"template": template, "form": form, "success": True},
+                )
+            return redirect("templates-detail", pk=pk)
+
+        return render(
+            request,
+            self.template_name,
+            {"template": template, "form": form},
+        )
+
+
+class ConfigTemplateCreateView(TenantScopedView):
+    """Create a new configuration template."""
+
+    template_name = "templates/create.html"
+
+    def get(self, request):
+        form = ConfigTemplateForm(user=request.user)
+        return render(request, self.template_name, {"form": form})
+
+    def post(self, request):
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        form = ConfigTemplateForm(request.POST, user=request.user)
+        if form.is_valid():
+            template = form.save(commit=False)
+            template.created_by = request.user
+            template.save()
+            return redirect("templates-detail", pk=template.pk)
+
+        return render(request, self.template_name, {"form": form})
+
+
+class ConfigTemplateDeleteView(TenantScopedView):
+    """Delete a configuration template."""
+
+    def post(self, request, pk):
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        template = get_object_or_404(ConfigTemplate.objects.select_related("customer"), pk=pk)
+        check = self.ensure_customer_access(template.customer_id)
+        if check:
+            return check
+
+        template.delete()
+        return redirect("templates-list")
+
+
+class ConfigTemplateRenderView(TenantScopedView):
+    """Render a configuration template with variables."""
+
+    partial_name = "templates/_render_result.html"
+
+    def post(self, request, pk):
+        template = get_object_or_404(ConfigTemplate.objects.select_related("customer"), pk=pk)
+        check = self.ensure_customer_access(template.customer_id)
+        if check:
+            return check
+
+        # Parse variables from request
+        variables = {}
+        for key, value in request.POST.items():
+            if key.startswith("var_"):
+                var_name = key[4:]  # Remove "var_" prefix
+                variables[var_name] = value
+
+        try:
+            rendered = template.render(variables)
+            return render(
+                request,
+                self.partial_name,
+                {
+                    "template": template,
+                    "rendered": rendered,
+                    "variables": variables,
+                    "success": True,
+                },
+            )
+        except Exception as e:
+            return render(
+                request,
+                self.partial_name,
+                {
+                    "template": template,
+                    "error": str(e),
+                    "variables": variables,
+                },
+            )
+
+
+# ==============================================================================
+# NetBox Integration Views (Issue #9)
+# ==============================================================================
+
+
+class NetBoxConfigForm(forms.ModelForm):
+    """Form for NetBox configuration."""
+
+    api_token = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(attrs={"placeholder": "Enter API token"}),
+        help_text="NetBox API token (leave blank to keep existing)",
+    )
+
+    class Meta:
+        model = NetBoxConfig
+        fields = [
+            "customer",
+            "name",
+            "api_url",
+            "api_token",
+            "sync_frequency",
+            "enabled",
+            "site_filter",
+            "tenant_filter",
+            "role_filter",
+            "status_filter",
+            "default_credential",
+        ]
+
+    def __init__(self, *args, **kwargs):
+        user = kwargs.pop("user", None)
+        super().__init__(*args, **kwargs)
+        if user and getattr(user, "role", "viewer") != "admin":
+            self.fields["customer"].queryset = user.customers.all()
+            self.fields["default_credential"].queryset = Credential.objects.filter(
+                customer__in=user.customers.all()
+            )
+        else:
+            self.fields["customer"].queryset = Customer.objects.all()
+            self.fields["default_credential"].queryset = Credential.objects.all()
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        api_token = self.cleaned_data.get("api_token")
+        if api_token:
+            instance.api_token = api_token
+        if commit:
+            instance.save()
+        return instance
+
+
+class NetBoxSettingsListView(TenantScopedView):
+    """List NetBox configurations."""
+
+    template_name = "settings/netbox_list.html"
+
+    def get(self, request):
+        configs = self.filter_by_customer(
+            NetBoxConfig.objects.select_related("customer", "default_credential").all()
+        )
+        return render(request, self.template_name, {"configs": configs})
+
+
+class NetBoxSettingsDetailView(TenantScopedView):
+    """View/edit a NetBox configuration."""
+
+    template_name = "settings/netbox_detail.html"
+    partial_name = "settings/_netbox_form.html"
+
+    def get(self, request, pk):
+        config = get_object_or_404(
+            NetBoxConfig.objects.select_related("customer", "default_credential"), pk=pk
+        )
+        check = self.ensure_customer_access(config.customer_id)
+        if check:
+            return check
+
+        # Get recent sync logs
+        sync_logs = NetBoxSyncLog.objects.filter(config=config).order_by("-started_at")[:10]
+
+        form = NetBoxConfigForm(instance=config, user=request.user)
+        return render(
+            request,
+            self.template_name,
+            {"config": config, "form": form, "sync_logs": sync_logs},
+        )
+
+    def post(self, request, pk):
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        config = get_object_or_404(
+            NetBoxConfig.objects.select_related("customer", "default_credential"), pk=pk
+        )
+        check = self.ensure_customer_access(config.customer_id)
+        if check:
+            return check
+
+        form = NetBoxConfigForm(request.POST, instance=config, user=request.user)
+        if form.is_valid():
+            form.save()
+            if request.headers.get("HX-Request"):
+                return render(
+                    request,
+                    self.partial_name,
+                    {"config": config, "form": form, "success": True},
+                )
+            return redirect("netbox-settings-detail", pk=pk)
+
+        return render(request, self.template_name, {"config": config, "form": form})
+
+
+class NetBoxSettingsCreateView(TenantScopedView):
+    """Create a new NetBox configuration."""
+
+    template_name = "settings/netbox_create.html"
+
+    def get(self, request):
+        form = NetBoxConfigForm(user=request.user)
+        return render(request, self.template_name, {"form": form})
+
+    def post(self, request):
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        form = NetBoxConfigForm(request.POST, user=request.user)
+        if form.is_valid():
+            config = form.save()
+            return redirect("netbox-settings-detail", pk=config.pk)
+
+        return render(request, self.template_name, {"form": form})
+
+
+class NetBoxSettingsDeleteView(TenantScopedView):
+    """Delete a NetBox configuration."""
+
+    def post(self, request, pk):
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        config = get_object_or_404(NetBoxConfig.objects.select_related("customer"), pk=pk)
+        check = self.ensure_customer_access(config.customer_id)
+        if check:
+            return check
+
+        config.delete()
+        return redirect("netbox-settings")
+
+
+class NetBoxSyncView(TenantScopedView):
+    """Trigger a manual NetBox sync."""
+
+    partial_name = "settings/_netbox_sync_result.html"
+
+    def post(self, request, pk):
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        config = get_object_or_404(NetBoxConfig.objects.select_related("customer"), pk=pk)
+        check = self.ensure_customer_access(config.customer_id)
+        if check:
+            return check
+
+        if not config.enabled:
+            return render(
+                request,
+                self.partial_name,
+                {"config": config, "error": "NetBox sync is disabled"},
+            )
+
+        if not config.has_api_token():
+            return render(
+                request,
+                self.partial_name,
+                {"config": config, "error": "API token is not configured"},
+            )
+
+        from webnet.jobs.tasks import netbox_sync_job
+
+        full_sync = request.POST.get("full_sync", "").lower() == "true"
+        netbox_sync_job.delay(config.id, full_sync=full_sync)
+
+        return render(
+            request,
+            self.partial_name,
+            {"config": config, "success": True, "message": "NetBox sync queued"},
+        )
+
+
+class NetBoxTestConnectionView(TenantScopedView):
+    """Test NetBox API connection."""
+
+    partial_name = "settings/_netbox_test_result.html"
+
+    def post(self, request, pk):
+        config = get_object_or_404(NetBoxConfig.objects.select_related("customer"), pk=pk)
+        check = self.ensure_customer_access(config.customer_id)
+        if check:
+            return check
+
+        if not config.has_api_token():
+            return render(
+                request,
+                self.partial_name,
+                {"config": config, "success": False, "message": "API token not configured"},
+            )
+
+        from webnet.devices.netbox_service import NetBoxService
+
+        service = NetBoxService(config)
+        result = service.test_connection()
+
+        return render(
+            request,
+            self.partial_name,
+            {
+                "config": config,
+                "success": result.success,
+                "message": result.message,
+                "netbox_version": result.netbox_version,
+                "error": result.error,
+            },
+        )
+
+
+class NetBoxSyncLogsView(TenantScopedView):
+    """View NetBox sync logs."""
+
+    template_name = "settings/netbox_sync_logs.html"
+    partial_name = "settings/_netbox_sync_logs_table.html"
+
+    def get(self, request, pk):
+        config = get_object_or_404(NetBoxConfig.objects.select_related("customer"), pk=pk)
+        check = self.ensure_customer_access(config.customer_id)
+        if check:
+            return check
+
+        logs = NetBoxSyncLog.objects.filter(config=config).order_by("-started_at")[:50]
+
+        if request.headers.get("HX-Request"):
+            return render(request, self.partial_name, {"config": config, "sync_logs": logs})
+
+        return render(request, self.template_name, {"config": config, "sync_logs": logs})

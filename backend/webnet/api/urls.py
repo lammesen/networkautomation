@@ -23,6 +23,10 @@ router.register(r"tags", views.TagViewSet, basename="tag")
 router.register(r"device-groups", views.DeviceGroupViewSet, basename="device-group")
 # Issue #40 - Bulk Device Onboarding
 router.register(r"bulk-onboarding", views.BulkOnboardingViewSet, basename="bulk-onboarding")
+# Configuration Template Library (Issue #16)
+router.register(r"config/templates", views.ConfigTemplateViewSet, basename="config-template")
+# NetBox Integration (Issue #9)
+router.register(r"integrations/netbox", views.NetBoxConfigViewSet, basename="netbox-config")
 
 urlpatterns = [
     path("auth/login", views.AuthViewSet.as_view({"post": "login"})),

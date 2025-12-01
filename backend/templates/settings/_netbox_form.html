@@ -1,0 +1,155 @@
+{% if success %}
+<div class="alert alert-success mb-4">
+    <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+    <span>Configuration saved successfully!</span>
+</div>
+{% endif %}
+
+<form method="post" class="space-y-4">
+    {% csrf_token %}
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-control">
+            <label class="label">
+                <span class="label-text">Customer</span>
+            </label>
+            <select name="customer" class="select select-bordered w-full">
+                {% for customer in form.customer.field.queryset %}
+                <option value="{{ customer.id }}" {% if form.customer.value|stringformat:"s" == customer.id|stringformat:"s" %}selected{% endif %}>
+                    {{ customer.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-control">
+            <label class="label">
+                <span class="label-text">Name</span>
+            </label>
+            <input type="text" name="name" value="{{ form.name.value|default:'NetBox' }}" 
+                   class="input input-bordered w-full" />
+        </div>
+    </div>
+
+    <div class="form-control">
+        <label class="label">
+            <span class="label-text">API URL</span>
+        </label>
+        <input type="url" name="api_url" value="{{ form.api_url.value|default:'' }}" 
+               placeholder="https://netbox.example.com/api"
+               class="input input-bordered w-full {% if form.api_url.errors %}input-error{% endif %}" />
+        {% if form.api_url.errors %}
+        <label class="label">
+            <span class="label-text-alt text-error">{{ form.api_url.errors.0 }}</span>
+        </label>
+        {% endif %}
+    </div>
+
+    <div class="form-control">
+        <label class="label">
+            <span class="label-text">API Token</span>
+        </label>
+        <input type="password" name="api_token" value="" 
+               placeholder="{% if config.has_api_token %}••••••••••••••••{% else %}Enter API token{% endif %}"
+               class="input input-bordered w-full" />
+        <label class="label">
+            <span class="label-text-alt text-base-content/60">
+                Leave blank to keep existing token
+            </span>
+        </label>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-control">
+            <label class="label">
+                <span class="label-text">Sync Frequency</span>
+            </label>
+            <select name="sync_frequency" class="select select-bordered w-full">
+                {% for value, label in form.sync_frequency.field.choices %}
+                <option value="{{ value }}" {% if form.sync_frequency.value == value %}selected{% endif %}>
+                    {{ label }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-control">
+            <label class="label">
+                <span class="label-text">Default Credential</span>
+            </label>
+            <select name="default_credential" class="select select-bordered w-full">
+                <option value="">Select credential...</option>
+                {% for cred in form.default_credential.field.queryset %}
+                <option value="{{ cred.id }}" {% if form.default_credential.value|stringformat:"s" == cred.id|stringformat:"s" %}selected{% endif %}>
+                    {{ cred.name }} ({{ cred.customer.name }})
+                </option>
+                {% endfor %}
+            </select>
+            <label class="label">
+                <span class="label-text-alt text-base-content/60">
+                    Assigned to newly synced devices
+                </span>
+            </label>
+        </div>
+    </div>
+
+    <div class="form-control">
+        <label class="label cursor-pointer justify-start gap-4">
+            <input type="checkbox" name="enabled" class="toggle toggle-primary" 
+                   {% if form.enabled.value %}checked{% endif %} />
+            <span class="label-text">Enable automatic sync</span>
+        </label>
+    </div>
+
+    <div class="divider">Filters</div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-control">
+            <label class="label">
+                <span class="label-text">Site Filter</span>
+            </label>
+            <input type="text" name="site_filter" value="{{ form.site_filter.value|default:'' }}" 
+                   placeholder="site-a, site-b"
+                   class="input input-bordered w-full" />
+            <label class="label">
+                <span class="label-text-alt text-base-content/60">Comma-separated site slugs</span>
+            </label>
+        </div>
+
+        <div class="form-control">
+            <label class="label">
+                <span class="label-text">Tenant Filter</span>
+            </label>
+            <input type="text" name="tenant_filter" value="{{ form.tenant_filter.value|default:'' }}" 
+                   placeholder="tenant-a, tenant-b"
+                   class="input input-bordered w-full" />
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-control">
+            <label class="label">
+                <span class="label-text">Role Filter</span>
+            </label>
+            <input type="text" name="role_filter" value="{{ form.role_filter.value|default:'' }}" 
+                   placeholder="router, switch"
+                   class="input input-bordered w-full" />
+        </div>
+
+        <div class="form-control">
+            <label class="label">
+                <span class="label-text">Status Filter</span>
+            </label>
+            <input type="text" name="status_filter" value="{{ form.status_filter.value|default:'active' }}" 
+                   placeholder="active"
+                   class="input input-bordered w-full" />
+        </div>
+    </div>
+
+    <div class="flex justify-end gap-2 pt-4">
+        <a href="{% url 'netbox-settings' %}" class="btn btn-ghost">Cancel</a>
+        <button type="submit" class="btn btn-primary">Save Configuration</button>
+    </div>
+</form>

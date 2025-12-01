@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+
+{% block title %}{{ config.name }} - NetBox{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-6">
+        <div class="flex items-center gap-4">
+            <a href="{% url 'netbox-settings' %}" class="btn btn-ghost btn-sm">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                </svg>
+                Back
+            </a>
+            <div>
+                <h1 class="text-2xl font-bold text-base-content">{{ config.name }}</h1>
+                <p class="text-sm text-base-content/60 mt-1">
+                    {{ config.customer.name }} • NetBox Integration
+                </p>
+            </div>
+        </div>
+        <div class="flex gap-2">
+            <form action="{% url 'netbox-settings-delete' config.id %}" method="post" 
+                  onsubmit="return confirm('Are you sure you want to delete this configuration?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-error btn-outline">Delete</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Main Form -->
+        <div class="lg:col-span-2">
+            <div class="card bg-base-100 shadow-sm">
+                <div class="card-body">
+                    <h2 class="card-title">Configuration</h2>
+                    {% include "settings/_netbox_form.html" %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="space-y-6">
+            <!-- Actions -->
+            <div class="card bg-base-100 shadow-sm">
+                <div class="card-body">
+                    <h2 class="card-title text-lg">Actions</h2>
+                    
+                    <!-- Test Connection -->
+                    <form hx-post="{% url 'netbox-test-connection' config.id %}" 
+                          hx-target="#test-result" 
+                          hx-swap="innerHTML"
+                          class="mb-4">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-outline btn-sm w-full">
+                            Test Connection
+                        </button>
+                    </form>
+                    <div id="test-result"></div>
+
+                    <!-- Sync -->
+                    <form hx-post="{% url 'netbox-sync' config.id %}" 
+                          hx-target="#sync-result" 
+                          hx-swap="innerHTML"
+                          class="space-y-2">
+                        {% csrf_token %}
+                        <label class="label cursor-pointer justify-start gap-2">
+                            <input type="checkbox" name="full_sync" value="true" class="checkbox checkbox-sm" />
+                            <span class="label-text text-sm">Full sync (update all devices)</span>
+                        </label>
+                        <button type="submit" class="btn btn-primary btn-sm w-full"
+                                {% if not config.enabled %}disabled{% endif %}>
+                            Sync Now
+                        </button>
+                    </form>
+                    <div id="sync-result" class="mt-2"></div>
+                </div>
+            </div>
+
+            <!-- Last Sync Status -->
+            <div class="card bg-base-100 shadow-sm">
+                <div class="card-body">
+                    <h2 class="card-title text-lg">Last Sync</h2>
+                    {% if config.last_sync_at %}
+                    <div class="text-sm space-y-2">
+                        <div class="flex justify-between">
+                            <span class="text-base-content/60">Time</span>
+                            <span>{{ config.last_sync_at|date:"Y-m-d H:i" }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-base-content/60">Status</span>
+                            {% if config.last_sync_status == 'success' %}
+                            <span class="badge badge-success">Success</span>
+                            {% elif config.last_sync_status == 'partial' %}
+                            <span class="badge badge-warning">Partial</span>
+                            {% elif config.last_sync_status == 'failed' %}
+                            <span class="badge badge-error">Failed</span>
+                            {% else %}
+                            <span class="badge badge-ghost">{{ config.last_sync_status }}</span>
+                            {% endif %}
+                        </div>
+                        {% if config.last_sync_stats %}
+                        <div class="flex justify-between">
+                            <span class="text-base-content/60">Created</span>
+                            <span>{{ config.last_sync_stats.created|default:0 }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-base-content/60">Updated</span>
+                            <span>{{ config.last_sync_stats.updated|default:0 }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-base-content/60">Skipped</span>
+                            <span>{{ config.last_sync_stats.skipped|default:0 }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% if config.last_sync_message %}
+                    <p class="text-xs text-base-content/60 mt-2 break-words">{{ config.last_sync_message }}</p>
+                    {% endif %}
+                    {% else %}
+                    <p class="text-sm text-base-content/60">Never synced</p>
+                    {% endif %}
+                    <a href="{% url 'netbox-sync-logs' config.id %}" class="btn btn-ghost btn-xs mt-2">
+                        View All Logs
+                    </a>
+                </div>
+            </div>
+
+            <!-- Recent Sync Logs -->
+            <div class="card bg-base-100 shadow-sm">
+                <div class="card-body">
+                    <h2 class="card-title text-lg">Recent Syncs</h2>
+                    <div class="space-y-2">
+                        {% for log in sync_logs %}
+                        <div class="bg-base-200 rounded p-2 text-sm">
+                            <div class="flex justify-between items-center">
+                                <span class="text-base-content/60">{{ log.started_at|date:"m/d H:i" }}</span>
+                                {% if log.status == 'success' %}
+                                <span class="badge badge-success badge-xs">Success</span>
+                                {% elif log.status == 'partial' %}
+                                <span class="badge badge-warning badge-xs">Partial</span>
+                                {% elif log.status == 'failed' %}
+                                <span class="badge badge-error badge-xs">Failed</span>
+                                {% else %}
+                                <span class="badge badge-ghost badge-xs">{{ log.status }}</span>
+                                {% endif %}
+                            </div>
+                            <div class="text-xs mt-1">
+                                +{{ log.devices_created }} / ~{{ log.devices_updated }} / -{{ log.devices_skipped }}
+                            </div>
+                        </div>
+                        {% empty %}
+                        <p class="text-sm text-base-content/60">No sync history</p>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

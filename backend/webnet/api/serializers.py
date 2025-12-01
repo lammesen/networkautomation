@@ -4,8 +4,9 @@ from rest_framework import serializers
 from webnet.users.models import User, APIKey
 from webnet.customers.models import Customer, CustomerIPRange
 from webnet.devices.models import Device, Credential, TopologyLink, DiscoveredDevice
+from webnet.devices.models import NetBoxConfig, NetBoxSyncLog
 from webnet.jobs.models import Job, JobLog
-from webnet.config_mgmt.models import ConfigSnapshot
+from webnet.config_mgmt.models import ConfigSnapshot, ConfigTemplate
 from webnet.compliance.models import CompliancePolicy, ComplianceResult
 
 
@@ -467,3 +468,196 @@ class DeviceWithTagsSerializer(DeviceSerializer):
 
         groups = DeviceGroup.objects.filter(customer=obj.customer, devices=obj).values("id", "name")
         return list(groups)
+
+
+class ConfigTemplateSerializer(serializers.ModelSerializer):
+    """Serializer for configuration templates."""
+
+    created_by_username = serializers.CharField(
+        source="created_by.username", read_only=True, allow_null=True
+    )
+
+    class Meta:
+        model = ConfigTemplate
+        fields = [
+            "id",
+            "customer",
+            "name",
+            "description",
+            "category",
+            "template_content",
+            "variables_schema",
+            "platform_tags",
+            "is_active",
+            "created_by",
+            "created_by_username",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["created_at", "updated_at", "created_by"]
+
+    def validate_customer(self, value: Customer) -> Customer:
+        """Validate that the user has access to the specified customer."""
+        from webnet.api.permissions import user_has_customer_access
+
+        request = self.context.get("request")
+        if request and not user_has_customer_access(request.user, value.id):
+            raise serializers.ValidationError("You do not have access to this customer.")
+        return value
+
+    def create(self, validated_data):
+        request = self.context.get("request")
+        if request and request.user:
+            validated_data["created_by"] = request.user
+        return super().create(validated_data)
+
+
+class ConfigTemplateRenderSerializer(serializers.Serializer):
+    """Serializer for rendering a configuration template."""
+
+    variables = serializers.DictField(
+        required=False, default=dict, help_text="Variable values for template rendering"
+    )
+    device_id = serializers.IntegerField(
+        required=False, allow_null=True, help_text="Optional device ID for context"
+    )
+
+
+class ConfigTemplateDeploySerializer(serializers.Serializer):
+    """Serializer for deploying a rendered template to devices."""
+
+    variables = serializers.DictField(
+        required=False, default=dict, help_text="Variable values for template rendering"
+    )
+    device_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=True,
+        help_text="List of device IDs to deploy to",
+    )
+    mode = serializers.ChoiceField(
+        choices=["merge", "replace"],
+        default="merge",
+        help_text="Deploy mode: merge or replace",
+    )
+    dry_run = serializers.BooleanField(
+        default=True, help_text="If true, preview only without committing"
+    )
+
+
+# ==============================================================================
+# NetBox Integration Serializers (Issue #9)
+# ==============================================================================
+
+
+class NetBoxConfigSerializer(serializers.ModelSerializer):
+    """Serializer for NetBox configuration."""
+
+    api_token = serializers.CharField(
+        write_only=True, required=False, allow_blank=True, help_text="NetBox API token"
+    )
+    has_api_token = serializers.SerializerMethodField()
+    default_credential_name = serializers.CharField(
+        source="default_credential.name", read_only=True, allow_null=True
+    )
+
+    class Meta:
+        model = NetBoxConfig
+        fields = [
+            "id",
+            "customer",
+            "name",
+            "api_url",
+            "api_token",
+            "has_api_token",
+            "sync_frequency",
+            "enabled",
+            "site_filter",
+            "tenant_filter",
+            "role_filter",
+            "status_filter",
+            "field_mappings",
+            "default_credential",
+            "default_credential_name",
+            "last_sync_at",
+            "last_sync_status",
+            "last_sync_message",
+            "last_sync_stats",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "last_sync_at",
+            "last_sync_status",
+            "last_sync_message",
+            "last_sync_stats",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_has_api_token(self, obj) -> bool:
+        return obj.has_api_token()
+
+    def validate_customer(self, value: Customer) -> Customer:
+        """Validate that the user has access to the specified customer."""
+        from webnet.api.permissions import user_has_customer_access
+
+        request = self.context.get("request")
+        if request and not user_has_customer_access(request.user, value.id):
+            raise serializers.ValidationError("You do not have access to this customer.")
+        return value
+
+    def create(self, validated_data):
+        api_token = validated_data.pop("api_token", None)
+        instance = NetBoxConfig(**validated_data)
+        if api_token:
+            instance.api_token = api_token
+        instance.save()
+        return instance
+
+    def update(self, instance, validated_data):
+        api_token = validated_data.pop("api_token", None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        if api_token:
+            instance.api_token = api_token
+        instance.save()
+        return instance
+
+
+class NetBoxSyncLogSerializer(serializers.ModelSerializer):
+    """Serializer for NetBox sync logs."""
+
+    class Meta:
+        model = NetBoxSyncLog
+        fields = [
+            "id",
+            "config",
+            "status",
+            "devices_created",
+            "devices_updated",
+            "devices_skipped",
+            "devices_failed",
+            "message",
+            "details",
+            "started_at",
+            "finished_at",
+        ]
+        read_only_fields = [
+            "status",
+            "devices_created",
+            "devices_updated",
+            "devices_skipped",
+            "devices_failed",
+            "message",
+            "details",
+            "started_at",
+            "finished_at",
+        ]
+
+
+class NetBoxSyncRequestSerializer(serializers.Serializer):
+    """Serializer for triggering a NetBox sync."""
+
+    full_sync = serializers.BooleanField(
+        default=False, help_text="If true, sync all devices (not just delta)"
+    )
