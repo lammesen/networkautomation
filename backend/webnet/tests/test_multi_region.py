@@ -7,7 +7,6 @@ from rest_framework.test import APIClient
 from webnet.customers.models import Customer
 from webnet.core.models import Region
 from webnet.devices.models import Device, Credential
-from webnet.jobs.models import Job
 from webnet.jobs.services import JobService
 
 User = get_user_model()
