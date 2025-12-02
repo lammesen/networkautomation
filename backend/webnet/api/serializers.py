@@ -18,7 +18,7 @@ from webnet.devices.models import (
     ServiceNowIncident,
     ServiceNowChangeRequest,
 )
-from webnet.jobs.models import Job, JobLog
+from webnet.jobs.models import Job, JobLog, Schedule
 from webnet.config_mgmt.models import ConfigSnapshot, ConfigTemplate, ConfigDrift, DriftAlert
 from webnet.compliance.models import (
     CompliancePolicy,
@@ -164,6 +164,34 @@ class JobLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = JobLog
         fields = ["id", "job", "ts", "level", "host", "message", "extra_json"]
+
+
+class ScheduleSerializer(serializers.ModelSerializer):
+    created_by_username = serializers.CharField(source="created_by.username", read_only=True)
+    job_type_display = serializers.CharField(source="get_job_type_display", read_only=True)
+
+    class Meta:
+        model = Schedule
+        fields = [
+            "id",
+            "customer",
+            "name",
+            "description",
+            "job_type",
+            "job_type_display",
+            "enabled",
+            "interval_type",
+            "cron_expression",
+            "target_summary_json",
+            "payload_json",
+            "next_run",
+            "last_run",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "created_by_username",
+        ]
+        read_only_fields = ["next_run", "last_run", "created_at", "updated_at"]
 
 
 class ConfigSnapshotSerializer(serializers.ModelSerializer):

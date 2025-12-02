@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}{% if mode == 'edit' %}Edit{% else %}Create{% endif %} Schedule - webnet{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="flex flex-col gap-4 mb-6">
+  <div class="flex items-center gap-2">
+    <a href="{% url 'schedules-list' %}" class="text-muted-foreground hover:text-foreground">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+      </svg>
+    </a>
+    <h1 class="text-2xl font-bold tracking-tight">
+      {% if mode == 'edit' %}Edit Schedule{% else %}Create Schedule{% endif %}
+    </h1>
+  </div>
+  <p class="text-muted-foreground">Configure an automated schedule for recurring jobs.</p>
+</div>
+
+<!-- Form -->
+<div class="rounded-lg border bg-card p-6 max-w-2xl">
+  <form method="post" action="{% if mode == 'edit' %}{% url 'schedule-edit' schedule.id %}{% else %}{% url 'schedule-create' %}{% endif %}" id="schedule-form">
+    {% csrf_token %}
+    
+    <div class="space-y-6">
+      <!-- Name -->
+      <div>
+        <label for="name" class="block text-sm font-medium mb-2">Name</label>
+        <input type="text" id="name" name="name" required
+               value="{% if schedule %}{{ schedule.name }}{% endif %}"
+               class="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+               placeholder="e.g., Nightly Backup">
+      </div>
+
+      <!-- Description -->
+      <div>
+        <label for="description" class="block text-sm font-medium mb-2">Description</label>
+        <textarea id="description" name="description" rows="3"
+                  class="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  placeholder="Optional description">{% if schedule %}{{ schedule.description }}{% endif %}</textarea>
+      </div>
+
+      <!-- Customer -->
+      <div>
+        <label for="customer" class="block text-sm font-medium mb-2">Customer</label>
+        <select id="customer" name="customer" required
+                class="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+          <option value="">Select a customer</option>
+          {% for customer in customers %}
+          <option value="{{ customer.id }}" {% if schedule and schedule.customer_id == customer.id %}selected{% endif %}>
+            {{ customer.name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Job Type -->
+      <div>
+        <label for="job_type" class="block text-sm font-medium mb-2">Job Type</label>
+        <select id="job_type" name="job_type" required
+                class="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+          <option value="">Select a job type</option>
+          {% for value, label in job_types %}
+          <option value="{{ value }}" {% if schedule and schedule.job_type == value %}selected{% endif %}>
+            {{ label }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Interval Type -->
+      <div>
+        <label for="interval_type" class="block text-sm font-medium mb-2">Schedule Interval</label>
+        <select id="interval_type" name="interval_type" required
+                class="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                onchange="toggleCronExpression()">
+          {% for value, label in interval_types %}
+          <option value="{{ value }}" {% if schedule and schedule.interval_type == value %}selected{% elif not schedule and value == 'daily' %}selected{% endif %}>
+            {{ label }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Cron Expression -->
+      <div id="cron-expression-group" style="display: none;">
+        <label for="cron_expression" class="block text-sm font-medium mb-2">Cron Expression</label>
+        <input type="text" id="cron_expression" name="cron_expression"
+               value="{% if schedule %}{{ schedule.cron_expression }}{% endif %}"
+               class="w-full rounded-md border bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary"
+               placeholder="0 2 * * * (minute hour day month day_of_week)">
+        <p class="text-xs text-muted-foreground mt-1">Format: minute hour day month day_of_week (e.g., "0 2 * * *" for daily at 2 AM)</p>
+      </div>
+
+      <!-- Enabled -->
+      <div class="flex items-center gap-2">
+        <input type="checkbox" id="enabled" name="enabled" value="true"
+               {% if not schedule or schedule.enabled %}checked{% endif %}
+               class="rounded border-gray-300 text-primary focus:ring-primary">
+        <label for="enabled" class="text-sm font-medium">Enable this schedule</label>
+      </div>
+
+      <!-- Buttons -->
+      <div class="flex gap-2 pt-4">
+        <button type="submit" class="inline-flex items-center justify-center rounded-md text-sm font-medium h-10 px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90">
+          {% if mode == 'edit' %}Update Schedule{% else %}Create Schedule{% endif %}
+        </button>
+        <a href="{% url 'schedules-list' %}" class="inline-flex items-center justify-center rounded-md text-sm font-medium h-10 px-4 py-2 border bg-background hover:bg-accent hover:text-accent-foreground">
+          Cancel
+        </a>
+      </div>
+    </div>
+  </form>
+</div>
+
+<script>
+function toggleCronExpression() {
+  const intervalType = document.getElementById('interval_type').value;
+  const cronGroup = document.getElementById('cron-expression-group');
+  const cronInput = document.getElementById('cron_expression');
+  
+  if (intervalType === 'cron') {
+    cronGroup.style.display = 'block';
+    cronInput.required = true;
+  } else {
+    cronGroup.style.display = 'none';
+    cronInput.required = false;
+  }
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+  toggleCronExpression();
+});
+</script>
+{% endblock %}

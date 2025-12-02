@@ -154,16 +154,15 @@
             </div>
           </div>
 
-          <!-- Scheduling Section (placeholder) -->
+          <!-- Scheduling Section -->
           <div>
             <h3 class="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Scheduling</h3>
             <div class="space-y-1">
-              <a href="#" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium text-muted-foreground cursor-not-allowed" aria-disabled="true" title="Coming soon">
+              <a href="/schedules/" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium transition-colors {% if '/schedules' in request.path %}bg-accent text-accent-foreground{% else %}hover:bg-accent hover:text-accent-foreground{% endif %}">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 1.567-3 3.5S10.343 15 12 15s3-1.567 3-3.5S13.657 8 12 8z" />
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.5 19h13M4 7h16M7 4v3m10-3v3" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
-                Schedules (coming soon)
+                Schedules
               </a>
             </div>
           </div>
@@ -315,7 +314,7 @@
             <div>
               <h3 class="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Scheduling</h3>
               <div class="space-y-1">
-                <span class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium text-muted-foreground">Schedules (coming soon)</span>
+                <a href="/schedules/" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>Schedules</a>
               </div>
             </div>
             <div>

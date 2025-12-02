@@ -86,6 +86,13 @@ from .views import (
     # Webhook Integration
     WebhookListView,
     WebhookDeliveryListView,
+    # Schedule Management
+    ScheduleListView,
+    ScheduleDetailView,
+    ScheduleCreateView,
+    ScheduleEditView,
+    ScheduleDeleteView,
+    ScheduleCalendarView,
 )
 
 urlpatterns = [
@@ -232,4 +239,11 @@ urlpatterns = [
     path(
         "settings/webhooks/deliveries", WebhookDeliveryListView.as_view(), name="webhook-deliveries"
     ),
+    # Schedule Management
+    path("schedules/", ScheduleListView.as_view(), name="schedules-list"),
+    path("schedules/calendar", ScheduleCalendarView.as_view(), name="schedules-calendar"),
+    path("schedules/new", ScheduleCreateView.as_view(), name="schedule-create"),
+    path("schedules/<int:pk>/", ScheduleDetailView.as_view(), name="schedule-detail"),
+    path("schedules/<int:pk>/edit", ScheduleEditView.as_view(), name="schedule-edit"),
+    path("schedules/<int:pk>/delete", ScheduleDeleteView.as_view(), name="schedule-delete"),
 ]

@@ -36,7 +36,7 @@ from webnet.devices.models import (
     NetBoxSyncLog,
     SSHHostKey,
 )
-from webnet.jobs.models import Job, JobLog
+from webnet.jobs.models import Job, JobLog, Schedule
 from webnet.jobs.services import JobService
 from webnet.config_mgmt.models import ConfigSnapshot, ConfigTemplate, ConfigDrift, DriftAlert
 from webnet.compliance.models import (
@@ -64,6 +64,7 @@ from .serializers import (
     DeviceSerializer,
     JobSerializer,
     JobLogSerializer,
+    ScheduleSerializer,
     ConfigSnapshotSerializer,
     ConfigDriftSerializer,
     DriftAlertSerializer,
@@ -541,6 +542,25 @@ class JobAdminViewSet(CustomerScopedQuerysetMixin, viewsets.ReadOnlyModelViewSet
     serializer_class = JobSerializer
     permission_classes = [IsAuthenticated, RolePermission]
     customer_field = "customer_id"
+
+
+class ScheduleViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
+    queryset = Schedule.objects.select_related("customer", "created_by")
+    serializer_class = ScheduleSerializer
+    permission_classes = [IsAuthenticated, RolePermission, ObjectCustomerPermission]
+    customer_field = "customer"
+
+    def perform_create(self, serializer):
+        """Set created_by to current user."""
+        serializer.save(created_by=self.request.user)
+
+    @action(detail=True, methods=["post"])
+    def toggle(self, request, pk=None):
+        """Toggle schedule enabled/disabled."""
+        schedule = self.get_object()
+        schedule.enabled = not schedule.enabled
+        schedule.save(update_fields=["enabled"])
+        return Response(ScheduleSerializer(schedule).data)
 
 
 class JobLogsView(APIView):

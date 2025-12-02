@@ -1,6 +1,59 @@
 from django.db import models
 
 
+class Schedule(models.Model):
+    """Recurring job schedule with cron-like expressions."""
+
+    INTERVAL_CHOICES = (
+        ("cron", "CRON Expression"),
+        ("hourly", "Hourly"),
+        ("daily", "Daily"),
+        ("weekly", "Weekly"),
+        ("monthly", "Monthly"),
+    )
+
+    # Import TYPE_CHOICES from Job to maintain consistency
+    # We'll define it after Job class, but for now use CharField without choices
+    customer = models.ForeignKey(
+        "customers.Customer", on_delete=models.CASCADE, related_name="schedules"
+    )
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    job_type = models.CharField(max_length=50)  # Will use Job.TYPE_CHOICES
+    enabled = models.BooleanField(default=True)
+    interval_type = models.CharField(max_length=20, choices=INTERVAL_CHOICES, default="daily")
+    cron_expression = models.CharField(
+        max_length=255, blank=True, help_text="Cron expression (e.g., '0 2 * * *')"
+    )
+    target_summary_json = models.JSONField(blank=True, null=True)
+    payload_json = models.JSONField(blank=True, null=True)
+    next_run = models.DateTimeField(blank=True, null=True)
+    last_run = models.DateTimeField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        "users.User", on_delete=models.CASCADE, related_name="created_schedules"
+    )
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["customer"]),
+            models.Index(fields=["enabled"]),
+            models.Index(fields=["next_run"]),
+        ]
+        ordering = ["name"]
+
+    def __str__(self) -> str:  # pragma: no cover
+        return f"{self.name} ({self.get_interval_type_display()})"
+
+    def get_job_type_display(self) -> str:
+        """Get display name for job type."""
+        for value, label in Job.TYPE_CHOICES:
+            if value == self.job_type:
+                return label
+        return self.job_type
+
+
 class Job(models.Model):
     TYPE_CHOICES = (
         ("run_commands", "Run commands"),
@@ -23,6 +76,9 @@ class Job(models.Model):
 
     customer = models.ForeignKey(
         "customers.Customer", on_delete=models.CASCADE, related_name="jobs"
+    )
+    schedule = models.ForeignKey(
+        Schedule, on_delete=models.SET_NULL, related_name="jobs", blank=True, null=True
     )
     type = models.CharField(max_length=50, choices=TYPE_CHOICES)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="queued")

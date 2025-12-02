@@ -42,7 +42,7 @@ from webnet.devices.models import (
     NetBoxSyncLog,
     SSHHostKey,
 )
-from webnet.jobs.models import Job, JobLog
+from webnet.jobs.models import Job, JobLog, Schedule
 from webnet.jobs.services import JobService
 
 logger = logging.getLogger(__name__)
@@ -2654,6 +2654,7 @@ class RemediationActionListView(TenantScopedView):
         return render(request, self.template_name, context)
 
 
+<<<<<<< HEAD
 # Plugin Management Views
 
 
@@ -2907,4 +2908,222 @@ class WebhookDeliveryListView(TenantScopedView):
             "deliveries": deliveries,
         }
 
+        return render(request, self.template_name, context)
+
+
+class ScheduleListView(TenantScopedView):
+    template_name = "schedules/list.html"
+    partial_name = "schedules/_table.html"
+
+    def get(self, request):
+        qs = Schedule.objects.select_related("customer", "created_by")
+        qs = self.filter_by_customer(qs).order_by("name")
+
+        schedules_payload = [
+            {
+                "id": schedule.id,
+                "name": schedule.name,
+                "job_type": schedule.get_job_type_display(),
+                "interval": schedule.get_interval_type_display(),
+                "enabled": schedule.enabled,
+                "next_run": (
+                    timezone.localtime(schedule.next_run).strftime("%Y-%m-%d %H:%M")
+                    if schedule.next_run
+                    else "N/A"
+                ),
+                "last_run": (
+                    timezone.localtime(schedule.last_run).strftime("%Y-%m-%d %H:%M")
+                    if schedule.last_run
+                    else "Never"
+                ),
+                "detailUrl": reverse("schedule-detail", args=[schedule.id]),
+            }
+            for schedule in qs
+        ]
+
+        context = {
+            "schedules": qs,
+            "schedules_table_props": json.dumps(
+                {
+                    "rows": schedules_payload,
+                    "emptyState": {
+                        "title": "No schedules found",
+                        "description": "Create a schedule to automate recurring tasks.",
+                    },
+                }
+            ),
+        }
+
+        if request.headers.get("HX-Request"):
+            return render(request, self.partial_name, context)
+        return render(request, self.template_name, context)
+
+
+class ScheduleDetailView(TenantScopedView):
+    template_name = "schedules/detail.html"
+
+    def get(self, request, pk: int):
+        schedule = get_object_or_404(
+            Schedule.objects.select_related("customer", "created_by"), pk=pk
+        )
+        forbidden = self.ensure_customer_access(schedule.customer_id)
+        if forbidden:
+            return forbidden
+
+        # Get recent jobs for this schedule
+        recent_jobs = (
+            Job.objects.filter(schedule=schedule)
+            .select_related("user")
+            .order_by("-requested_at")[:10]
+        )
+
+        context = {
+            "schedule": schedule,
+            "recent_jobs": recent_jobs,
+        }
+        return render(request, self.template_name, context)
+
+
+class ScheduleCreateView(TenantScopedView):
+    template_name = "schedules/form.html"
+
+    def get(self, request):
+        customers = self.get_accessible_customers()
+        job_types = Job.TYPE_CHOICES
+        interval_types = Schedule.INTERVAL_CHOICES
+
+        context = {
+            "customers": customers,
+            "job_types": job_types,
+            "interval_types": interval_types,
+            "mode": "create",
+        }
+        return render(request, self.template_name, context)
+
+    def post(self, request):
+        customers = self.get_accessible_customers()
+        customer_id = request.POST.get("customer")
+
+        # Validate customer access
+        if not any(c.id == int(customer_id) for c in customers):
+            return HttpResponseForbidden("Access denied to this customer")
+
+        # Create schedule
+        customer = Customer.objects.get(pk=customer_id)
+        schedule = Schedule(
+            customer=customer,
+            created_by=request.user,
+            name=request.POST.get("name"),
+            description=request.POST.get("description", ""),
+            job_type=request.POST.get("job_type"),
+            interval_type=request.POST.get("interval_type"),
+            cron_expression=request.POST.get("cron_expression", ""),
+            enabled="enabled" in request.POST or request.POST.get("enabled") == "on",
+        )
+        schedule.save()
+
+        return redirect("schedule-detail", pk=schedule.id)
+
+
+class ScheduleEditView(TenantScopedView):
+    template_name = "schedules/form.html"
+
+    def get(self, request, pk: int):
+        schedule = get_object_or_404(
+            Schedule.objects.select_related("customer", "created_by"), pk=pk
+        )
+        forbidden = self.ensure_customer_access(schedule.customer_id)
+        if forbidden:
+            return forbidden
+
+        customers = self.get_accessible_customers()
+        job_types = Job.TYPE_CHOICES
+        interval_types = Schedule.INTERVAL_CHOICES
+
+        context = {
+            "schedule": schedule,
+            "customers": customers,
+            "job_types": job_types,
+            "interval_types": interval_types,
+            "mode": "edit",
+        }
+        return render(request, self.template_name, context)
+
+    def post(self, request, pk: int):
+        schedule = get_object_or_404(
+            Schedule.objects.select_related("customer", "created_by"), pk=pk
+        )
+        forbidden = self.ensure_customer_access(schedule.customer_id)
+        if forbidden:
+            return forbidden
+
+        # Update schedule
+        schedule.name = request.POST.get("name")
+        schedule.description = request.POST.get("description", "")
+        schedule.job_type = request.POST.get("job_type")
+        schedule.interval_type = request.POST.get("interval_type")
+        schedule.cron_expression = request.POST.get("cron_expression", "")
+        schedule.enabled = "enabled" in request.POST or request.POST.get("enabled") == "on"
+        schedule.save()
+
+        return redirect("schedule-detail", pk=schedule.id)
+
+
+class ScheduleDeleteView(TenantScopedView):
+    def post(self, request, pk: int):
+        schedule = get_object_or_404(Schedule, pk=pk)
+        forbidden = self.ensure_customer_access(schedule.customer_id)
+        if forbidden:
+            return forbidden
+
+        schedule.delete()
+        return redirect("schedules-list")
+
+
+class ScheduleCalendarView(TenantScopedView):
+    template_name = "schedules/calendar.html"
+
+    def get(self, request):
+        from calendar import monthcalendar, month_name
+
+        # Get year and month from query params
+        try:
+            year = int(request.GET.get("year", timezone.now().year))
+            month = int(request.GET.get("month", timezone.now().month))
+        except (ValueError, TypeError):
+            year = timezone.now().year
+            month = timezone.now().month
+
+        # Get all enabled schedules for the customer
+        schedules = Schedule.objects.filter(enabled=True)
+        schedules = self.filter_by_customer(schedules).select_related("customer", "created_by")
+
+        # Calculate calendar events
+        calendar_weeks = monthcalendar(year, month)
+        month_name_str = month_name[month]
+
+        # Create events for the calendar
+        events = []
+        for schedule in schedules:
+            if schedule.next_run:
+                next_run = timezone.localtime(schedule.next_run)
+                if next_run.year == year and next_run.month == month:
+                    events.append(
+                        {
+                            "id": schedule.id,
+                            "name": schedule.name,
+                            "day": next_run.day,
+                            "time": next_run.strftime("%H:%M"),
+                            "job_type": schedule.get_job_type_display(),
+                        }
+                    )
+
+        context = {
+            "year": year,
+            "month": month,
+            "month_name": month_name_str,
+            "calendar_weeks": calendar_weeks,
+            "events": events,
+            "schedules": schedules,
+        }
         return render(request, self.template_name, context)
