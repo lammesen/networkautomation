@@ -72,6 +72,7 @@ INSTALLED_APPS = [
     "webnet.ansible_mgmt",
     "webnet.webhooks",
     "webnet.notifications",
+    "webnet.chatops",
     "webnet.api",
     "webnet.ui",
     "webnet.graphql_api",

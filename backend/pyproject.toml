@@ -31,6 +31,7 @@ dependencies = [
     "django-auth-ldap>=5.0.0",
     "strawberry-graphql-django>=0.49.4",
     "ansible>=2.16.0",
+    "requests>=2.32.0",
 ]
 
 [project.optional-dependencies]
@@ -65,6 +66,7 @@ packages = [
     "webnet.compliance",
     "webnet.networkops",
     "webnet.ansible_mgmt",
+    "webnet.chatops",
     "webnet.api",
     "webnet.ui",
     "webnet.graphql_api",

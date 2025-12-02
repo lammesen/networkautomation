@@ -1,12 +1,15 @@
 """Service for configuration drift detection and analysis."""
 
 import difflib
+import logging
 from typing import Optional
 
 from django.utils import timezone
 
 from webnet.config_mgmt.models import ConfigSnapshot, ConfigDrift, DriftAlert
 from webnet.users.models import User
+
+logger = logging.getLogger(__name__)
 
 
 class DriftService:
@@ -70,6 +73,17 @@ class DriftService:
             diff_summary=diff_summary,
             triggered_by=user,
         )
+
+        # Send ChatOps notification if drift detected
+        if has_changes:
+            try:
+                from webnet.chatops.slack_service import notify_drift_detected
+                from webnet.chatops.teams_service import notify_drift_detected_teams
+
+                notify_drift_detected(drift)
+                notify_drift_detected_teams(drift)
+            except Exception as e:
+                logger.warning(f"Failed to send drift notification: {e}")
 
         return drift
 
