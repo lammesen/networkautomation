@@ -2677,6 +2677,7 @@ class WebhookDeliveryListView(TenantScopedView):
     """List webhook deliveries."""
 
     template_name = "settings/webhook_deliveries.html"
+    customer_field = "webhook__customer_id"
 
     def get(self, request):
         from webnet.webhooks.models import WebhookDelivery
@@ -2684,7 +2685,7 @@ class WebhookDeliveryListView(TenantScopedView):
         qs = WebhookDelivery.objects.select_related("webhook", "webhook__customer").order_by(
             "-created_at"
         )[:100]
-        deliveries = self.filter_by_customer(qs, "webhook__customer_id")
+        deliveries = self.filter_by_customer(qs)
 
         context = {
             "deliveries": deliveries,
