@@ -1,7 +1,8 @@
 from django.db import models
+from webnet.core.custom_fields import CustomFieldMixin
 
 
-class Job(models.Model):
+class Job(CustomFieldMixin, models.Model):
     TYPE_CHOICES = (
         ("run_commands", "Run commands"),
         ("config_backup", "Config backup"),

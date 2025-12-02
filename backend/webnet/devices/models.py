@@ -1,6 +1,7 @@
 from django.db import models
 from django.db.models import Q
 from webnet.core.crypto import encrypt_text, decrypt_text
+from webnet.core.custom_fields import CustomFieldMixin
 
 
 class NetBoxConfig(models.Model):
@@ -208,7 +209,7 @@ class NetBoxSyncLog(models.Model):
         return f"Sync {self.id} for {self.config_id} - {self.status}"
 
 
-class Credential(models.Model):
+class Credential(CustomFieldMixin, models.Model):
     customer = models.ForeignKey(
         "customers.Customer", on_delete=models.CASCADE, related_name="credentials"
     )
@@ -244,7 +245,7 @@ class Credential(models.Model):
         self._enable_password = encrypt_text(value) if value else ""
 
 
-class Tag(models.Model):
+class Tag(CustomFieldMixin, models.Model):
     """Customer-scoped tag for organizing devices.
 
     Tags allow flexible grouping of devices beyond the basic site/role/vendor fields.
@@ -276,7 +277,7 @@ class Tag(models.Model):
         return f"{self.name}"
 
 
-class DeviceGroup(models.Model):
+class DeviceGroup(CustomFieldMixin, models.Model):
     """Customer-scoped device group for organizing and targeting devices.
 
     Supports both static (explicit device list) and dynamic (filter-based) membership.
@@ -361,7 +362,7 @@ class DeviceGroup(models.Model):
         return self.get_devices().count()
 
 
-class Device(models.Model):
+class Device(CustomFieldMixin, models.Model):
     PROTOCOL_CDP = "cdp"
     PROTOCOL_LLDP = "lldp"
     PROTOCOL_BOTH = "both"

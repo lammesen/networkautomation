@@ -7,9 +7,10 @@ from django.db import models
 from django.core.validators import MinLengthValidator
 
 from webnet.core.crypto import encrypt_text, decrypt_text
+from webnet.core.custom_fields import CustomFieldMixin
 
 
-class ConfigTemplate(models.Model):
+class ConfigTemplate(CustomFieldMixin, models.Model):
     """Jinja2 configuration template for device configs.
 
     Templates can define variables with types and validation rules,
@@ -409,7 +410,7 @@ class GitSyncLog(models.Model):
         return f"Sync {self.id} for {self.repository_id} - {self.status}"
 
 
-class ConfigSnapshot(models.Model):
+class ConfigSnapshot(CustomFieldMixin, models.Model):
     device = models.ForeignKey(
         "devices.Device", on_delete=models.CASCADE, related_name="config_snapshots"
     )
