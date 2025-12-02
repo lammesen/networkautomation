@@ -15,17 +15,14 @@ class User(AbstractUser):
         related_name="users",
         blank=True,
     )
-    
+
     # 2FA fields
     two_factor_enabled = models.BooleanField(default=False)
     two_factor_required = models.BooleanField(
-        default=False,
-        help_text="If True, user must enable 2FA before accessing the system"
+        default=False, help_text="If True, user must enable 2FA before accessing the system"
     )
     backup_codes = models.JSONField(
-        default=list,
-        blank=True,
-        help_text="Hashed backup codes for account recovery"
+        default=list, blank=True, help_text="Hashed backup codes for account recovery"
     )
 
     class Meta:
@@ -34,11 +31,11 @@ class User(AbstractUser):
 
     def __str__(self) -> str:  # pragma: no cover - simple repr
         return self.username
-    
+
     def has_backup_codes(self) -> bool:
         """Check if user has any unused backup codes."""
         return bool(self.backup_codes)
-    
+
     def is_2fa_enabled(self) -> bool:
         """Check if 2FA is enabled for this user."""
         return self.two_factor_enabled
@@ -46,7 +43,7 @@ class User(AbstractUser):
 
 class WebAuthnCredential(models.Model):
     """WebAuthn/FIDO2 security key credential."""
-    
+
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="webauthn_credentials")
     name = models.CharField(max_length=100, help_text="User-friendly name for this security key")
     credential_id = models.BinaryField(unique=True, help_text="WebAuthn credential ID")
@@ -55,7 +52,7 @@ class WebAuthnCredential(models.Model):
     aaguid = models.BinaryField(help_text="Authenticator AAGUID")
     created_at = models.DateTimeField(auto_now_add=True)
     last_used_at = models.DateTimeField(null=True, blank=True)
-    
+
     class Meta:
         indexes = [
             models.Index(fields=["user"]),
@@ -63,7 +60,7 @@ class WebAuthnCredential(models.Model):
         ]
         verbose_name = "WebAuthn Credential"
         verbose_name_plural = "WebAuthn Credentials"
-    
+
     def __str__(self) -> str:
         return f"{self.user.username}: {self.name}"
 

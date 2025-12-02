@@ -125,6 +125,15 @@ class TenantScopedView(LoginRequiredMixin, View):
         return None
 
 
+class AdminRequiredMixin(LoginRequiredMixin):
+    """Restrict access to admin users."""
+
+    def dispatch(self, request, *args, **kwargs):
+        if getattr(request.user, "role", "") != "admin":
+            return HttpResponseForbidden("Admin access required")
+        return super().dispatch(request, *args, **kwargs)
+
+
 class DashboardView(TenantScopedView):
     template_name = "dashboard.html"
 
@@ -2892,11 +2901,10 @@ class RemediationActionListView(TenantScopedView):
         return render(request, self.template_name, context)
 
 
-<<<<<<< HEAD
 # Plugin Management Views
 
 
-class PluginListView(LoginRequiredMixin, View):
+class PluginListView(AdminRequiredMixin, View):
     """Plugin list view."""
 
     template_name = "plugins/list.html"
@@ -2914,7 +2922,7 @@ class PluginListView(LoginRequiredMixin, View):
         return render(request, self.template_name, context)
 
 
-class PluginDetailView(LoginRequiredMixin, View):
+class PluginDetailView(AdminRequiredMixin, View):
     """Plugin detail/settings view."""
 
     template_name = "plugins/detail.html"
@@ -2930,7 +2938,7 @@ class PluginDetailView(LoginRequiredMixin, View):
         return render(request, self.template_name, context)
 
 
-class PluginEnableView(LoginRequiredMixin, View):
+class PluginEnableView(AdminRequiredMixin, View):
     """Enable a plugin (HTMX partial)."""
 
     def post(self, request, pk):
@@ -2949,7 +2957,7 @@ class PluginEnableView(LoginRequiredMixin, View):
             return HttpResponseBadRequest(message)
 
 
-class PluginDisableView(LoginRequiredMixin, View):
+class PluginDisableView(AdminRequiredMixin, View):
     """Disable a plugin (HTMX partial)."""
 
     def post(self, request, pk):
@@ -2968,7 +2976,7 @@ class PluginDisableView(LoginRequiredMixin, View):
             return HttpResponseBadRequest(message)
 
 
-class PluginHealthView(LoginRequiredMixin, View):
+class PluginHealthView(AdminRequiredMixin, View):
     """Get plugin health status (HTMX partial)."""
 
     def get(self, request, pk):
@@ -2986,7 +2994,7 @@ class PluginHealthView(LoginRequiredMixin, View):
         return render(request, "plugins/_health.html", context)
 
 
-class PluginUpdateSettingsView(LoginRequiredMixin, View):
+class PluginUpdateSettingsView(AdminRequiredMixin, View):
     """Update plugin settings."""
 
     def post(self, request, pk):
@@ -3011,7 +3019,7 @@ class PluginUpdateSettingsView(LoginRequiredMixin, View):
             return HttpResponseBadRequest(message)
 
 
-class PluginCustomersView(LoginRequiredMixin, View):
+class PluginCustomersView(AdminRequiredMixin, View):
     """Get customer configurations for a plugin (HTMX partial)."""
 
     def get(self, request, pk):
@@ -3026,7 +3034,7 @@ class PluginCustomersView(LoginRequiredMixin, View):
         return render(request, "plugins/_customers.html", context)
 
 
-class PluginAuditLogView(LoginRequiredMixin, View):
+class PluginAuditLogView(AdminRequiredMixin, View):
     """Get audit logs for a plugin (HTMX partial)."""
 
     def get(self, request, pk):
@@ -3046,7 +3054,7 @@ class PluginAuditLogView(LoginRequiredMixin, View):
         return render(request, "plugins/_audit_log.html", context)
 
 
-class CustomerPluginEnableView(LoginRequiredMixin, View):
+class CustomerPluginEnableView(AdminRequiredMixin, View):
     """Enable plugin for a customer (HTMX partial)."""
 
     def post(self, request, pk):
@@ -3065,7 +3073,7 @@ class CustomerPluginEnableView(LoginRequiredMixin, View):
             return HttpResponseBadRequest(message)
 
 
-class CustomerPluginDisableView(LoginRequiredMixin, View):
+class CustomerPluginDisableView(AdminRequiredMixin, View):
     """Disable plugin for a customer (HTMX partial)."""
 
     def post(self, request, pk):
@@ -3084,7 +3092,7 @@ class CustomerPluginDisableView(LoginRequiredMixin, View):
             return HttpResponseBadRequest(message)
 
 
-class CustomerPluginUpdateSettingsView(LoginRequiredMixin, View):
+class CustomerPluginUpdateSettingsView(AdminRequiredMixin, View):
     """Update customer-specific plugin settings."""
 
     def post(self, request, pk):

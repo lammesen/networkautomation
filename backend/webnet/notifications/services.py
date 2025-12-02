@@ -175,7 +175,7 @@ def _send_notifications(
     related_compliance_result=None,
 ) -> None:
     """Helper function to send notifications to multiple recipients.
-    
+
     Args:
         customer: Customer object
         event_type: Type of notification event
@@ -243,9 +243,7 @@ def _send_notifications(
 
                 event.save()
         except Exception as e:
-            logger.error(
-                f"Failed to create notification event for {recipient}: {e}", exc_info=True
-            )
+            logger.error(f"Failed to create notification event for {recipient}: {e}", exc_info=True)
 
 
 def notify_job_event(job: Job, event_type: str) -> None:
@@ -259,13 +257,15 @@ def notify_job_event(job: Job, event_type: str) -> None:
     from django.db.models import Q
 
     # Get users who should be notified with optimized filtering
-    preferences = NotificationPreference.objects.filter(
-        customer=job.customer,
-        event_type=event_type,
-        enabled=True,
-    ).filter(
-        Q(job_types__isnull=True) | Q(job_types=[]) | Q(job_types__contains=[job.type])
-    ).select_related("user")
+    preferences = (
+        NotificationPreference.objects.filter(
+            customer=job.customer,
+            event_type=event_type,
+            enabled=True,
+        )
+        .filter(Q(job_types__isnull=True) | Q(job_types=[]) | Q(job_types__contains=[job.type]))
+        .select_related("user")
+    )
 
     if not preferences:
         logger.debug(f"No notification preferences for {event_type} in customer {job.customer_id}")

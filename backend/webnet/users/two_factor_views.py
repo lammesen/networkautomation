@@ -11,7 +11,6 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView as DjangoLoginView
 from django.http import HttpResponse
 from django.shortcuts import redirect, render
-from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
 
@@ -29,28 +28,28 @@ class CustomLoginView(DjangoLoginView):
     def form_valid(self, form: Any) -> HttpResponse:
         """Process valid login form and redirect to 2FA verification if needed."""
         user = form.get_user()
-        
+
         # Regenerate session to prevent session fixation attacks
         self.request.session.cycle_key()
-        
+
         # Check if user has 2FA enabled
         if user.is_2fa_enabled():
             # Store user ID in session for 2FA verification
             self.request.session["2fa_user_id"] = user.id
             self.request.session["2fa_backend"] = user.backend
             return redirect("2fa-verify")
-        
+
         # No 2FA required, proceed with normal login
         login(self.request, user)
-        
+
         # Check if 2FA is required but not enabled
         if user.two_factor_required and not user.two_factor_enabled:
             messages.warning(
                 self.request,
-                "Two-factor authentication is required for your account. Please set it up now."
+                "Two-factor authentication is required for your account. Please set it up now.",
             )
             return redirect("2fa-setup")
-        
+
         return super().form_valid(form)
 
 
@@ -64,12 +63,12 @@ class TwoFactorVerifyView(View):
         user_id = request.session.get("2fa_user_id")
         if not user_id:
             return redirect("login")
-        
+
         try:
             user = User.objects.get(id=user_id)
         except User.DoesNotExist:
             return redirect("login")
-        
+
         context = {
             "username": user.username,
             "has_backup_codes": user.has_backup_codes(),
@@ -81,48 +80,48 @@ class TwoFactorVerifyView(View):
         """Process 2FA token submission."""
         user_id = request.session.get("2fa_user_id")
         backend = request.session.get("2fa_backend")
-        
+
         if not user_id:
             return redirect("login")
-        
+
         try:
             user = User.objects.get(id=user_id)
         except User.DoesNotExist:
             return redirect("login")
-        
+
         token = request.POST.get("token", "").strip()
         use_backup = request.POST.get("use_backup") == "true"
-        
+
         valid = False
-        
+
         if use_backup:
             # Verify backup code
             valid = TwoFactorService.verify_backup_code(user, token)
             if valid:
                 messages.info(
                     request,
-                    "Backup code used successfully. Consider regenerating your backup codes."
+                    "Backup code used successfully. Consider regenerating your backup codes.",
                 )
         else:
             # Verify TOTP token
             valid = TwoFactorService.verify_totp_token(user, token)
-        
+
         if valid:
             # Clear 2FA session data
             del request.session["2fa_user_id"]
             if "2fa_backend" in request.session:
                 del request.session["2fa_backend"]
-            
+
             # Log user in
             user.backend = backend
             login(request, user)
-            
+
             # Validate redirect URL to prevent open redirect vulnerability
             next_url = request.GET.get("next", "/")
             if not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
                 next_url = "/"
             return redirect(next_url)
-        
+
         # Invalid token
         context = {
             "username": user.username,
@@ -140,18 +139,20 @@ class TwoFactorSetupView(LoginRequiredMixin, View):
     def get(self, request: Any) -> HttpResponse:
         """Display 2FA setup page."""
         user = request.user
-        
+
         # Prevent users with confirmed 2FA from accessing setup page
         if user.two_factor_enabled:
-            messages.info(request, "Two-factor authentication is already enabled. Manage it from settings.")
+            messages.info(
+                request, "Two-factor authentication is already enabled. Manage it from settings."
+            )
             return redirect("2fa-manage")
-        
+
         # Create or get unconfirmed TOTP device
         device = TwoFactorService.enable_totp_for_user(user)
-        
+
         # Generate QR code URL
         qr_url = device.config_url
-        
+
         context = {
             "qr_url": qr_url,
             "secret": device.key,
@@ -162,27 +163,32 @@ class TwoFactorSetupView(LoginRequiredMixin, View):
         """Verify and confirm 2FA setup."""
         user = request.user
         token = request.POST.get("token", "").strip()
-        
+
         # Get unconfirmed device
         from django_otp.plugins.otp_totp.models import TOTPDevice
+
         try:
             device = TOTPDevice.objects.get(user=user, confirmed=False)
         except TOTPDevice.DoesNotExist:
             messages.error(request, "No pending 2FA setup found. Please try again.")
             return redirect("2fa-setup")
-        
+
         # Verify token and confirm device
         if TwoFactorService.confirm_totp_device(device, token):
             # Generate backup codes
             backup_codes = TwoFactorService.regenerate_backup_codes(user)
-            
+
             messages.success(request, "Two-factor authentication has been enabled successfully!")
-            
+
             # Show backup codes
-            return render(request, "auth/2fa_backup_codes.html", {
-                "backup_codes": backup_codes,
-            })
-        
+            return render(
+                request,
+                "auth/2fa_backup_codes.html",
+                {
+                    "backup_codes": backup_codes,
+                },
+            )
+
         # Invalid token
         qr_url = device.config_url
         context = {
@@ -199,25 +205,26 @@ class TwoFactorQRCodeView(LoginRequiredMixin, View):
     def get(self, request: Any) -> HttpResponse:
         """Generate and return QR code image."""
         user = request.user
-        
+
         from django_otp.plugins.otp_totp.models import TOTPDevice
+
         try:
             device = TOTPDevice.objects.get(user=user, confirmed=False)
         except TOTPDevice.DoesNotExist:
             return HttpResponse("No pending setup", status=404)
-        
+
         # Generate QR code
         qr = qrcode.QRCode(version=1, box_size=10, border=5)
         qr.add_data(device.config_url)
         qr.make(fit=True)
-        
+
         img = qr.make_image(fill_color="black", back_color="white")
-        
+
         # Return image
         buffer = io.BytesIO()
         img.save(buffer, format="PNG")
         buffer.seek(0)
-        
+
         return HttpResponse(buffer.getvalue(), content_type="image/png")
 
 
@@ -229,10 +236,10 @@ class TwoFactorManageView(LoginRequiredMixin, View):
     def get(self, request: Any) -> HttpResponse:
         """Display 2FA management page."""
         user = request.user
-        
+
         # Get WebAuthn credentials
         webauthn_credentials = list(user.webauthn_credentials.all())
-        
+
         context = {
             "two_factor_enabled": user.two_factor_enabled,
             "two_factor_required": user.two_factor_required,
@@ -249,16 +256,19 @@ class TwoFactorDisableView(LoginRequiredMixin, View):
     def post(self, request: Any) -> HttpResponse:
         """Disable 2FA for user."""
         user = request.user
-        
+
         # Check if 2FA is required
         if user.two_factor_required:
-            messages.error(request, "Two-factor authentication is required for your account and cannot be disabled.")
+            messages.error(
+                request,
+                "Two-factor authentication is required for your account and cannot be disabled.",
+            )
             return redirect("2fa-manage")
-        
+
         # Disable 2FA
         TwoFactorService.disable_2fa_for_user(user)
         messages.success(request, "Two-factor authentication has been disabled.")
-        
+
         return redirect("2fa-manage")
 
 
@@ -268,20 +278,24 @@ class TwoFactorRegenerateCodesView(LoginRequiredMixin, View):
     def post(self, request: Any) -> HttpResponse:
         """Regenerate backup codes."""
         user = request.user
-        
+
         if not user.two_factor_enabled:
             messages.error(request, "Two-factor authentication must be enabled first.")
             return redirect("2fa-manage")
-        
+
         # Regenerate codes
         backup_codes = TwoFactorService.regenerate_backup_codes(user)
-        
+
         messages.success(request, "New backup codes have been generated.")
-        
-        return render(request, "auth/2fa_backup_codes.html", {
-            "backup_codes": backup_codes,
-            "regenerated": True,
-        })
+
+        return render(
+            request,
+            "auth/2fa_backup_codes.html",
+            {
+                "backup_codes": backup_codes,
+                "regenerated": True,
+            },
+        )
 
 
 class TwoFactorAdminResetView(LoginRequiredMixin, View):
@@ -293,23 +307,24 @@ class TwoFactorAdminResetView(LoginRequiredMixin, View):
         if request.user.role != "admin":
             messages.error(request, "Only administrators can reset 2FA for other users.")
             return redirect("dashboard")
-        
+
         try:
             user = User.objects.get(id=user_id)
         except User.DoesNotExist:
             messages.error(request, "User not found.")
             return redirect("dashboard")
-        
+
         # Reset 2FA
         TwoFactorService.disable_2fa_for_user(user)
-        
+
         messages.success(request, f"Two-factor authentication has been reset for {user.username}.")
-        
+
         # Redirect to user management or admin
         return redirect("admin:users_user_change", user_id)
 
 
 # WebAuthn Views
+
 
 class WebAuthnRegisterStartView(LoginRequiredMixin, View):
     """Start WebAuthn registration process."""
@@ -329,7 +344,7 @@ class WebAuthnRegisterStartView(LoginRequiredMixin, View):
                 json.dumps(result["options"]),
                 content_type="application/json",
             )
-        except ValueError as e:
+        except ValueError:
             # Expected errors (e.g., validation issues)
             return HttpResponse(
                 json.dumps({"error": "Failed to start registration"}),
@@ -447,8 +462,7 @@ class WebAuthnAuthCompleteView(View):
         import json
 
         user_id = request.session.get("2fa_user_id")
-        backend = request.session.get("2fa_backend")
-        
+
         if not user_id:
             return HttpResponse(
                 json.dumps({"error": "No user found"}),
@@ -476,7 +490,7 @@ class WebAuthnAuthCompleteView(View):
                 # Clear session data
                 del request.session["webauthn_auth_challenge"]
                 del request.session["2fa_user_id"]
-                
+
                 # Use stored backend from session
                 stored_backend = request.session.get("2fa_backend")
                 if stored_backend:
@@ -485,10 +499,11 @@ class WebAuthnAuthCompleteView(View):
                 else:
                     # Fallback to default backend if not in session
                     from django.contrib.auth import get_backends
+
                     backends = get_backends()
                     if backends:
                         user.backend = f"{backends[0].__module__}.{backends[0].__class__.__name__}"
-                
+
                 login(request, user)
 
                 return HttpResponse(

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Optional
+from typing import Any
 
 import requests
 
@@ -24,7 +24,9 @@ class TeamsService:
         self.bot_app_password = workspace.bot_app_password
         self.service_url = workspace.service_url
 
-    def send_message_via_webhook(self, webhook_url: str, adaptive_card: dict[str, Any]) -> dict[str, Any]:
+    def send_message_via_webhook(
+        self, webhook_url: str, adaptive_card: dict[str, Any]
+    ) -> dict[str, Any]:
         """Send a message to a Teams channel via incoming webhook."""
         try:
             response = requests.post(webhook_url, json=adaptive_card, timeout=10)
@@ -42,7 +44,7 @@ class TeamsService:
             "partial": "warning",
             "failed": "attention",
         }
-        color = status_color.get(job.status, "default")
+        _color = status_color.get(job.status, "default")  # Reserved for future use
 
         status_icon = {
             "success": "✅",
@@ -264,7 +266,9 @@ def notify_job_completion_teams(job: Job) -> None:
             if channel.webhook_url:
                 teams_service = TeamsService(channel.workspace)
                 teams_service.send_message_via_webhook(channel.webhook_url, card)
-                logger.info(f"Sent job completion notification to Teams channel {channel.channel_name}")
+                logger.info(
+                    f"Sent job completion notification to Teams channel {channel.channel_name}"
+                )
 
     except Exception as e:
         logger.error(f"Failed to send Teams job completion notification: {e}")

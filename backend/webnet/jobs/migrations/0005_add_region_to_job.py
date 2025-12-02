@@ -8,7 +8,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("core", "0001_add_region_model"),
+        ("core", "0002_add_region_model"),
         ("customers", "0002_customer_ssh_host_key_policy"),
         ("jobs", "0004_git_integration"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),

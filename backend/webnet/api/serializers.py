@@ -1448,7 +1448,36 @@ class WebhookDeliverySerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-=======
+        read_only_fields = [
+            "status",
+            "attempts",
+            "http_status",
+            "response_body",
+            "error_message",
+            "duration_ms",
+            "next_retry_at",
+            "created_at",
+            "updated_at",
+        ]
+
+
+# ==============================================================================
+# Multi-region Deployment Serializers
+# ==============================================================================
+
+
+class RegionSerializer(serializers.ModelSerializer):
+    """Serializer for Region model."""
+
+    queue_name = serializers.CharField(read_only=True)
+    is_available = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Region
+        fields = [
+            "id",
+            "customer",
+            "name",
             "identifier",
             "api_endpoint",
             "worker_pool_config",
@@ -1463,7 +1492,17 @@ class WebhookDeliverySerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at", "queue_name", "is_available"]
+        read_only_fields = [
+            "id",
+            "queue_name",
+            "is_available",
+            "created_at",
+            "updated_at",
+            "last_health_check",
+        ]
+
+    def get_is_available(self, obj):
+        return obj.is_available()
 
 
 class RegionHealthUpdateSerializer(serializers.Serializer):
@@ -1478,4 +1517,3 @@ class RegionHealthUpdateSerializer(serializers.Serializer):
         allow_blank=True,
         help_text="Optional message describing the health status",
     )
->>>>>>> origin/copilot/add-multi-region-deployment-support

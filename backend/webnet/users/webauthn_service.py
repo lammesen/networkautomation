@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 import json
 from typing import TYPE_CHECKING, Any
 
@@ -21,7 +20,6 @@ from webauthn.helpers.structs import (
     AuthenticatorSelectionCriteria,
     UserVerificationRequirement,
     ResidentKeyRequirement,
-    AuthenticatorAttachment,
 )
 
 if TYPE_CHECKING:
@@ -53,7 +51,7 @@ class WebAuthnService:
         options = generate_registration_options(
             rp_id=WebAuthnService.RP_ID,
             rp_name=WebAuthnService.RP_NAME,
-            user_id=str(user.id).encode('utf-8'),
+            user_id=str(user.id).encode("utf-8"),
             user_name=user.username,
             user_display_name=user.get_full_name() or user.username,
             exclude_credentials=existing_credentials,

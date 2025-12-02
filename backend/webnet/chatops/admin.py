@@ -77,7 +77,7 @@ class ChatOpsCommandAdmin(admin.ModelAdmin):
     readonly_fields = [
         "workspace",
         "user",
-        "slack_user_id",
+        "platform_user_id",
         "channel_id",
         "command",
         "response_status",

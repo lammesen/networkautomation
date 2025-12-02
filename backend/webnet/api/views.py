@@ -36,6 +36,10 @@ from webnet.devices.models import (
     NetBoxConfig,
     NetBoxSyncLog,
     SSHHostKey,
+    ServiceNowConfig,
+    ServiceNowSyncLog,
+    ServiceNowIncident,
+    ServiceNowChangeRequest,
 )
 from webnet.jobs.models import Job, JobLog, Schedule
 from webnet.jobs.services import JobService
@@ -47,12 +51,6 @@ from webnet.compliance.models import (
     RemediationAction,
 )
 from webnet.ansible_mgmt.models import Playbook, AnsibleConfig
-from webnet.servicenow.models import (
-    ServiceNowConfig,
-    ServiceNowSyncLog,
-    ServiceNowIncident,
-    ServiceNowChangeRequest,
-)
 from webnet.webhooks.models import Webhook, WebhookDelivery
 
 from .serializers import (
@@ -106,7 +104,6 @@ from .serializers import (
     ServiceNowSyncLogSerializer,
     ServiceNowSyncRequestSerializer,
     ServiceNowIncidentSerializer,
-    ServiceNowIncidentCreateSerializer,
     ServiceNowIncidentUpdateSerializer,
     ServiceNowChangeRequestSerializer,
     ServiceNowChangeRequestCreateSerializer,

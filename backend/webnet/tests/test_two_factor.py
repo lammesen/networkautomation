@@ -87,15 +87,15 @@ class TestTwoFactorService:
     def test_confirm_totp_device(self, user: User):
         """Test TOTP device confirmation."""
         device = TwoFactorService.enable_totp_for_user(user)
-        
+
         # Generate a valid token
         token = device.token()
-        
+
         # Confirm device with valid token
         assert TwoFactorService.confirm_totp_device(device, token)
         device.refresh_from_db()
         assert device.confirmed
-        
+
         # Check user's 2FA status
         user.refresh_from_db()
         assert user.two_factor_enabled
@@ -103,7 +103,7 @@ class TestTwoFactorService:
     def test_confirm_totp_device_invalid_token(self, user: User):
         """Test TOTP device confirmation with invalid token."""
         device = TwoFactorService.enable_totp_for_user(user)
-        
+
         # Try with invalid token
         assert not TwoFactorService.confirm_totp_device(device, "123456")
         device.refresh_from_db()
@@ -115,16 +115,16 @@ class TestTwoFactorService:
         device = TwoFactorService.enable_totp_for_user(user)
         token = device.token()
         TwoFactorService.confirm_totp_device(device, token)
-        
+
         # Add backup codes
         codes = TwoFactorService.generate_backup_codes()
         hashed = TwoFactorService.hash_backup_codes(codes)
         user.backup_codes = hashed
         user.save()
-        
+
         # Disable 2FA
         TwoFactorService.disable_2fa_for_user(user)
-        
+
         # Check everything is disabled
         user.refresh_from_db()
         assert not user.two_factor_enabled
@@ -135,15 +135,15 @@ class TestTwoFactorService:
         """Test getting TOTP device."""
         # No device initially
         assert TwoFactorService.get_totp_device(user) is None
-        
+
         # Create unconfirmed device
         device = TwoFactorService.enable_totp_for_user(user)
         assert TwoFactorService.get_totp_device(user) is None
-        
+
         # Confirm device
         token = device.token()
         TwoFactorService.confirm_totp_device(device, token)
-        
+
         # Should return device now
         retrieved = TwoFactorService.get_totp_device(user)
         assert retrieved is not None
@@ -155,11 +155,11 @@ class TestTwoFactorService:
         device = TwoFactorService.enable_totp_for_user(user)
         token = device.token()
         TwoFactorService.confirm_totp_device(device, token)
-        
+
         # Generate and verify new token
         new_token = device.token()
         assert TwoFactorService.verify_totp_token(user, new_token)
-        
+
         # Invalid token
         assert not TwoFactorService.verify_totp_token(user, "123456")
 
@@ -170,7 +170,7 @@ class TestTwoFactorService:
         assert len(initial_codes) == 10
         user.refresh_from_db()
         assert len(user.backup_codes) == 10
-        
+
         # Regenerate codes
         new_codes = TwoFactorService.regenerate_backup_codes(user)
         assert len(new_codes) == 10
@@ -220,11 +220,11 @@ class TestTwoFactorViews:
         device = TwoFactorService.enable_totp_for_user(user)
         token = device.token()
         TwoFactorService.confirm_totp_device(device, token)
-        
+
         # Disable it
         response = client_logged_in.post(reverse("2fa-disable"))
         assert response.status_code == 302
-        
+
         # Check it's disabled
         user.refresh_from_db()
         assert not user.two_factor_enabled
@@ -237,11 +237,11 @@ class TestTwoFactorViews:
         TwoFactorService.confirm_totp_device(device, token)
         user.two_factor_required = True
         user.save()
-        
+
         # Try to disable it
         response = client_logged_in.post(reverse("2fa-disable"))
         assert response.status_code == 302
-        
+
         # Check it's still enabled
         user.refresh_from_db()
         assert user.two_factor_enabled
@@ -265,7 +265,7 @@ class TestCustomLoginView:
         device = TwoFactorService.enable_totp_for_user(user)
         token = device.token()
         TwoFactorService.confirm_totp_device(device, token)
-        
+
         # Try to login
         response = client.post(
             reverse("login"),
@@ -281,7 +281,7 @@ class TestUserModel:
     def test_has_backup_codes(self, user: User):
         """Test has_backup_codes method."""
         assert not user.has_backup_codes()
-        
+
         user.backup_codes = ["hashed_code_1", "hashed_code_2"]
         user.save()
         assert user.has_backup_codes()
@@ -289,7 +289,7 @@ class TestUserModel:
     def test_is_2fa_enabled(self, user: User):
         """Test is_2fa_enabled method."""
         assert not user.is_2fa_enabled()
-        
+
         user.two_factor_enabled = True
         user.save()
         assert user.is_2fa_enabled()
@@ -304,7 +304,7 @@ class TestSecurityFixes:
         device = TwoFactorService.enable_totp_for_user(user)
         token = device.token()
         TwoFactorService.confirm_totp_device(device, token)
-        
+
         # Try to login with malicious next URL
         response = client.post(
             reverse("login"),
@@ -312,14 +312,14 @@ class TestSecurityFixes:
         )
         assert response.status_code == 302
         assert response.url == reverse("2fa-verify")
-        
+
         # Try to verify with malicious redirect
         new_token = device.token()
         response = client.post(
             reverse("2fa-verify") + "?next=https://evil-site.com",
             {"token": new_token},
         )
-        
+
         # Should redirect to safe URL, not evil site
         assert response.status_code == 302
         assert "evil-site.com" not in response.url
@@ -331,14 +331,14 @@ class TestSecurityFixes:
         device = TwoFactorService.enable_totp_for_user(user)
         token = device.token()
         TwoFactorService.confirm_totp_device(device, token)
-        
+
         # Try to access setup page
         response = client_logged_in.get(reverse("2fa-setup"))
-        
+
         # Should redirect to manage page
         assert response.status_code == 302
         assert response.url == reverse("2fa-manage")
-        
+
         # Verify device still exists and is confirmed
         device.refresh_from_db()
         assert device.confirmed
@@ -352,10 +352,10 @@ class TestSecurityFixes:
         token = device.token()
         TwoFactorService.confirm_totp_device(device, token)
         confirmed_device_id = device.id
-        
+
         # Try to enable again (should only delete unconfirmed)
         new_device = TwoFactorService.enable_totp_for_user(user)
-        
+
         # Confirmed device should still exist
         assert TOTPDevice.objects.filter(id=confirmed_device_id, confirmed=True).exists()
         # New unconfirmed device should be created
@@ -365,15 +365,15 @@ class TestSecurityFixes:
     def test_session_cycle_on_login(self, client: Client, user: User):
         """Test that session key is regenerated after password auth."""
         # Get initial session key
-        response = client.get(reverse("login"))
+        client.get(reverse("login"))
         initial_session_key = client.session.session_key
-        
+
         # Login
-        response = client.post(
+        client.post(
             reverse("login"),
             {"username": "testuser", "password": "testpass123"},
         )
-        
+
         # Session key should be different after login
         new_session_key = client.session.session_key
         assert new_session_key != initial_session_key

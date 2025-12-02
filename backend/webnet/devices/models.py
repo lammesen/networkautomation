@@ -794,7 +794,7 @@ class ServiceNowConfig(models.Model):
         null=False,
         help_text="Encrypted ServiceNow password (required)",
     )
-    
+
     # CMDB Configuration
     cmdb_table = models.CharField(
         max_length=100,
@@ -819,7 +819,7 @@ class ServiceNowConfig(models.Model):
         null=True,
         help_text="Company sys_id to associate with CIs",
     )
-    
+
     # Field Mappings
     device_to_cmdb_mappings = models.JSONField(
         default=dict,
@@ -831,7 +831,7 @@ class ServiceNowConfig(models.Model):
         blank=True,
         help_text="Custom field mappings from ServiceNow CI to webnet Device (JSON)",
     )
-    
+
     # Sync Configuration
     sync_frequency = models.CharField(
         max_length=20,
@@ -847,7 +847,7 @@ class ServiceNowConfig(models.Model):
         default=False,
         help_text="Whether automatic sync is enabled",
     )
-    
+
     # Default credential for imported devices
     default_credential = models.ForeignKey(
         "Credential",
@@ -857,7 +857,7 @@ class ServiceNowConfig(models.Model):
         related_name="servicenow_configs",
         help_text="Default credential to assign to imported devices",
     )
-    
+
     # Incident Configuration
     create_incidents_on_failure = models.BooleanField(
         default=False,
@@ -875,7 +875,7 @@ class ServiceNowConfig(models.Model):
         null=True,
         help_text="Default incident assignment group sys_id",
     )
-    
+
     # Change Management Configuration
     create_changes_on_deploy = models.BooleanField(
         default=False,
@@ -893,7 +893,7 @@ class ServiceNowConfig(models.Model):
         null=True,
         help_text="Default change assignment group sys_id",
     )
-    
+
     # Sync Status
     last_sync_at = models.DateTimeField(
         blank=True,
@@ -911,7 +911,7 @@ class ServiceNowConfig(models.Model):
         null=True,
         help_text="Message or error from last sync attempt",
     )
-    
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -952,7 +952,7 @@ class ServiceNowSyncLog(models.Model):
         ("partial", "Partial Success"),
         ("failed", "Failed"),
     ]
-    
+
     DIRECTION_CHOICES = [
         ("import", "Import from ServiceNow"),
         ("export", "Export to ServiceNow"),
@@ -1013,7 +1013,7 @@ class ServiceNowIncident(models.Model):
     STATE_ON_HOLD = 3
     STATE_RESOLVED = 6
     STATE_CLOSED = 7
-    
+
     STATE_CHOICES = [
         (STATE_NEW, "New"),
         (STATE_IN_PROGRESS, "In Progress"),
@@ -1077,7 +1077,7 @@ class ServiceNowChangeRequest(models.Model):
     STATE_IMPLEMENT = 3
     STATE_REVIEW = 4
     STATE_CLOSED = 6
-    
+
     STATE_CHOICES = [
         (STATE_NEW, "New"),
         (STATE_ASSESS, "Assess"),

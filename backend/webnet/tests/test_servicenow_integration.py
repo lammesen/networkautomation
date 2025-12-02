@@ -170,9 +170,7 @@ class TestServiceNowService:
 
         # Mock CI creation response
         mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "result": {"sys_id": "new123", "name": device.hostname}
-        }
+        mock_response.json.return_value = {"result": {"sys_id": "new123", "name": device.hostname}}
         mock_response.raise_for_status = MagicMock()
 
         mock_client_instance = MagicMock()
@@ -458,9 +456,7 @@ class TestServiceNowTasks:
 
     @patch("webnet.devices.servicenow_service.ServiceNowService.sync_to_cmdb")
     @patch("webnet.devices.servicenow_service.ServiceNowService.sync_from_cmdb")
-    def test_servicenow_sync_job_both_directions(
-        self, mock_import, mock_export, servicenow_config
-    ):
+    def test_servicenow_sync_job_both_directions(self, mock_import, mock_export, servicenow_config):
         """Test ServiceNow sync job with both directions."""
         from webnet.jobs.tasks import servicenow_sync_job
         from webnet.devices.servicenow_service import SyncResult

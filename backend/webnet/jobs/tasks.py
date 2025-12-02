@@ -308,7 +308,9 @@ def compliance_check_job(job_id: int, policy_id: int) -> None:
             )
             # Send ChatOps notifications for violations
             try:
-                from webnet.chatops.slack_service import notify_compliance_violation as chatops_notify_violation
+                from webnet.chatops.slack_service import (
+                    notify_compliance_violation as chatops_notify_violation,
+                )
                 from webnet.chatops.teams_service import notify_compliance_violation_teams
 
                 for violation in violations:

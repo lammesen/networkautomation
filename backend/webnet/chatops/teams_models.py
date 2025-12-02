@@ -18,7 +18,9 @@ class TeamsWorkspace(models.Model):
         max_length=255, help_text="Bot application password (encrypted)"
     )
     service_url = models.CharField(
-        max_length=500, help_text="Teams service URL", default="https://smba.trafficmanager.net/amer/"
+        max_length=500,
+        help_text="Teams service URL",
+        default="https://smba.trafficmanager.net/amer/",
     )
     enabled = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)

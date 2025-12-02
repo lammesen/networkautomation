@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("core", "0001_add_region_model"),
+        ("core", "0002_add_region_model"),
         ("customers", "0002_customer_ssh_host_key_policy"),
         ("devices", "0007_merge_20251202_0016"),
     ]

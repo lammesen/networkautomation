@@ -6,10 +6,8 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
 
-    initial = True
-
     dependencies = [
-        ("customers", "0002_customer_ssh_host_key_policy"),
+        ("core", "0001_add_custom_field_definition"),
     ]
 
     operations = [

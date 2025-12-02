@@ -6,7 +6,6 @@ from django.urls import reverse
 from django.utils.html import format_html
 
 from webnet.users.models import User, APIKey, WebAuthnCredential
-from webnet.users.two_factor_service import TwoFactorService
 
 
 @admin.register(User)
@@ -71,7 +70,7 @@ class UserAdmin(BaseUserAdmin):
             # Add help text with reset button
             help_text = format_html(
                 'User has 2FA enabled. <a href="{}" class="button" '
-                'onclick="return confirm(\'Are you sure you want to reset 2FA for this user?\');">'
+                "onclick=\"return confirm('Are you sure you want to reset 2FA for this user?');\">"
                 "Reset 2FA</a>",
                 reverse("2fa-admin-reset", args=[obj.id]),
             )
@@ -137,7 +136,14 @@ class WebAuthnCredentialAdmin(admin.ModelAdmin):
     )
     list_filter = ("created_at", "last_used_at")
     search_fields = ("user__username", "name")
-    readonly_fields = ("credential_id", "public_key", "sign_count", "aaguid", "created_at", "last_used_at")
+    readonly_fields = (
+        "credential_id",
+        "public_key",
+        "sign_count",
+        "aaguid",
+        "created_at",
+        "last_used_at",
+    )
     date_hierarchy = "created_at"
 
     fieldsets = (

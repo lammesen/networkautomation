@@ -33,14 +33,32 @@ urlpatterns = [
     path("2fa/qrcode/", TwoFactorQRCodeView.as_view(), name="2fa-qrcode"),
     path("2fa/manage/", TwoFactorManageView.as_view(), name="2fa-manage"),
     path("2fa/disable/", TwoFactorDisableView.as_view(), name="2fa-disable"),
-    path("2fa/regenerate-codes/", TwoFactorRegenerateCodesView.as_view(), name="2fa-regenerate-codes"),
-    path("2fa/admin/reset/<int:user_id>/", TwoFactorAdminResetView.as_view(), name="2fa-admin-reset"),
+    path(
+        "2fa/regenerate-codes/", TwoFactorRegenerateCodesView.as_view(), name="2fa-regenerate-codes"
+    ),
+    path(
+        "2fa/admin/reset/<int:user_id>/", TwoFactorAdminResetView.as_view(), name="2fa-admin-reset"
+    ),
     # WebAuthn URLs
-    path("webauthn/register/start/", WebAuthnRegisterStartView.as_view(), name="webauthn-register-start"),
-    path("webauthn/register/complete/", WebAuthnRegisterCompleteView.as_view(), name="webauthn-register-complete"),
+    path(
+        "webauthn/register/start/",
+        WebAuthnRegisterStartView.as_view(),
+        name="webauthn-register-start",
+    ),
+    path(
+        "webauthn/register/complete/",
+        WebAuthnRegisterCompleteView.as_view(),
+        name="webauthn-register-complete",
+    ),
     path("webauthn/auth/start/", WebAuthnAuthStartView.as_view(), name="webauthn-auth-start"),
-    path("webauthn/auth/complete/", WebAuthnAuthCompleteView.as_view(), name="webauthn-auth-complete"),
-    path("webauthn/credential/<int:credential_id>/delete/", WebAuthnCredentialDeleteView.as_view(), name="webauthn-credential-delete"),
+    path(
+        "webauthn/auth/complete/", WebAuthnAuthCompleteView.as_view(), name="webauthn-auth-complete"
+    ),
+    path(
+        "webauthn/credential/<int:credential_id>/delete/",
+        WebAuthnCredentialDeleteView.as_view(),
+        name="webauthn-credential-delete",
+    ),
     path("api/v1/", include("webnet.api.urls")),
     path("api/graphql/", include("webnet.graphql_api.urls")),
     path("", include("webnet.ui.urls")),

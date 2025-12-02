@@ -11,11 +11,15 @@ router = DefaultRouter()
 # Slack endpoints
 router.register(r"slack/workspaces", views.SlackWorkspaceViewSet, basename="slack-workspace")
 router.register(r"slack/channels", views.SlackChannelViewSet, basename="slack-channel")
-router.register(r"slack/user-mappings", views.SlackUserMappingViewSet, basename="slack-user-mapping")
+router.register(
+    r"slack/user-mappings", views.SlackUserMappingViewSet, basename="slack-user-mapping"
+)
 # Teams endpoints
 router.register(r"teams/workspaces", views.TeamsWorkspaceViewSet, basename="teams-workspace")
 router.register(r"teams/channels", views.TeamsChannelViewSet, basename="teams-channel")
-router.register(r"teams/user-mappings", views.TeamsUserMappingViewSet, basename="teams-user-mapping")
+router.register(
+    r"teams/user-mappings", views.TeamsUserMappingViewSet, basename="teams-user-mapping"
+)
 # Audit log
 router.register(r"commands", views.ChatOpsCommandViewSet, basename="chatops-command")
 

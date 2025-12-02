@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import secrets
 from typing import TYPE_CHECKING
 
@@ -78,7 +77,7 @@ class TwoFactorService:
         """Disable 2FA for user."""
         # Delete all TOTP devices
         TOTPDevice.objects.filter(user=user).delete()
-        
+
         # Clear backup codes and disable 2FA
         user.two_factor_enabled = False
         user.backup_codes = []
