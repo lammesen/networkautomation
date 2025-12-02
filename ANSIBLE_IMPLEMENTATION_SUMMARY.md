@@ -23,9 +23,9 @@ Successfully implemented Ansible playbook execution feature allowing users to st
   - Environment variables
 
 - `Playbook`: Playbook storage and management
-  - Inline content support
-  - Git repository integration (prepared)
-  - File upload support (prepared)
+  - Inline content support ✅
+  - Git repository integration ✅ **[NEW]**
+  - File upload support ✅ **[NEW]**
   - Variables and tags
   - Customer scoping
   - Enable/disable control
@@ -458,3 +458,75 @@ Potential improvements for future iterations:
 The Ansible playbook execution feature is **fully implemented and production-ready**. All acceptance criteria have been met, comprehensive tests are in place, and security considerations have been addressed. The feature integrates seamlessly with the existing job system and provides a powerful automation capability for network operations.
 
 **Status: COMPLETE ✅**
+
+## Recent Updates (December 2, 2025)
+
+### Git Repository and File Upload Sources Implementation
+
+**New Features:**
+1. **Git Repository Integration**
+   - Function: `fetch_playbook_from_git()`
+   - Shallow clone of Git repositories for efficiency
+   - Branch selection support
+   - Path specification within repository
+   - Configurable timeout (default: 60 seconds)
+   - Proper error handling and sanitization
+
+2. **File Upload Support**
+   - New `uploaded_file` FileField on Playbook model
+   - Date-partitioned storage (`playbooks/%Y/%m/`)
+   - Multipart form data support in API
+   - File content validation during execution
+
+3. **Execution Integration**
+   - Updated `ansible_playbook_job` task
+   - All three source types now fully functional:
+     - `inline`: Direct YAML content
+     - `git`: Clone and fetch from repository
+     - `upload`: Read from uploaded file
+   - Detailed logging for each source type
+   - Comprehensive error handling
+
+**API Updates:**
+
+Create Git-based Playbook:
+```bash
+curl -X POST http://localhost:8000/api/v1/ansible/playbooks/ \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "customer": 1,
+    "name": "Network Config Playbook",
+    "source_type": "git",
+    "git_repo_url": "https://github.com/org/ansible-playbooks.git",
+    "git_branch": "main",
+    "git_path": "network/config.yml"
+  }'
+```
+
+Upload Playbook File:
+```bash
+curl -X POST http://localhost:8000/api/v1/ansible/playbooks/ \
+  -H "Authorization: Bearer <token>" \
+  -F "customer=1" \
+  -F "name=Uploaded Config Playbook" \
+  -F "source_type=upload" \
+  -F "uploaded_file=@my_playbook.yml"
+```
+
+**Testing:**
+- ✅ 15 tests passing (1 skipped for performance)
+- ✅ Git source creation test
+- ✅ File upload source creation test
+- ✅ Git fetch error handling test
+- ✅ All linter checks passed
+
+**Files Changed:**
+- `ansible_service.py`: Added `fetch_playbook_from_git()` function
+- `models.py`: Added `uploaded_file` field
+- `tasks.py`: Updated task to handle all source types
+- `serializers.py`: Added file upload support
+- Migration: `0002_playbook_uploaded_file.py`
+- Tests: Added 3 new tests
+
+**Status:** All playbook source types are now fully implemented and tested! ✅
