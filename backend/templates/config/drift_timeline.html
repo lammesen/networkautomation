@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Configuration Drift Timeline - webnet{% endblock %}
+
+{% block content %}
+<!-- Breadcrumb -->
+<nav class="flex mb-4" aria-label="Breadcrumb">
+  <ol class="inline-flex items-center space-x-1 md:space-x-2 text-sm">
+    <li class="inline-flex items-center">
+      <a href="/config/" class="text-muted-foreground hover:text-foreground">Config Snapshots</a>
+    </li>
+    <li class="flex items-center">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mx-1 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+      </svg>
+      <span class="font-medium">Drift Timeline</span>
+    </li>
+  </ol>
+</nav>
+
+<!-- Page Header -->
+<div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-bold tracking-tight">Configuration Drift Timeline</h1>
+    <p class="text-muted-foreground">Track configuration changes over time</p>
+  </div>
+  <div class="flex items-center gap-2">
+    <a href="/config/drift/alerts" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 px-4 py-2 border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+      </svg>
+      View Alerts
+    </a>
+  </div>
+</div>
+
+<!-- Device Selection & Filters -->
+<div class="rounded-lg border bg-card p-6 mb-6">
+  <form hx-get="/config/drift/timeline" hx-target="#drift-timeline-content" hx-push-url="true" class="flex flex-wrap items-end gap-4">
+    <div class="space-y-2 flex-1 min-w-[200px]">
+      <label for="device_id" class="text-sm font-medium leading-none">Device ID</label>
+      <input type="number" name="device_id" id="device_id" value="{{ device.id|default:'' }}" placeholder="Enter device ID" required
+             class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
+    </div>
+    <div class="space-y-2 min-w-[150px]">
+      <label for="days" class="text-sm font-medium leading-none">Time Period</label>
+      <select name="days" id="days" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+        <option value="7" {% if days == 7 %}selected{% endif %}>Last 7 days</option>
+        <option value="30" {% if days == 30 %}selected{% endif %}>Last 30 days</option>
+        <option value="90" {% if days == 90 %}selected{% endif %}>Last 90 days</option>
+        <option value="365" {% if days == 365 %}selected{% endif %}>Last year</option>
+      </select>
+    </div>
+    <button type="submit" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 px-4 py-2 bg-primary text-primary-foreground shadow hover:bg-primary/90">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+      </svg>
+      Load Timeline
+    </button>
+  </form>
+</div>
+
+<!-- Timeline Content -->
+<div id="drift-timeline-content">
+  {% include "config/_drift_timeline.html" %}
+</div>
+{% endblock %}

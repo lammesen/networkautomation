@@ -1,0 +1,127 @@
+{% if error %}
+<div class="rounded-lg border bg-card p-6">
+  <div class="flex items-center gap-2 text-destructive">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+    <span class="font-medium">{{ error }}</span>
+  </div>
+</div>
+{% elif device %}
+<!-- Statistics Summary -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+  <div class="rounded-lg border bg-card p-4">
+    <div class="text-sm text-muted-foreground">Device</div>
+    <div class="text-2xl font-bold">{{ device.hostname }}</div>
+  </div>
+  <div class="rounded-lg border bg-card p-4">
+    <div class="text-sm text-muted-foreground">Total Changes</div>
+    <div class="text-2xl font-bold">{{ frequency_stats.total_changes }}</div>
+  </div>
+  <div class="rounded-lg border bg-card p-4">
+    <div class="text-sm text-muted-foreground">Lines Added</div>
+    <div class="text-2xl font-bold text-green-600">+{{ frequency_stats.total_additions }}</div>
+  </div>
+  <div class="rounded-lg border bg-card p-4">
+    <div class="text-sm text-muted-foreground">Lines Deleted</div>
+    <div class="text-2xl font-bold text-red-600">-{{ frequency_stats.total_deletions }}</div>
+  </div>
+</div>
+
+<!-- Timeline -->
+<div class="rounded-lg border bg-card p-6">
+  <h2 class="text-lg font-semibold mb-4">Change History</h2>
+  
+  {% if drifts %}
+  <div class="space-y-4">
+    {% for drift in drifts %}
+    <div class="flex items-start gap-4 pb-4 border-b last:border-b-0">
+      <!-- Timeline dot -->
+      <div class="flex-shrink-0 mt-1">
+        {% if drift.has_changes %}
+        <div class="w-3 h-3 rounded-full bg-primary"></div>
+        {% else %}
+        <div class="w-3 h-3 rounded-full bg-muted"></div>
+        {% endif %}
+      </div>
+      
+      <!-- Timeline content -->
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center justify-between mb-2">
+          <div class="flex items-center gap-2">
+            <span class="font-medium">{{ drift.detected_at|date:"Y-m-d H:i:s" }}</span>
+            {% if drift.has_changes %}
+            <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium
+              {% if drift.changes >= 100 %}bg-red-100 text-red-700
+              {% elif drift.changes >= 50 %}bg-yellow-100 text-yellow-700
+              {% else %}bg-blue-100 text-blue-700{% endif %}">
+              {{ drift.get_change_magnitude }}
+            </span>
+            {% else %}
+            <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-gray-100 text-gray-700">
+              No changes
+            </span>
+            {% endif %}
+          </div>
+          <div class="flex items-center gap-2">
+            {% if drift.triggered_by %}
+            <span class="text-sm text-muted-foreground">by {{ drift.triggered_by.username }}</span>
+            {% endif %}
+          </div>
+        </div>
+        
+        {% if drift.has_changes %}
+        <div class="text-sm text-muted-foreground mb-2">
+          <span class="text-green-600">+{{ drift.additions }}</span> /
+          <span class="text-red-600">-{{ drift.deletions }}</span> lines changed
+        </div>
+        
+        {% if drift.diff_summary %}
+        <div class="text-sm bg-muted p-2 rounded mb-2">
+          {{ drift.diff_summary }}
+        </div>
+        {% endif %}
+        
+        <div class="flex gap-2">
+          <a href="/config/drift/{{ drift.id }}/" 
+             class="inline-flex items-center gap-1 text-sm text-primary hover:underline">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+            View Details
+          </a>
+          <a href="/config/diff?from={{ drift.snapshot_from_id }}&to={{ drift.snapshot_to_id }}" 
+             class="inline-flex items-center gap-1 text-sm text-primary hover:underline">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+            </svg>
+            View Diff
+          </a>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="text-center py-8">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-muted-foreground mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+    </svg>
+    <h3 class="text-lg font-medium mb-2">No drift detected</h3>
+    <p class="text-muted-foreground">No configuration changes found in the selected time period.</p>
+  </div>
+  {% endif %}
+</div>
+{% else %}
+<div class="rounded-lg border bg-card p-6">
+  <div class="text-center py-8">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-muted-foreground mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+    </svg>
+    <h3 class="text-lg font-medium mb-2">Select a device</h3>
+    <p class="text-muted-foreground">Enter a device ID above to view its configuration drift timeline.</p>
+  </div>
+</div>
+{% endif %}

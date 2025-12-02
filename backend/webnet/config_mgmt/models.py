@@ -457,3 +457,123 @@ class ConfigSnapshot(models.Model):
         if self.config_text and not self.hash:
             self.hash = hashlib.sha256(self.config_text.encode()).hexdigest()
         super().save(*args, **kwargs)
+
+
+class ConfigDrift(models.Model):
+    """Track configuration drift between consecutive snapshots."""
+
+    device = models.ForeignKey(
+        "devices.Device",
+        on_delete=models.CASCADE,
+        related_name="config_drifts",
+        help_text="Device this drift analysis belongs to",
+    )
+    snapshot_from = models.ForeignKey(
+        ConfigSnapshot,
+        on_delete=models.CASCADE,
+        related_name="drifts_as_from",
+        help_text="Earlier snapshot in comparison",
+    )
+    snapshot_to = models.ForeignKey(
+        ConfigSnapshot,
+        on_delete=models.CASCADE,
+        related_name="drifts_as_to",
+        help_text="Later snapshot in comparison",
+    )
+    detected_at = models.DateTimeField(auto_now_add=True)
+    additions = models.IntegerField(default=0, help_text="Number of lines added")
+    deletions = models.IntegerField(default=0, help_text="Number of lines deleted")
+    changes = models.IntegerField(default=0, help_text="Number of lines changed")
+    total_lines = models.IntegerField(default=0, help_text="Total lines in diff output")
+    has_changes = models.BooleanField(default=False, help_text="Whether any changes were detected")
+    diff_summary = models.TextField(blank=True, help_text="Summary of major changes")
+    triggered_by = models.ForeignKey(
+        "users.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="triggered_drifts",
+        help_text="User who triggered the backup that created this drift",
+    )
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["device"]),
+            models.Index(fields=["detected_at"]),
+            models.Index(fields=["has_changes"]),
+        ]
+        ordering = ["-detected_at"]
+        unique_together = ("snapshot_from", "snapshot_to")
+
+    def __str__(self) -> str:  # pragma: no cover
+        return f"Drift {self.id} for {self.device.hostname}"
+
+    def get_change_magnitude(self) -> str:
+        """Return a human-readable change magnitude."""
+        total = self.additions + self.deletions
+        if total == 0:
+            return "No changes"
+        elif total < 10:
+            return "Minor changes"
+        elif total < 50:
+            return "Moderate changes"
+        else:
+            return "Major changes"
+
+
+class DriftAlert(models.Model):
+    """Alert for unexpected configuration changes."""
+
+    SEVERITY_CHOICES = [
+        ("info", "Info"),
+        ("warning", "Warning"),
+        ("critical", "Critical"),
+    ]
+
+    STATUS_CHOICES = [
+        ("open", "Open"),
+        ("acknowledged", "Acknowledged"),
+        ("resolved", "Resolved"),
+        ("ignored", "Ignored"),
+    ]
+
+    drift = models.ForeignKey(
+        ConfigDrift,
+        on_delete=models.CASCADE,
+        related_name="alerts",
+        help_text="Associated drift analysis",
+    )
+    severity = models.CharField(
+        max_length=20,
+        choices=SEVERITY_CHOICES,
+        default="info",
+        help_text="Alert severity level",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default="open",
+        help_text="Alert status",
+    )
+    message = models.TextField(help_text="Alert message describing the change")
+    detected_at = models.DateTimeField(auto_now_add=True)
+    acknowledged_by = models.ForeignKey(
+        "users.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="acknowledged_drift_alerts",
+    )
+    acknowledged_at = models.DateTimeField(null=True, blank=True)
+    resolution_notes = models.TextField(blank=True, help_text="Notes about alert resolution")
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["severity"]),
+            models.Index(fields=["status"]),
+            models.Index(fields=["detected_at"]),
+        ]
+        ordering = ["-detected_at"]
+
+    def __str__(self) -> str:  # pragma: no cover
+        return f"Alert {self.id} - {self.severity} ({self.status})"
