@@ -1,6 +1,6 @@
 """Tests for LDAP authentication backend."""
 
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, PropertyMock, patch
 
 import pytest
 from django.contrib.auth import authenticate, get_user_model
@@ -38,26 +38,23 @@ class TestLDAPBackendDirectly:
         from webnet.core.ldap_backend import WebnetLDAPBackend
 
         backend = WebnetLDAPBackend()
-
+        
         user = User.objects.create_user(username="testuser", role="admin")
-
+        
         ldap_user_mock = Mock()
         ldap_user_mock.attrs = {}
         ldap_user_mock.group_dns = []
-
+        
         with patch("webnet.core.ldap_backend.LDAPBackend.authenticate_ldap_user") as mock_parent:
-            with patch(
-                "webnet.ldap_config.LDAP_CONFIG",
-                {
-                    "VIEWER_GROUPS": [],
-                    "OPERATOR_GROUPS": [],
-                    "ADMIN_GROUPS": [],
-                },
-            ):
+            with patch("webnet.ldap_config.LDAP_CONFIG", {
+                "VIEWER_GROUPS": [],
+                "OPERATOR_GROUPS": [],
+                "ADMIN_GROUPS": [],
+            }):
                 mock_parent.return_value = user
-
+                
                 result = backend.authenticate_ldap_user(ldap_user_mock, "password")
-
+                
                 assert result is not None
                 assert result.role == "viewer"
 
@@ -66,26 +63,23 @@ class TestLDAPBackendDirectly:
         from webnet.core.ldap_backend import WebnetLDAPBackend
 
         backend = WebnetLDAPBackend()
-
+        
         user = User.objects.create_user(username="operatoruser", role="viewer")
-
+        
         ldap_user_mock = Mock()
         ldap_user_mock.attrs = {}
         ldap_user_mock.group_dns = ["cn=operators,ou=groups,dc=example,dc=com"]
-
+        
         with patch("webnet.core.ldap_backend.LDAPBackend.authenticate_ldap_user") as mock_parent:
-            with patch(
-                "webnet.ldap_config.LDAP_CONFIG",
-                {
-                    "VIEWER_GROUPS": [],
-                    "OPERATOR_GROUPS": ["cn=operators,ou=groups,dc=example,dc=com"],
-                    "ADMIN_GROUPS": [],
-                },
-            ):
+            with patch("webnet.ldap_config.LDAP_CONFIG", {
+                "VIEWER_GROUPS": [],
+                "OPERATOR_GROUPS": ["cn=operators,ou=groups,dc=example,dc=com"],
+                "ADMIN_GROUPS": [],
+            }):
                 mock_parent.return_value = user
-
+                
                 result = backend.authenticate_ldap_user(ldap_user_mock, "password")
-
+                
                 assert result is not None
                 assert result.role == "operator"
 
@@ -94,29 +88,26 @@ class TestLDAPBackendDirectly:
         from webnet.core.ldap_backend import WebnetLDAPBackend
 
         backend = WebnetLDAPBackend()
-
+        
         user = User.objects.create_user(username="adminuser", role="viewer")
-
+        
         ldap_user_mock = Mock()
         ldap_user_mock.attrs = {}
         ldap_user_mock.group_dns = [
             "cn=operators,ou=groups,dc=example,dc=com",
             "cn=admins,ou=groups,dc=example,dc=com",
         ]
-
+        
         with patch("webnet.core.ldap_backend.LDAPBackend.authenticate_ldap_user") as mock_parent:
-            with patch(
-                "webnet.ldap_config.LDAP_CONFIG",
-                {
-                    "VIEWER_GROUPS": [],
-                    "OPERATOR_GROUPS": ["cn=operators,ou=groups,dc=example,dc=com"],
-                    "ADMIN_GROUPS": ["cn=admins,ou=groups,dc=example,dc=com"],
-                },
-            ):
+            with patch("webnet.ldap_config.LDAP_CONFIG", {
+                "VIEWER_GROUPS": [],
+                "OPERATOR_GROUPS": ["cn=operators,ou=groups,dc=example,dc=com"],
+                "ADMIN_GROUPS": ["cn=admins,ou=groups,dc=example,dc=com"],
+            }):
                 mock_parent.return_value = user
-
+                
                 result = backend.authenticate_ldap_user(ldap_user_mock, "password")
-
+                
                 assert result is not None
                 assert result.role == "admin"
 
@@ -125,27 +116,24 @@ class TestLDAPBackendDirectly:
         from webnet.core.ldap_backend import WebnetLDAPBackend
 
         backend = WebnetLDAPBackend()
-
+        
         user = User.objects.create_user(username="customeruser", role="viewer")
-
+        
         ldap_user_mock = Mock()
         ldap_user_mock.attrs = {"department": ["LDAP Test Customer"]}
         ldap_user_mock.group_dns = []
-
+        
         with patch("webnet.core.ldap_backend.LDAPBackend.authenticate_ldap_user") as mock_parent:
-            with patch(
-                "webnet.ldap_config.LDAP_CONFIG",
-                {
-                    "VIEWER_GROUPS": [],
-                    "OPERATOR_GROUPS": [],
-                    "ADMIN_GROUPS": [],
-                    "LDAP_ATTR_CUSTOMER": "department",
-                },
-            ):
+            with patch("webnet.ldap_config.LDAP_CONFIG", {
+                "VIEWER_GROUPS": [],
+                "OPERATOR_GROUPS": [],
+                "ADMIN_GROUPS": [],
+                "LDAP_ATTR_CUSTOMER": "department",
+            }):
                 mock_parent.return_value = user
-
+                
                 result = backend.authenticate_ldap_user(ldap_user_mock, "password")
-
+                
                 assert result is not None
                 assert result.customers.filter(id=customer_for_ldap.id).exists()
 
@@ -154,27 +142,24 @@ class TestLDAPBackendDirectly:
         from webnet.core.ldap_backend import WebnetLDAPBackend
 
         backend = WebnetLDAPBackend()
-
+        
         user = User.objects.create_user(username="customeruser2", role="viewer")
-
+        
         ldap_user_mock = Mock()
         ldap_user_mock.attrs = {"department": [str(customer_for_ldap.id)]}
         ldap_user_mock.group_dns = []
-
+        
         with patch("webnet.core.ldap_backend.LDAPBackend.authenticate_ldap_user") as mock_parent:
-            with patch(
-                "webnet.ldap_config.LDAP_CONFIG",
-                {
-                    "VIEWER_GROUPS": [],
-                    "OPERATOR_GROUPS": [],
-                    "ADMIN_GROUPS": [],
-                    "LDAP_ATTR_CUSTOMER": "department",
-                },
-            ):
+            with patch("webnet.ldap_config.LDAP_CONFIG", {
+                "VIEWER_GROUPS": [],
+                "OPERATOR_GROUPS": [],
+                "ADMIN_GROUPS": [],
+                "LDAP_ATTR_CUSTOMER": "department",
+            }):
                 mock_parent.return_value = user
-
+                
                 result = backend.authenticate_ldap_user(ldap_user_mock, "password")
-
+                
                 assert result is not None
                 assert result.customers.filter(id=customer_for_ldap.id).exists()
 
@@ -183,27 +168,24 @@ class TestLDAPBackendDirectly:
         from webnet.core.ldap_backend import WebnetLDAPBackend
 
         backend = WebnetLDAPBackend()
-
+        
         user = User.objects.create_user(username="testuser", role="admin")
-
+        
         # Create a mock that will raise AttributeError when group_dns is accessed
-        ldap_user_mock = Mock(spec=["attrs"])
+        ldap_user_mock = Mock(spec=['attrs'])
         ldap_user_mock.attrs = {}
         # Accessing group_dns on a spec'd mock without that attribute will raise AttributeError
-
+        
         with patch("webnet.core.ldap_backend.LDAPBackend.authenticate_ldap_user") as mock_parent:
-            with patch(
-                "webnet.ldap_config.LDAP_CONFIG",
-                {
-                    "VIEWER_GROUPS": [],
-                    "OPERATOR_GROUPS": [],
-                    "ADMIN_GROUPS": [],
-                },
-            ):
+            with patch("webnet.ldap_config.LDAP_CONFIG", {
+                "VIEWER_GROUPS": [],
+                "OPERATOR_GROUPS": [],
+                "ADMIN_GROUPS": [],
+            }):
                 mock_parent.return_value = user
-
+                
                 result = backend.authenticate_ldap_user(ldap_user_mock, "password")
-
+                
                 assert result is not None
                 assert result.role == "viewer"
 
@@ -212,14 +194,14 @@ class TestLDAPBackendDirectly:
         from webnet.core.ldap_backend import WebnetLDAPBackend
 
         backend = WebnetLDAPBackend()
-
+        
         ldap_user_mock = Mock()
-
+        
         with patch("webnet.core.ldap_backend.LDAPBackend.authenticate_ldap_user") as mock_parent:
             mock_parent.return_value = None
-
+            
             result = backend.authenticate_ldap_user(ldap_user_mock, "password")
-
+            
             assert result is None
 
 
