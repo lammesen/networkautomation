@@ -6,7 +6,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from webnet.customers.models import Customer
-from webnet.jobs.models import Schedule, Job
+from webnet.jobs.models import Schedule
 from webnet.jobs.schedule_service import ScheduleService
 
 User = get_user_model()
@@ -118,14 +118,14 @@ def test_schedule_api_respects_customer_scope():
     """Test that schedules are scoped to customer."""
     customer_a = Customer.objects.create(name="Acme")
     customer_b = Customer.objects.create(name="Beta")
-    
+
     admin_a = User.objects.create_user(username="admin_a", password="secret123", role="admin")
     admin_a.customers.add(customer_a)
-    
+
     admin_b = User.objects.create_user(username="admin_b", password="secret123", role="admin")
     admin_b.customers.add(customer_b)
 
-    schedule_a = Schedule.objects.create(
+    Schedule.objects.create(
         customer=customer_a,
         created_by=admin_a,
         name="Schedule A",
@@ -151,17 +151,13 @@ def test_schedule_api_respects_customer_scope():
     # Just verify we get some results
     assert data["count"] >= 1
 
-    # Skip the cross-customer access test for now as scoping may not be fully implemented
-    # resp = client.get(f"/api/v1/schedules/{schedule_a.id + 1}/")
-    # assert resp.status_code in {403, 404}
-
 
 @pytest.mark.django_db
 def test_schedule_service_calculate_next_run():
     """Test calculating next run time for schedules."""
     customer = Customer.objects.create(name="Acme")
     user = User.objects.create_user(username="admin", password="secret123", role="admin")
-    
+
     schedule = Schedule.objects.create(
         customer=customer,
         created_by=user,
@@ -173,7 +169,7 @@ def test_schedule_service_calculate_next_run():
 
     service = ScheduleService()
     next_run = service.calculate_next_run(schedule)
-    
+
     assert next_run is not None
     assert next_run > timezone.now()
 
@@ -183,7 +179,7 @@ def test_schedule_service_create_job_from_schedule():
     """Test creating a job from a schedule."""
     customer = Customer.objects.create(name="Acme")
     user = User.objects.create_user(username="admin", password="secret123", role="admin")
-    
+
     schedule = Schedule.objects.create(
         customer=customer,
         created_by=user,
@@ -196,7 +192,7 @@ def test_schedule_service_create_job_from_schedule():
 
     service = ScheduleService()
     job = service.create_scheduled_job(schedule)
-    
+
     assert job is not None
     assert job.type == "config_backup"
     assert job.customer == customer
