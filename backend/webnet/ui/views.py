@@ -59,6 +59,9 @@ class DeviceForm(forms.ModelForm):
             "platform",
             "role",
             "site",
+            "site_latitude",
+            "site_longitude",
+            "site_address",
             "credential",
         ]
 
@@ -73,8 +76,8 @@ class DeviceForm(forms.ModelForm):
         else:
             self.fields["customer"].queryset = Customer.objects.all()
             self.fields["credential"].queryset = Credential.objects.all()
-        self.fields["role"].required = False
-        self.fields["site"].required = False
+        for optional_field in ("role", "site", "site_latitude", "site_longitude", "site_address"):
+            self.fields[optional_field].required = False
 
 
 def logout_view(request):
@@ -1109,6 +1112,18 @@ class TopologyListView(TenantScopedView):
                 return render(request, self.map_partial_name, context)
             return render(request, self.partial_name, context)
         return render(request, self.template_name, context)
+
+
+class GeoMapView(TenantScopedView):
+    template_name = "maps/geo.html"
+
+    def get(self, request):
+        map_props = {
+            "dataUrl": "/api/v1/maps/geo",
+            "initialCenter": [20, 0],
+            "initialZoom": 2,
+        }
+        return render(request, self.template_name, {"map_props": json.dumps(map_props)})
 
 
 class CommandsView(TenantScopedView):

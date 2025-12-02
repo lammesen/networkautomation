@@ -14,6 +14,7 @@ from typing import Optional
 from django.contrib.auth import authenticate
 from django.db.models import Count
 from django.utils import timezone
+from django.utils.text import slugify
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -119,6 +120,7 @@ from .permissions import (
     RolePermission,
     CustomerScopedQuerysetMixin,
     ObjectCustomerPermission,
+    _customer_ids_for_user,
     user_has_customer_access,
     resolve_customer_for_request,
 )
@@ -1086,11 +1088,193 @@ class TopologyLinkViewSet(CustomerScopedQuerysetMixin, viewsets.ReadOnlyModelVie
                         "local_interface": link.local_interface,
                         "remote_interface": link.remote_interface,
                         "protocol": link.protocol,
-                        "discovered_at": link.discovered_at.isoformat(),
+                        "discovered_at": link.discovered_at.isoformat()
+                        if link.discovered_at
+                        else None,
                     },
                 }
             )
         return Response({"nodes": list(nodes.values()), "edges": edges})
+
+
+class GeoMapDataView(APIView):
+    """Return aggregated site/device data for geographic map visualization."""
+
+    permission_classes = [IsAuthenticated, RolePermission]
+
+    @staticmethod
+    def _site_key(customer_id: int, site_name: str | None) -> str:
+        slug = slugify(site_name or "site") or "site"
+        return f"{customer_id}:{slug}"
+
+    @staticmethod
+    def _normalize_device_status(device: Device) -> str:
+        if device.enabled is False:
+            return "disabled"
+        status = (device.reachability_status or "").lower()
+        if status in {"reachable", "up", "online", "ok", "success"}:
+            return "reachable"
+        if status in {"unreachable", "down", "offline", "failed"}:
+            return "unreachable"
+        return "unknown"
+
+    @staticmethod
+    def _merge_link_status(current: str, new: str) -> str:
+        """Pick the most severe status for a link."""
+        severity = {"down": 3, "degraded": 2, "up": 1, "unknown": 0}
+        return new if severity.get(new, 0) >= severity.get(current, 0) else current
+
+    def _derive_site_status(self, summary: dict[str, int]) -> str:
+        reachable = summary.get("reachable_devices", 0)
+        unreachable = summary.get("unreachable_devices", 0)
+        disabled = summary.get("disabled_devices", 0)
+        if reachable and not unreachable:
+            return "healthy"
+        if unreachable and reachable:
+            return "degraded"
+        if unreachable and not reachable:
+            return "down"
+        if disabled:
+            return "maintenance"
+        return "unknown"
+
+    def _derive_link_status(self, local: Device, remote: Device) -> str:
+        statuses = {
+            self._normalize_device_status(local),
+            self._normalize_device_status(remote),
+        }
+        if "unreachable" in statuses:
+            return "down"
+        if "reachable" in statuses and ({"unknown", "disabled"} & statuses):
+            return "degraded"
+        if statuses == {"reachable"}:
+            return "up"
+        return "unknown"
+
+    def _customer_ids(self, user) -> list[int]:
+        if getattr(user, "role", "viewer") == "admin":
+            return list(Customer.objects.values_list("id", flat=True))
+        return _customer_ids_for_user(user)
+
+    def _build_sites(self, devices):
+        sites: dict[str, dict] = {}
+        for device in devices:
+            if device.site_latitude is None or device.site_longitude is None:
+                continue
+            key = self._site_key(device.customer_id, device.site)
+            site = sites.get(key)
+            if not site:
+                site = {
+                    "id": key,
+                    "name": device.site or "Unassigned",
+                    "customer_id": device.customer_id,
+                    "latitude": float(device.site_latitude),
+                    "longitude": float(device.site_longitude),
+                    "address": device.site_address,
+                    "device_count": 0,
+                    "reachable_devices": 0,
+                    "unreachable_devices": 0,
+                    "disabled_devices": 0,
+                    "unknown_devices": 0,
+                    "devices": [],
+                }
+                sites[key] = site
+
+            status = self._normalize_device_status(device)
+            site["device_count"] += 1
+            if status == "reachable":
+                site["reachable_devices"] += 1
+            elif status == "unreachable":
+                site["unreachable_devices"] += 1
+            elif status == "disabled":
+                site["disabled_devices"] += 1
+            else:
+                site["unknown_devices"] += 1
+
+            site["devices"].append(
+                {
+                    "id": device.id,
+                    "hostname": device.hostname,
+                    "mgmt_ip": device.mgmt_ip,
+                    "vendor": device.vendor,
+                    "platform": device.platform,
+                    "role": device.role,
+                    "status": status,
+                    "reachability_status": device.reachability_status,
+                    "detail_url": f"/devices/{device.id}/",
+                }
+            )
+
+        for site in sites.values():
+            site["status"] = self._derive_site_status(site)
+        return sites
+
+    def _build_links(self, customer_ids: list[int], sites: dict[str, dict]):
+        links: dict[str, dict] = {}
+        qs = (
+            TopologyLink.objects.select_related("local_device", "remote_device")
+            .filter(local_device__customer_id__in=customer_ids)
+            .order_by("local_device__hostname")
+        )
+
+        for link in qs:
+            local = link.local_device
+            remote = link.remote_device
+            if not local or not remote:
+                continue
+            local_key = self._site_key(local.customer_id, local.site)
+            remote_key = self._site_key(remote.customer_id, remote.site)
+            local_site = sites.get(local_key)
+            remote_site = sites.get(remote_key)
+            if not local_site or not remote_site:
+                continue
+
+            link_key = "->".join(sorted([local_key, remote_key]))
+            edge = links.get(link_key)
+            if not edge:
+                edge = {
+                    "id": link_key,
+                    "source": local_key,
+                    "target": remote_key,
+                    "source_name": local_site["name"],
+                    "target_name": remote_site["name"],
+                    "count": 0,
+                    "status": "unknown",
+                    "samples": [],
+                }
+                links[link_key] = edge
+
+            edge["count"] += 1
+            edge["status"] = self._merge_link_status(
+                edge["status"], self._derive_link_status(local, remote)
+            )
+            edge["samples"].append(
+                {
+                    "local_interface": link.local_interface,
+                    "remote_interface": link.remote_interface,
+                    "protocol": link.protocol,
+                    "discovered_at": (
+                        link.discovered_at.isoformat() if link.discovered_at else None
+                    ),
+                }
+            )
+
+        return list(links.values())
+
+    def get(self, request):
+        customer_ids = self._customer_ids(request.user)
+        if not customer_ids:
+            return Response({"sites": [], "links": []})
+
+        devices = (
+            Device.objects.select_related("customer")
+            .filter(customer_id__in=customer_ids)
+            .exclude(site_latitude__isnull=True)
+            .exclude(site_longitude__isnull=True)
+        )
+        sites = self._build_sites(devices)
+        links = self._build_links(customer_ids, sites)
+        return Response({"sites": list(sites.values()), "links": links})
 
 
 class SSHHostKeyViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):

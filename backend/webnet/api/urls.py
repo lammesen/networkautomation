@@ -113,6 +113,7 @@ urlpatterns = [
     path("devices/<int:pk>/jobs", views.DeviceViewSet.as_view({"get": "jobs"})),
     path("devices/<int:pk>/snapshots", views.DeviceViewSet.as_view({"get": "snapshots"})),
     path("devices/<int:pk>/topology", views.DeviceViewSet.as_view({"get": "topology"})),
+    path("maps/geo", views.GeoMapDataView.as_view(), name="geo-map"),
     path("jobs/<int:pk>/logs", views.JobLogsView.as_view()),
     path("jobs/<int:pk>/retry", views.JobViewSet.as_view({"post": "retry"})),
     path("jobs/<int:pk>/cancel", views.JobViewSet.as_view({"post": "cancel"})),

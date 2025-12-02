@@ -49,6 +49,8 @@ const buildOptions = {
     '.tsx': 'tsx',
     '.ts': 'ts',
     '.css': 'css',
+    '.png': 'file',
+    '.svg': 'file',
   },
   define: {
     'process.env.NODE_ENV': isWatch ? '"development"' : '"production"',

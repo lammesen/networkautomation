@@ -1,5 +1,6 @@
 from django.db import models
 from django.db.models import Q
+from django.core.validators import MinValueValidator, MaxValueValidator
 from webnet.core.crypto import encrypt_text, decrypt_text
 from webnet.core.custom_fields import CustomFieldMixin
 
@@ -382,6 +383,28 @@ class Device(CustomFieldMixin, models.Model):
     platform = models.CharField(max_length=50)
     role = models.CharField(max_length=50, blank=True, null=True)
     site = models.CharField(max_length=100, blank=True, null=True)
+    site_latitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(-90.0), MaxValueValidator(90.0)],
+        help_text="Latitude for the device's site (degrees)",
+    )
+    site_longitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(-180.0), MaxValueValidator(180.0)],
+        help_text="Longitude for the device's site (degrees)",
+    )
+    site_address = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Human-readable location/address for the site",
+    )
     tags = models.JSONField(blank=True, null=True)  # Legacy JSON tags field
     credential = models.ForeignKey(Credential, on_delete=models.PROTECT, related_name="devices")
     enabled = models.BooleanField(default=True)
