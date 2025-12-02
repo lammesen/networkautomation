@@ -12,7 +12,7 @@ Job Details:
 - Started: {{ ctx.job.started_at|date:"Y-m-d H:i:s T" }}
 - Failed: {{ ctx.job.finished_at|date:"Y-m-d H:i:s T" }}
 
-{% if ctx.job.result_summary_json.error %}Error: {{ ctx.job.result_summary_json.error }}
+{% if ctx.job.result_summary_json and ctx.job.result_summary_json.error %}Error: {{ ctx.job.result_summary_json.error }}
 {% endif %}
 View full details and logs: {{ ctx.webnet_url }}/jobs/{{ ctx.job.id }}
 

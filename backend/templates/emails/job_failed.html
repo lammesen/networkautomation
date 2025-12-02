@@ -116,7 +116,7 @@
             </div>
         </div>
 
-        {% if ctx.job.result_summary_json.error %}
+        {% if ctx.job.result_summary_json and ctx.job.result_summary_json.error %}
         <div class="error-box">
             <strong>Error:</strong><br>
             {{ ctx.job.result_summary_json.error }}

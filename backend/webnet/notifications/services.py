@@ -165,6 +165,89 @@ class EmailService:
             return False, error_msg
 
 
+def _send_notifications(
+    customer,
+    event_type: str,
+    subject: str,
+    context: EmailContext,
+    preferences,
+    related_job=None,
+    related_compliance_result=None,
+) -> None:
+    """Helper function to send notifications to multiple recipients.
+    
+    Args:
+        customer: Customer object
+        event_type: Type of notification event
+        subject: Email subject line
+        context: EmailContext for template rendering
+        preferences: List of NotificationPreference objects
+        related_job: Optional Job object to link to notification event
+        related_compliance_result: Optional ComplianceResult object to link to notification event
+    """
+    from webnet.notifications.models import NotificationEvent, SMTPConfig
+    from django.db import transaction
+
+    # Get SMTP config
+    try:
+        smtp_config = SMTPConfig.objects.get(customer=customer, enabled=True)
+    except SMTPConfig.DoesNotExist:
+        logger.debug(f"No SMTP config for customer {customer.id}")
+        return
+
+    email_service = EmailService(smtp_config)
+
+    for pref in preferences:
+        recipient = pref.email_address or pref.user.email
+        if not recipient:
+            logger.warning(f"User {pref.user.username} has no email address")
+            continue
+
+        # Use transaction to ensure event creation and email sending are atomic
+        try:
+            with transaction.atomic():
+                # Create notification event record
+                event = NotificationEvent.objects.create(
+                    customer=customer,
+                    recipient_email=recipient,
+                    event_type=event_type,
+                    subject=subject,
+                    job=related_job,
+                    compliance_result=related_compliance_result,
+                )
+
+                # Send email
+                try:
+                    success, error_msg = email_service.send_notification(
+                        recipient_email=recipient,
+                        subject=subject,
+                        context=context,
+                        event_type=event_type,
+                    )
+                except Exception as e:
+                    # Handle template or other errors more gracefully
+                    logger.error(
+                        f"Error sending notification email for event_type={event_type}: {e}",
+                        exc_info=True,
+                    )
+                    success = False
+                    error_msg = str(e)
+
+                # Update event status
+                if success:
+                    event.status = "sent"
+                    event.sent_at = timezone.now()
+                else:
+                    event.status = "failed"
+                    event.error_message = error_msg
+
+                event.save()
+        except Exception as e:
+            logger.error(
+                f"Failed to create notification event for {recipient}: {e}", exc_info=True
+            )
+
+
 def notify_job_event(job: Job, event_type: str) -> None:
     """Send notifications for job events.
 
@@ -172,24 +255,17 @@ def notify_job_event(job: Job, event_type: str) -> None:
         job: Job object
         event_type: Type of event (job_success, job_failed, job_partial)
     """
-    from webnet.notifications.models import NotificationEvent, NotificationPreference, SMTPConfig
+    from webnet.notifications.models import NotificationPreference
+    from django.db.models import Q
 
-    # Check if SMTP is configured for customer
-    try:
-        smtp_config = SMTPConfig.objects.get(customer=job.customer, enabled=True)
-    except SMTPConfig.DoesNotExist:
-        logger.debug(f"No SMTP config for customer {job.customer_id}")
-        return
-
-    # Get users who should be notified
+    # Get users who should be notified with optimized filtering
     preferences = NotificationPreference.objects.filter(
         customer=job.customer,
         event_type=event_type,
         enabled=True,
+    ).filter(
+        Q(job_types__isnull=True) | Q(job_types=[]) | Q(job_types__contains=[job.type])
     ).select_related("user")
-
-    # Filter by job type if specified
-    preferences = [pref for pref in preferences if not pref.job_types or job.type in pref.job_types]
 
     if not preferences:
         logger.debug(f"No notification preferences for {event_type} in customer {job.customer_id}")
@@ -209,40 +285,14 @@ def notify_job_event(job: Job, event_type: str) -> None:
     subject = f"[Webnet] Job {status_text}: {job.get_type_display()}"
 
     # Send notifications
-    email_service = EmailService(smtp_config)
-
-    for pref in preferences:
-        recipient = pref.email_address or pref.user.email
-        if not recipient:
-            logger.warning(f"User {pref.user.username} has no email address")
-            continue
-
-        # Create notification event record
-        event = NotificationEvent.objects.create(
-            customer=job.customer,
-            recipient_email=recipient,
-            event_type=event_type,
-            subject=subject,
-            job=job,
-        )
-
-        # Send email
-        success, error_msg = email_service.send_notification(
-            recipient_email=recipient,
-            subject=subject,
-            context=context,
-            event_type=event_type,
-        )
-
-        # Update event status
-        if success:
-            event.status = "sent"
-            event.sent_at = timezone.now()
-        else:
-            event.status = "failed"
-            event.error_message = error_msg
-
-        event.save()
+    _send_notifications(
+        customer=job.customer,
+        event_type=event_type,
+        subject=subject,
+        context=context,
+        preferences=preferences,
+        related_job=job,
+    )
 
 
 def notify_compliance_violation(compliance_result: ComplianceResult) -> None:
@@ -251,16 +301,9 @@ def notify_compliance_violation(compliance_result: ComplianceResult) -> None:
     Args:
         compliance_result: ComplianceResult object with violation
     """
-    from webnet.notifications.models import NotificationEvent, NotificationPreference, SMTPConfig
+    from webnet.notifications.models import NotificationPreference
 
     customer = compliance_result.policy.customer
-
-    # Check if SMTP is configured for customer
-    try:
-        smtp_config = SMTPConfig.objects.get(customer=customer, enabled=True)
-    except SMTPConfig.DoesNotExist:
-        logger.debug(f"No SMTP config for customer {customer.id}")
-        return
 
     # Get users who should be notified
     preferences = NotificationPreference.objects.filter(
@@ -288,37 +331,11 @@ def notify_compliance_violation(compliance_result: ComplianceResult) -> None:
     subject = f"[Webnet] Compliance Violation: {compliance_result.policy.name}"
 
     # Send notifications
-    email_service = EmailService(smtp_config)
-
-    for pref in preferences:
-        recipient = pref.email_address or pref.user.email
-        if not recipient:
-            logger.warning(f"User {pref.user.username} has no email address")
-            continue
-
-        # Create notification event record
-        event = NotificationEvent.objects.create(
-            customer=customer,
-            recipient_email=recipient,
-            event_type="compliance_violation",
-            subject=subject,
-            compliance_result=compliance_result,
-        )
-
-        # Send email
-        success, error_msg = email_service.send_notification(
-            recipient_email=recipient,
-            subject=subject,
-            context=context,
-            event_type="compliance_violation",
-        )
-
-        # Update event status
-        if success:
-            event.status = "sent"
-            event.sent_at = timezone.now()
-        else:
-            event.status = "failed"
-            event.error_message = error_msg
-
-        event.save()
+    _send_notifications(
+        customer=customer,
+        event_type="compliance_violation",
+        subject=subject,
+        context=context,
+        preferences=preferences,
+        related_compliance_result=compliance_result,
+    )

@@ -30,8 +30,10 @@ class SMTPConfigSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         """Mask password in responses."""
         data = super().to_representation(instance)
-        if instance.password:
+        if instance._password:
             data["password"] = "********"
+        else:
+            data["password"] = None
         return data
 
 
