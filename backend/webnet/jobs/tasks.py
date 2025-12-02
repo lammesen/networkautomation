@@ -1551,7 +1551,8 @@ def ansible_playbook_job(
         pass
 
     # Merge extra_vars with playbook defaults
-    merged_vars = {**(playbook.variables or {}), **(extra_vars or {})}
+    merged_vars = (playbook.variables or {}).copy()
+    merged_vars.update(extra_vars or {})
 
     # Get playbook content based on source type
     playbook_content = ""

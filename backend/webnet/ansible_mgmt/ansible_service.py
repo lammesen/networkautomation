@@ -51,6 +51,8 @@ def generate_ansible_inventory(
         hostname = dev.hostname
 
         # Add host variables
+        # Note: Passwords are stored encrypted in the database but must be
+        # decrypted for Ansible execution. Consider using SSH keys for enhanced security.
         inventory["_meta"]["hostvars"][hostname] = {
             "ansible_host": dev.mgmt_ip,
             "ansible_user": cred.username,
@@ -113,6 +115,7 @@ def execute_ansible_playbook(
     ansible_cfg_content: str | None = None,
     vault_password: str | None = None,
     environment_vars: dict | None = None,
+    timeout: int = 3600,
 ) -> tuple[int, str, str]:
     """Execute Ansible playbook with given inventory.
 
@@ -125,6 +128,7 @@ def execute_ansible_playbook(
         ansible_cfg_content: Custom ansible.cfg content
         vault_password: Vault password for encrypted vars
         environment_vars: Environment variables for execution
+        timeout: Execution timeout in seconds (default: 3600)
 
     Returns:
         Tuple of (return_code, stdout, stderr)
@@ -179,7 +183,8 @@ def execute_ansible_playbook(
         if environment_vars:
             env.update(environment_vars)
 
-        # Disable host key checking for automation
+        # Note: Host key checking is disabled for automation.
+        # In production, consider using SSH key management or host key verification.
         env["ANSIBLE_HOST_KEY_CHECKING"] = "False"
 
         # Execute playbook
@@ -189,12 +194,12 @@ def execute_ansible_playbook(
                 cwd=tmpdir,
                 capture_output=True,
                 text=True,
-                timeout=3600,  # 1 hour timeout
+                timeout=timeout,
                 env=env,
             )
             return result.returncode, result.stdout, result.stderr
         except subprocess.TimeoutExpired:
-            return 124, "", "Playbook execution timed out after 1 hour"
+            return 124, "", f"Playbook execution timed out after {timeout} seconds"
         except Exception as e:
             logger.exception("Error executing Ansible playbook")
             return 1, "", str(e)
