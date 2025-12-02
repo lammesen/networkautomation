@@ -19,6 +19,7 @@ from webnet.compliance.models import (
     RemediationRule,
     RemediationAction,
 )
+from webnet.ansible_mgmt.models import Playbook, AnsibleConfig
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -865,4 +866,72 @@ class NetBoxSyncRequestSerializer(serializers.Serializer):
 
     full_sync = serializers.BooleanField(
         default=False, help_text="If true, sync all devices (not just delta)"
+    )
+
+
+class AnsibleConfigSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AnsibleConfig
+        fields = [
+            "id",
+            "customer",
+            "ansible_cfg_content",
+            "collections",
+            "environment_vars",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["created_at", "updated_at"]
+
+
+class PlaybookSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Playbook
+        fields = [
+            "id",
+            "customer",
+            "name",
+            "description",
+            "source_type",
+            "content",
+            "git_repo_url",
+            "git_branch",
+            "git_path",
+            "variables",
+            "tags",
+            "enabled",
+            "created_by",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["created_by", "created_at", "updated_at"]
+
+    def create(self, validated_data):
+        # Set created_by to the current user
+        request = self.context.get("request")
+        if request and hasattr(request, "user"):
+            validated_data["created_by"] = request.user
+        return super().create(validated_data)
+
+
+class PlaybookExecuteSerializer(serializers.Serializer):
+    """Serializer for executing a playbook."""
+
+    targets = serializers.DictField(
+        required=False,
+        help_text="Device filter targets (site, role, vendor, device_ids)",
+    )
+    extra_vars = serializers.DictField(
+        required=False,
+        help_text="Extra variables to pass to the playbook",
+    )
+    limit = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="Limit execution to specific hosts (Ansible limit pattern)",
+    )
+    tags = serializers.ListField(
+        child=serializers.CharField(),
+        required=False,
+        help_text="Ansible tags to run",
     )

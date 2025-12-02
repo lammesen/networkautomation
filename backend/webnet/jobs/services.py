@@ -187,6 +187,17 @@ class JobService:
                     (j.payload_json or {}).get("credential_ids", []),
                 ),
             ),
+            "ansible_playbook": (
+                "ansible_playbook_job",
+                lambda j: (
+                    j.id,
+                    (j.payload_json or {}).get("playbook_id"),
+                    (j.target_summary_json or {}).get("filters", {}),
+                    (j.payload_json or {}).get("extra_vars", {}),
+                    (j.payload_json or {}).get("limit"),
+                    (j.payload_json or {}).get("tags", []),
+                ),
+            ),
         }
         entry = task_map.get(job.type)
         if not entry:

@@ -9,6 +9,7 @@ class Job(models.Model):
         ("config_deploy_commit", "Config deploy commit"),
         ("compliance_check", "Compliance check"),
         ("topology_discovery", "Topology discovery"),
+        ("ansible_playbook", "Ansible playbook"),
     )
     STATUS_CHOICES = (
         ("queued", "Queued"),

@@ -49,6 +49,10 @@ from webnet.jobs.services import JobService
 from webnet.automation import build_inventory
 from webnet.devices.models import Device, TopologyLink
 from webnet.config_mgmt.models import ConfigSnapshot
+from webnet.ansible_mgmt.ansible_service import (
+    generate_ansible_inventory,
+    execute_ansible_playbook,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1476,3 +1480,155 @@ def auto_remediation_job(rule_id: int, compliance_result_id: int) -> None:
         action.finished_at = timezone.now()
         action.save(update_fields=["status", "error_message", "finished_at"])
         js.set_status(job, "failed", result_summary={"error": str(e)})
+
+
+@shared_task(name="ansible_playbook_job")
+def ansible_playbook_job(
+    job_id: int,
+    playbook_id: int,
+    targets: dict | None = None,
+    extra_vars: dict | None = None,
+    limit: str | None = None,
+    tags: list[str] | None = None,
+) -> None:
+    """Execute Ansible playbook against managed devices.
+
+    Args:
+        job_id: Job ID to track progress
+        playbook_id: Playbook ID to execute
+        targets: Device filter targets (optional, defaults to all devices)
+        extra_vars: Extra variables to pass to playbook
+        limit: Limit execution to specific hosts
+        tags: Ansible tags to run
+    """
+    from webnet.ansible_mgmt.models import Playbook, AnsibleConfig
+
+    js = JobService()
+    try:
+        job = Job.objects.get(pk=job_id)
+    except Job.DoesNotExist:
+        return
+
+    js.set_status(job, "running")
+
+    try:
+        # Get playbook
+        playbook = Playbook.objects.select_related("customer").get(
+            pk=playbook_id, customer_id=job.customer_id
+        )
+    except Playbook.DoesNotExist:
+        js.append_log(job, level="ERROR", message=f"Playbook {playbook_id} not found")
+        js.set_status(job, "failed", result_summary={"error": "playbook not found"})
+        return
+
+    if not playbook.enabled:
+        js.append_log(job, level="ERROR", message=f"Playbook '{playbook.name}' is disabled")
+        js.set_status(job, "failed", result_summary={"error": "playbook disabled"})
+        return
+
+    js.append_log(job, level="INFO", message=f"Executing playbook: {playbook.name}")
+
+    # Generate Ansible inventory from webnet devices
+    inventory = generate_ansible_inventory(filters=targets, customer_id=job.customer_id)
+
+    # Check if any hosts matched
+    if not inventory["_meta"]["hostvars"]:
+        js.append_log(job, level="ERROR", message="No devices matched targets")
+        js.set_status(job, "failed", result_summary={"error": "no devices"})
+        return
+
+    js.append_log(
+        job,
+        level="INFO",
+        message=f"Generated inventory with {len(inventory['_meta']['hostvars'])} hosts",
+    )
+
+    # Get Ansible configuration
+    ansible_config = None
+    try:
+        ansible_config = AnsibleConfig.objects.get(customer_id=job.customer_id)
+    except AnsibleConfig.DoesNotExist:
+        pass
+
+    # Merge extra_vars with playbook defaults
+    merged_vars = {**(playbook.variables or {}), **(extra_vars or {})}
+
+    # Get playbook content based on source type
+    playbook_content = ""
+    if playbook.source_type == "inline":
+        playbook_content = playbook.content
+    elif playbook.source_type == "git":
+        js.append_log(
+            job, level="ERROR", message="Git repository source not yet implemented"
+        )
+        js.set_status(job, "failed", result_summary={"error": "git source not implemented"})
+        return
+    elif playbook.source_type == "upload":
+        js.append_log(
+            job, level="ERROR", message="File upload source not yet implemented"
+        )
+        js.set_status(job, "failed", result_summary={"error": "upload source not implemented"})
+        return
+
+    if not playbook_content:
+        js.append_log(job, level="ERROR", message="Playbook content is empty")
+        js.set_status(job, "failed", result_summary={"error": "empty playbook"})
+        return
+
+    # Execute playbook
+    js.append_log(job, level="INFO", message="Starting Ansible playbook execution")
+
+    return_code, stdout, stderr = execute_ansible_playbook(
+        playbook_content=playbook_content,
+        inventory=inventory,
+        extra_vars=merged_vars,
+        limit=limit,
+        tags=tags,
+        ansible_cfg_content=ansible_config.ansible_cfg_content if ansible_config else None,
+        vault_password=ansible_config.vault_password if ansible_config else None,
+        environment_vars=ansible_config.environment_vars if ansible_config else None,
+    )
+
+    # Log stdout
+    if stdout:
+        for line in stdout.split("\n"):
+            if line.strip():
+                js.append_log(job, level="INFO", message=line)
+
+    # Log stderr
+    if stderr:
+        for line in stderr.split("\n"):
+            if line.strip():
+                js.append_log(job, level="WARN", message=line)
+
+    # Parse results and set job status
+    if return_code == 0:
+        js.append_log(job, level="INFO", message="Playbook execution completed successfully")
+        # Try to extract task results from output
+        result_summary = {
+            "playbook_id": playbook_id,
+            "playbook_name": playbook.name,
+            "hosts_count": len(inventory["_meta"]["hostvars"]),
+            "return_code": return_code,
+        }
+        # Parse recap if available
+        if "PLAY RECAP" in stdout:
+            recap_start = stdout.index("PLAY RECAP")
+            recap_lines = stdout[recap_start:].split("\n")[1:]
+            result_summary["recap"] = [line for line in recap_lines if line.strip()]
+
+        js.set_status(job, "success", result_summary=result_summary)
+    else:
+        js.append_log(
+            job, level="ERROR", message=f"Playbook execution failed with return code {return_code}"
+        )
+        js.set_status(
+            job,
+            "failed",
+            result_summary={
+                "error": f"return code {return_code}",
+                "playbook_id": playbook_id,
+                "playbook_name": playbook.name,
+            },
+        )
+

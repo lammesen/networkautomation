@@ -40,6 +40,9 @@ router.register(r"config/templates", views.ConfigTemplateViewSet, basename="conf
 router.register(r"config/drift/alerts", views.DriftAlertViewSet, basename="drift-alert")
 # NetBox Integration (Issue #9)
 router.register(r"integrations/netbox", views.NetBoxConfigViewSet, basename="netbox-config")
+# Ansible Integration
+router.register(r"ansible/configs", views.AnsibleConfigViewSet, basename="ansible-config")
+router.register(r"ansible/playbooks", views.PlaybookViewSet, basename="playbook")
 
 urlpatterns = [
     path("auth/login", views.AuthViewSet.as_view({"post": "login"})),
