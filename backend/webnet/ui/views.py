@@ -2733,7 +2733,6 @@ class PluginHealthView(LoginRequiredMixin, View):
     """Get plugin health status (HTMX partial)."""
 
     def get(self, request, pk):
-        import json as json_lib
         from webnet.plugins.models import PluginConfig
         from webnet.plugins.manager import PluginManager
 
@@ -2742,7 +2741,7 @@ class PluginHealthView(LoginRequiredMixin, View):
 
         # Format details as JSON string for display
         if health.get("details"):
-            health["details"] = json_lib.dumps(health["details"], indent=2)
+            health["details"] = json.dumps(health["details"], indent=2)
 
         context = {"health": health}
         return render(request, "plugins/_health.html", context)
@@ -2752,7 +2751,6 @@ class PluginUpdateSettingsView(LoginRequiredMixin, View):
     """Update plugin settings."""
 
     def post(self, request, pk):
-        import json as json_lib
         from webnet.plugins.models import PluginConfig
         from webnet.plugins.manager import PluginManager
 
@@ -2760,8 +2758,8 @@ class PluginUpdateSettingsView(LoginRequiredMixin, View):
 
         try:
             settings_str = request.POST.get("settings", "{}")
-            settings = json_lib.loads(settings_str)
-        except json_lib.JSONDecodeError:
+            settings = json.loads(settings_str)
+        except json.JSONDecodeError:
             return HttpResponseBadRequest("Invalid JSON in settings")
 
         success, message = PluginManager.update_plugin_settings(
@@ -2793,7 +2791,6 @@ class PluginAuditLogView(LoginRequiredMixin, View):
     """Get audit logs for a plugin (HTMX partial)."""
 
     def get(self, request, pk):
-        import json as json_lib
         from webnet.plugins.models import PluginConfig, PluginAuditLog
 
         plugin = get_object_or_404(PluginConfig, pk=pk)
@@ -2804,7 +2801,7 @@ class PluginAuditLogView(LoginRequiredMixin, View):
         # Format details as JSON string for display
         for log in audit_logs:
             if log.details:
-                log.details = json_lib.dumps(log.details, indent=2)
+                log.details = json.dumps(log.details, indent=2)
 
         context = {"audit_logs": audit_logs}
         return render(request, "plugins/_audit_log.html", context)
@@ -2852,7 +2849,6 @@ class CustomerPluginUpdateSettingsView(LoginRequiredMixin, View):
     """Update customer-specific plugin settings."""
 
     def post(self, request, pk):
-        import json as json_lib
         from webnet.plugins.models import CustomerPluginConfig
         from webnet.plugins.manager import PluginManager
 
@@ -2860,8 +2856,8 @@ class CustomerPluginUpdateSettingsView(LoginRequiredMixin, View):
 
         try:
             settings_str = request.POST.get("settings", "{}")
-            settings = json_lib.loads(settings_str)
-        except json_lib.JSONDecodeError:
+            settings = json.loads(settings_str)
+        except json.JSONDecodeError:
             return HttpResponseBadRequest("Invalid JSON in settings")
 
         success, message = PluginManager.update_plugin_settings(
