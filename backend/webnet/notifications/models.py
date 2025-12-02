@@ -1,4 +1,5 @@
 from django.db import models
+from webnet.core.crypto import encrypt_text, decrypt_text
 
 
 class SMTPConfig(models.Model):
@@ -14,7 +15,12 @@ class SMTPConfig(models.Model):
     use_tls = models.BooleanField(default=True, help_text="Use TLS encryption")
     use_ssl = models.BooleanField(default=False, help_text="Use SSL encryption")
     username = models.CharField(max_length=255, blank=True, null=True)
-    password = models.CharField(max_length=255, blank=True, null=True)
+    _password = models.TextField(
+        db_column="password",
+        blank=True,
+        null=True,
+        help_text="Encrypted SMTP password",
+    )
     from_email = models.EmailField(help_text="From address for sent emails")
     reply_to_email = models.EmailField(blank=True, null=True)
     enabled = models.BooleanField(default=True)
@@ -27,6 +33,21 @@ class SMTPConfig(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover
         return f"SMTP Config for {self.customer.name}"
+
+    @property
+    def password(self) -> str | None:
+        """Decrypt and return the SMTP password."""
+        if not self._password:
+            return None
+        return decrypt_text(self._password)
+
+    @password.setter
+    def password(self, value: str | None) -> None:
+        """Encrypt and store the SMTP password."""
+        if value is None or value == "":
+            self._password = ""
+        else:
+            self._password = encrypt_text(value)
 
 
 class NotificationPreference(models.Model):
