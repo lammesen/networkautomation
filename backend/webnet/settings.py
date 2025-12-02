@@ -60,6 +60,8 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     "channels",
     "django_filters",
+    "django_otp",
+    "django_otp.plugins.otp_totp",
     "webnet.core",
     "webnet.users",
     "webnet.customers",
@@ -80,6 +82,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django_otp.middleware.OTPMiddleware",
     "webnet.core.middleware.RequireLoginMiddleware",
     "webnet.core.metrics.MetricsMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
@@ -199,6 +202,7 @@ LOGOUT_REDIRECT_URL = "/login/"
 LOGIN_EXEMPT_PREFIXES = (
     "/login",
     "/logout",
+    "/2fa/",
     "/api/",
     "/ws/",  # WebSocket paths - auth handled by Channels AuthMiddlewareStack
     "/static/",

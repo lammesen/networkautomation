@@ -29,6 +29,8 @@ dependencies = [
     "nornir-netmiko>=1.0.0",
     "asyncssh>=2.14.2",
     "django-auth-ldap>=5.0.0",
+    "django-otp>=1.5.0",
+    "qrcode>=7.4.2",
 ]
 
 [project.optional-dependencies]
