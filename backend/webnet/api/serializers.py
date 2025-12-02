@@ -1112,7 +1112,9 @@ class ServiceNowChangeRequestSerializer(serializers.ModelSerializer):
 class ServiceNowChangeRequestCreateSerializer(serializers.Serializer):
     """Serializer for creating ServiceNow change requests."""
 
-    short_description = serializers.CharField(max_length=255, help_text="Brief summary of the change")
+    short_description = serializers.CharField(
+        max_length=255, help_text="Brief summary of the change"
+    )
     description = serializers.CharField(help_text="Detailed description of the change")
     justification = serializers.CharField(help_text="Business justification for the change")
     risk = serializers.IntegerField(

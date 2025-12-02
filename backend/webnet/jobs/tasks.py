@@ -1513,9 +1513,7 @@ def servicenow_sync_job(
     if direction in ["export", "both"]:
         devices = None
         if device_ids:
-            devices = list(
-                Device.objects.filter(id__in=device_ids, customer_id=config.customer_id)
-            )
+            devices = list(Device.objects.filter(id__in=device_ids, customer_id=config.customer_id))
 
         result = service.sync_to_cmdb(devices=devices)
         results.append(
@@ -1670,4 +1668,3 @@ Please review the job logs for more details.
     else:
         logger.error("Failed to create ServiceNow incident for job %s: %s", job_id, result.error)
         return {"success": False, "error": result.error}
-

@@ -74,12 +74,13 @@ class JobService:
         )
         # Broadcast job status change
         broadcast_job_update(job, action="updated")
-        
+
         # Create ServiceNow incident if job failed
         if status == "failed":
             from webnet.jobs.tasks import create_servicenow_incident
+
             create_servicenow_incident.delay(job.id)
-        
+
         return job
 
     @transaction.atomic
