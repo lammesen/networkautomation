@@ -118,7 +118,13 @@ class JobService:
         from webnet.devices.models import Device
 
         # Get target devices from job's target_summary
+        # Support both nested {"filters": {...}} and flat {...} formats
         target_filters = (job.target_summary_json or {}).get("filters", {})
+        if not target_filters and job.target_summary_json:
+            # Fallback: treat top-level keys as filters for backward compatibility
+            # This handles compliance jobs which use policy.scope_json directly
+            target_filters = job.target_summary_json
+
         if not target_filters:
             # No specific targets, use default queue
             return None

@@ -388,6 +388,34 @@ class TestJobRegionRouting:
         assert job.region == region_us_east
         assert dispatched_tasks[0]["queue"] == "region_us-east-1"
 
+    def test_job_routing_with_flat_target_summary(
+        self, customer, user, device_in_us_east, region_us_east
+    ):
+        """Test routing with flat target_summary (compliance job format).
+
+        Compliance jobs pass policy.scope_json directly as target_summary,
+        which uses flat structure like {"site": "datacenter"} instead of
+        nested {"filters": {"site": "datacenter"}}.
+        """
+        dispatched_tasks = []
+
+        def mock_dispatcher(task_name, args=None, queue=None):
+            dispatched_tasks.append({"task": task_name, "args": args, "queue": queue})
+
+        service = JobService(dispatcher=mock_dispatcher)
+        job = service.create_job(
+            job_type="compliance_check",
+            user=user,
+            customer=customer,
+            target_summary={"site": "us-east-datacenter"},  # Flat format, no "filters" key
+            payload={"policy_id": 1},
+        )
+
+        # Verify job was routed to device's region using flat format
+        job.refresh_from_db()
+        assert job.region == region_us_east
+        assert dispatched_tasks[0]["queue"] == "region_us-east-1"
+
 
 @pytest.mark.django_db
 class TestDeviceRegionAssignment:
