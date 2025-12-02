@@ -6,9 +6,8 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('devices', '0006_alter_netboxconfig__api_token'),
-        ('devices', '0006_alter_netboxconfig__api_token_sshhostkey'),
+        ("devices", "0006_alter_netboxconfig__api_token"),
+        ("devices", "0006_alter_netboxconfig__api_token_sshhostkey"),
     ]
 
-    operations = [
-    ]
+    operations = []
