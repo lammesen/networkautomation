@@ -81,7 +81,33 @@ class JobService:
 
             create_servicenow_incident.delay(job.id)
 
+        # Send email notifications for completed jobs
+        if status in {"success", "partial", "failed"}:
+            self._send_job_notification(job, status)
+
         return job
+
+    def _send_job_notification(self, job: Job, status: str) -> None:
+        """Send email notification for job completion.
+
+        Args:
+            job: Completed job
+            status: Job status (success, partial, failed)
+        """
+        try:
+            from webnet.notifications.services import notify_job_event
+
+            # Map job status to notification event type
+            event_type_map = {
+                "success": "job_success",
+                "partial": "job_partial",
+                "failed": "job_failed",
+            }
+            event_type = event_type_map.get(status)
+            if event_type:
+                notify_job_event(job, event_type)
+        except Exception as e:
+            logger.error(f"Failed to send job notification for job {job.id}: {e}")
 
     @transaction.atomic
     def append_log(

@@ -71,6 +71,7 @@ INSTALLED_APPS = [
     "webnet.plugins",
     "webnet.ansible_mgmt",
     "webnet.webhooks",
+    "webnet.notifications",
     "webnet.api",
     "webnet.ui",
     "webnet.graphql_api",
@@ -278,3 +279,14 @@ LOGGING = {
 
 # Plugin system configuration
 WEBNET_PLUGINS = env("WEBNET_PLUGINS", "").split(",") if env("WEBNET_PLUGINS") else []
+
+# Email settings
+EMAIL_BACKEND = env("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
+EMAIL_HOST = env("EMAIL_HOST", "")
+EMAIL_PORT = int(env("EMAIL_PORT", "587"))
+EMAIL_USE_TLS = env("EMAIL_USE_TLS", "true").lower() == "true"
+EMAIL_USE_SSL = env("EMAIL_USE_SSL", "false").lower() == "true"
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", "")
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "webnet@example.com")
+WEBNET_BASE_URL = env("WEBNET_BASE_URL", "http://localhost:8000")

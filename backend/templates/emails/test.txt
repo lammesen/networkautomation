@@ -1,0 +1,11 @@
+Email Test - Webnet
+
+✓ Email configuration is working!
+
+This is a test email from Webnet Network Automation for {{ ctx.customer_name }}.
+
+If you received this email, your SMTP configuration is correctly set up.
+
+---
+This is a test notification from Webnet Network Automation.
+© Webnet Network Automation | {{ ctx.customer_name }}

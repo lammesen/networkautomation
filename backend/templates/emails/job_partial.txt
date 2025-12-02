@@ -1,0 +1,20 @@
+Job Completed with Partial Success - Webnet
+
+Hello,
+
+A job has completed with partial success in {{ ctx.customer_name }}. Some targets failed.
+
+Status: PARTIAL
+
+Job Details:
+- Job Type: {{ ctx.job.get_type_display }}
+- Job ID: #{{ ctx.job.id }}
+- Started: {{ ctx.job.started_at|date:"Y-m-d H:i:s T" }}
+- Finished: {{ ctx.job.finished_at|date:"Y-m-d H:i:s T" }}
+{% if ctx.job.result_summary_json %}- Summary: {{ ctx.job.result_summary_json }}{% endif %}
+
+View full details: {{ ctx.webnet_url }}/jobs/{{ ctx.job.id }}
+
+---
+This is an automated notification from Webnet Network Automation.
+© Webnet Network Automation | {{ ctx.customer_name }}

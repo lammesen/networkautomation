@@ -4,6 +4,11 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
 from . import views
+from webnet.notifications.views import (
+    SMTPConfigViewSet,
+    NotificationPreferenceViewSet,
+    NotificationEventViewSet,
+)
 
 router = DefaultRouter()
 router.register(r"users", views.UserViewSet, basename="user")
@@ -60,6 +65,12 @@ router.register(r"ansible/playbooks", views.PlaybookViewSet, basename="playbook"
 # Webhook Integration
 router.register(r"webhooks", views.WebhookViewSet, basename="webhook")
 router.register(r"webhook-deliveries", views.WebhookDeliveryViewSet, basename="webhook-delivery")
+# Email Notifications
+router.register(r"notifications/smtp", SMTPConfigViewSet, basename="smtp-config")
+router.register(
+    r"notifications/preferences", NotificationPreferenceViewSet, basename="notification-preference"
+)
+router.register(r"notifications/events", NotificationEventViewSet, basename="notification-event")
 
 urlpatterns = [
     path("auth/login", views.AuthViewSet.as_view({"post": "login"})),

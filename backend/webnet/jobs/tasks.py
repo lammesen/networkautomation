@@ -292,6 +292,7 @@ def compliance_check_job(job_id: int, policy_id: int) -> None:
     # After compliance check completes and results are populated, trigger auto-remediation
     try:
         from webnet.compliance.models import ComplianceResult
+        from webnet.notifications.services import notify_compliance_violation
 
         # Get violations for this policy that were created by this job
         # This ensures we only remediate violations from the current compliance check
@@ -305,9 +306,14 @@ def compliance_check_job(job_id: int, policy_id: int) -> None:
                 level="INFO",
                 message=f"Found {violations.count()} violations, checking for auto-remediation rules",
             )
-            # Trigger auto-remediation for each violation
+            # Trigger auto-remediation and send notifications for each violation
             for violation in violations:
                 trigger_auto_remediation.delay(violation.id)
+                # Send email notification for compliance violation
+                try:
+                    notify_compliance_violation(violation)
+                except Exception as e:
+                    logger.error(f"Failed to send compliance violation notification: {e}")
     except Exception as e:
         logger.error(f"Error triggering auto-remediation: {e}")
 

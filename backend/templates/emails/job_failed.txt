@@ -1,0 +1,21 @@
+Job Failed - Webnet
+
+Hello,
+
+A job has FAILED in {{ ctx.customer_name }} and requires attention.
+
+Status: FAILED
+
+Job Details:
+- Job Type: {{ ctx.job.get_type_display }}
+- Job ID: #{{ ctx.job.id }}
+- Started: {{ ctx.job.started_at|date:"Y-m-d H:i:s T" }}
+- Failed: {{ ctx.job.finished_at|date:"Y-m-d H:i:s T" }}
+
+{% if ctx.job.result_summary_json and ctx.job.result_summary_json.error %}Error: {{ ctx.job.result_summary_json.error }}
+{% endif %}
+View full details and logs: {{ ctx.webnet_url }}/jobs/{{ ctx.job.id }}
+
+---
+This is an automated notification from Webnet Network Automation.
+© Webnet Network Automation | {{ ctx.customer_name }}
