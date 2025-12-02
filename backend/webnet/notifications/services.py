@@ -46,10 +46,11 @@ class EmailService:
         if self.smtp_config:
             # Check if we're in a test environment with locmem backend
             from django.conf import settings
-            if hasattr(settings, 'EMAIL_BACKEND') and 'locmem' in settings.EMAIL_BACKEND:
+
+            if hasattr(settings, "EMAIL_BACKEND") and "locmem" in settings.EMAIL_BACKEND:
                 # Use locmem backend for testing
                 return get_connection(backend=settings.EMAIL_BACKEND)
-            
+
             return get_connection(
                 backend="django.core.mail.backends.smtp.EmailBackend",
                 host=self.smtp_config.host,
@@ -188,11 +189,7 @@ def notify_job_event(job: Job, event_type: str) -> None:
     ).select_related("user")
 
     # Filter by job type if specified
-    preferences = [
-        pref
-        for pref in preferences
-        if not pref.job_types or job.type in pref.job_types
-    ]
+    preferences = [pref for pref in preferences if not pref.job_types or job.type in pref.job_types]
 
     if not preferences:
         logger.debug(f"No notification preferences for {event_type} in customer {job.customer_id}")
@@ -273,7 +270,9 @@ def notify_compliance_violation(compliance_result: ComplianceResult) -> None:
     ).select_related("user")
 
     if not preferences:
-        logger.debug(f"No notification preferences for compliance_violation in customer {customer.id}")
+        logger.debug(
+            f"No notification preferences for compliance_violation in customer {customer.id}"
+        )
         return
 
     # Prepare context

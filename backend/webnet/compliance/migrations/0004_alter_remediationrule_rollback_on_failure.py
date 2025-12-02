@@ -6,13 +6,15 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('compliance', '0003_remediationrule_remediationaction_and_more'),
+        ("compliance", "0003_remediationrule_remediationaction_and_more"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='remediationrule',
-            name='rollback_on_failure',
-            field=models.BooleanField(default=True, help_text='Rollback changes if remediation fails'),
+            model_name="remediationrule",
+            name="rollback_on_failure",
+            field=models.BooleanField(
+                default=True, help_text="Rollback changes if remediation fails"
+            ),
         ),
     ]

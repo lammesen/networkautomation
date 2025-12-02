@@ -5,7 +5,11 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
-from webnet.api.permissions import RolePermission, ObjectCustomerPermission, CustomerScopedQuerysetMixin
+from webnet.api.permissions import (
+    RolePermission,
+    ObjectCustomerPermission,
+    CustomerScopedQuerysetMixin,
+)
 from webnet.notifications.models import SMTPConfig, NotificationPreference, NotificationEvent
 from webnet.notifications.serializers import (
     SMTPConfigSerializer,
@@ -28,20 +32,20 @@ class SMTPConfigViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
     def test_email(self, request, pk=None):
         """Send a test email to verify SMTP configuration."""
         smtp_config = self.get_object()
-        
+
         # Get recipient email from request or use user's email
         recipient = request.data.get("recipient_email", request.user.email)
-        
+
         if not recipient:
             return Response(
                 {"error": "No recipient email address provided or found in user profile"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
         # Send test email
         email_service = EmailService(smtp_config)
         success, error_msg = email_service.send_test_email(recipient)
-        
+
         if success:
             return Response(
                 {"message": f"Test email sent successfully to {recipient}"},
@@ -66,11 +70,11 @@ class NotificationPreferenceViewSet(CustomerScopedQuerysetMixin, viewsets.ModelV
     def get_queryset(self):
         """Filter to current user's preferences unless admin."""
         qs = super().get_queryset()
-        
+
         # Admins can see all preferences, others only their own
         if self.request.user.role != "admin":
             qs = qs.filter(user=self.request.user)
-        
+
         return qs
 
     @action(detail=False, methods=["get"])

@@ -10,7 +10,11 @@ from webnet.jobs.models import Job
 from webnet.compliance.models import CompliancePolicy, ComplianceResult
 from webnet.devices.models import Device, Credential
 from webnet.notifications.models import SMTPConfig, NotificationPreference, NotificationEvent
-from webnet.notifications.services import notify_job_event, notify_compliance_violation, EmailService
+from webnet.notifications.services import (
+    notify_job_event,
+    notify_compliance_violation,
+    EmailService,
+)
 
 
 @pytest.fixture
@@ -73,10 +77,10 @@ class TestEmailNotifications:
         """Test sending a test email."""
         # Use console backend for testing
         settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
-        
+
         email_service = EmailService(smtp_config)
         success, error_msg = email_service.send_test_email("recipient@example.com")
-        
+
         assert success is True
         assert error_msg is None
         assert len(mail.outbox) == 1
@@ -86,7 +90,7 @@ class TestEmailNotifications:
     def test_job_success_notification(self, user, customer, smtp_config, notification_preference):
         """Test job success notification."""
         settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
-        
+
         # Create a completed job
         job = Job.objects.create(
             customer=customer,
@@ -94,15 +98,18 @@ class TestEmailNotifications:
             type="config_backup",
             status="success",
         )
-        
+
         # Send notification
         notify_job_event(job, "job_success")
-        
+
         # Check email was sent
         assert len(mail.outbox) == 1
-        assert "Job Success" in mail.outbox[0].subject or "Job Completed Successfully" in mail.outbox[0].subject
+        assert (
+            "Job Success" in mail.outbox[0].subject
+            or "Job Completed Successfully" in mail.outbox[0].subject
+        )
         assert user.email in mail.outbox[0].to
-        
+
         # Check notification event was logged
         events = NotificationEvent.objects.filter(job=job)
         assert events.count() == 1
@@ -111,7 +118,7 @@ class TestEmailNotifications:
     def test_job_failed_notification(self, user, customer, smtp_config):
         """Test job failed notification."""
         settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
-        
+
         # Create notification preference for failed jobs
         NotificationPreference.objects.create(
             user=user,
@@ -119,7 +126,7 @@ class TestEmailNotifications:
             event_type="job_failed",
             enabled=True,
         )
-        
+
         # Create a failed job
         job = Job.objects.create(
             customer=customer,
@@ -128,10 +135,10 @@ class TestEmailNotifications:
             status="failed",
             result_summary_json={"error": "Connection timeout"},
         )
-        
+
         # Send notification
         notify_job_event(job, "job_failed")
-        
+
         # Check email was sent
         assert len(mail.outbox) == 1
         assert "Job Failed" in mail.outbox[0].subject
@@ -139,7 +146,7 @@ class TestEmailNotifications:
     def test_compliance_violation_notification(self, user, customer, smtp_config):
         """Test compliance violation notification."""
         settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
-        
+
         # Create notification preference
         NotificationPreference.objects.create(
             user=user,
@@ -147,7 +154,7 @@ class TestEmailNotifications:
             event_type="compliance_violation",
             enabled=True,
         )
-        
+
         # Create compliance policy and result
         policy = CompliancePolicy.objects.create(
             customer=customer,
@@ -156,13 +163,13 @@ class TestEmailNotifications:
             definition_yaml="rules: []",
             created_by=user,
         )
-        
+
         credential = Credential.objects.create(
             customer=customer,
             name="test-cred",
             username="admin",
         )
-        
+
         device = Device.objects.create(
             customer=customer,
             hostname="test-router",
@@ -171,14 +178,14 @@ class TestEmailNotifications:
             platform="ios",
             credential=credential,
         )
-        
+
         job = Job.objects.create(
             customer=customer,
             user=user,
             type="compliance_check",
             status="success",
         )
-        
+
         result = ComplianceResult.objects.create(
             policy=policy,
             device=device,
@@ -186,10 +193,10 @@ class TestEmailNotifications:
             status="failed",
             details_json={"error": "Configuration mismatch"},
         )
-        
+
         # Send notification
         notify_compliance_violation(result)
-        
+
         # Check email was sent
         assert len(mail.outbox) == 1
         assert "Compliance Violation" in mail.outbox[0].subject
@@ -197,7 +204,7 @@ class TestEmailNotifications:
     def test_no_smtp_config_no_notification(self, user, customer):
         """Test that no notification is sent when SMTP is not configured."""
         settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
-        
+
         # Create notification preference but no SMTP config
         NotificationPreference.objects.create(
             user=user,
@@ -205,24 +212,24 @@ class TestEmailNotifications:
             event_type="job_success",
             enabled=True,
         )
-        
+
         job = Job.objects.create(
             customer=customer,
             user=user,
             type="config_backup",
             status="success",
         )
-        
+
         # Send notification
         notify_job_event(job, "job_success")
-        
+
         # No email should be sent
         assert len(mail.outbox) == 0
 
     def test_disabled_preference_no_notification(self, user, customer, smtp_config):
         """Test that no notification is sent when preference is disabled."""
         settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
-        
+
         # Create disabled preference
         NotificationPreference.objects.create(
             user=user,
@@ -230,24 +237,24 @@ class TestEmailNotifications:
             event_type="job_success",
             enabled=False,
         )
-        
+
         job = Job.objects.create(
             customer=customer,
             user=user,
             type="config_backup",
             status="success",
         )
-        
+
         # Send notification
         notify_job_event(job, "job_success")
-        
+
         # No email should be sent
         assert len(mail.outbox) == 0
 
     def test_job_type_filter(self, user, customer, smtp_config):
         """Test that notifications can be filtered by job type."""
         settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
-        
+
         # Create preference only for config_backup jobs
         NotificationPreference.objects.create(
             user=user,
@@ -256,7 +263,7 @@ class TestEmailNotifications:
             enabled=True,
             job_types=["config_backup"],
         )
-        
+
         # Test with matching job type
         job1 = Job.objects.create(
             customer=customer,
@@ -266,7 +273,7 @@ class TestEmailNotifications:
         )
         notify_job_event(job1, "job_success")
         assert len(mail.outbox) == 1
-        
+
         # Test with non-matching job type
         mail.outbox.clear()
         job2 = Job.objects.create(
@@ -281,7 +288,7 @@ class TestEmailNotifications:
     def test_custom_email_address(self, user, customer, smtp_config):
         """Test using custom email address in preferences."""
         settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
-        
+
         custom_email = "custom@example.com"
         NotificationPreference.objects.create(
             user=user,
@@ -290,16 +297,16 @@ class TestEmailNotifications:
             enabled=True,
             email_address=custom_email,
         )
-        
+
         job = Job.objects.create(
             customer=customer,
             user=user,
             type="config_backup",
             status="success",
         )
-        
+
         notify_job_event(job, "job_success")
-        
+
         assert len(mail.outbox) == 1
         assert custom_email in mail.outbox[0].to
         assert user.email not in mail.outbox[0].to

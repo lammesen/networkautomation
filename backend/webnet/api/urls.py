@@ -4,6 +4,11 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
 from . import views
+from webnet.notifications.views import (
+    SMTPConfigViewSet,
+    NotificationPreferenceViewSet,
+    NotificationEventViewSet,
+)
 
 router = DefaultRouter()
 router.register(r"users", views.UserViewSet, basename="user")
@@ -41,11 +46,11 @@ router.register(r"config/drift/alerts", views.DriftAlertViewSet, basename="drift
 # NetBox Integration (Issue #9)
 router.register(r"integrations/netbox", views.NetBoxConfigViewSet, basename="netbox-config")
 # Email Notifications
-router.register(r"notifications/smtp", views.SMTPConfigViewSet, basename="smtp-config")
+router.register(r"notifications/smtp", SMTPConfigViewSet, basename="smtp-config")
 router.register(
-    r"notifications/preferences", views.NotificationPreferenceViewSet, basename="notification-preference"
+    r"notifications/preferences", NotificationPreferenceViewSet, basename="notification-preference"
 )
-router.register(r"notifications/events", views.NotificationEventViewSet, basename="notification-event")
+router.register(r"notifications/events", NotificationEventViewSet, basename="notification-event")
 
 urlpatterns = [
     path("auth/login", views.AuthViewSet.as_view({"post": "login"})),

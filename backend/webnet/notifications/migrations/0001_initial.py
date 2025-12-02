@@ -10,71 +10,177 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('compliance', '0004_alter_remediationrule_rollback_on_failure'),
-        ('customers', '0002_customer_ssh_host_key_policy'),
-        ('jobs', '0004_git_integration'),
+        ("compliance", "0004_alter_remediationrule_rollback_on_failure"),
+        ("customers", "0002_customer_ssh_host_key_policy"),
+        ("jobs", "0004_git_integration"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='SMTPConfig',
+            name="SMTPConfig",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('host', models.CharField(help_text='SMTP server hostname', max_length=255)),
-                ('port', models.IntegerField(default=587, help_text='SMTP server port')),
-                ('use_tls', models.BooleanField(default=True, help_text='Use TLS encryption')),
-                ('use_ssl', models.BooleanField(default=False, help_text='Use SSL encryption')),
-                ('username', models.CharField(blank=True, max_length=255, null=True)),
-                ('password', models.CharField(blank=True, max_length=255, null=True)),
-                ('from_email', models.EmailField(help_text='From address for sent emails', max_length=254)),
-                ('reply_to_email', models.EmailField(blank=True, max_length=254, null=True)),
-                ('enabled', models.BooleanField(default=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('customer', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='smtp_config', to='customers.customer')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                ("host", models.CharField(help_text="SMTP server hostname", max_length=255)),
+                ("port", models.IntegerField(default=587, help_text="SMTP server port")),
+                ("use_tls", models.BooleanField(default=True, help_text="Use TLS encryption")),
+                ("use_ssl", models.BooleanField(default=False, help_text="Use SSL encryption")),
+                ("username", models.CharField(blank=True, max_length=255, null=True)),
+                ("password", models.CharField(blank=True, max_length=255, null=True)),
+                (
+                    "from_email",
+                    models.EmailField(help_text="From address for sent emails", max_length=254),
+                ),
+                ("reply_to_email", models.EmailField(blank=True, max_length=254, null=True)),
+                ("enabled", models.BooleanField(default=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "customer",
+                    models.OneToOneField(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="smtp_config",
+                        to="customers.customer",
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'SMTP Configuration',
-                'verbose_name_plural': 'SMTP Configurations',
+                "verbose_name": "SMTP Configuration",
+                "verbose_name_plural": "SMTP Configurations",
             },
         ),
         migrations.CreateModel(
-            name='NotificationEvent',
+            name="NotificationEvent",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('recipient_email', models.EmailField(max_length=254)),
-                ('event_type', models.CharField(max_length=50)),
-                ('subject', models.CharField(max_length=255)),
-                ('status', models.CharField(choices=[('pending', 'Pending'), ('sent', 'Sent'), ('failed', 'Failed')], default='pending', max_length=20)),
-                ('error_message', models.TextField(blank=True, null=True)),
-                ('sent_at', models.DateTimeField(blank=True, null=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('compliance_result', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='notification_events', to='compliance.complianceresult')),
-                ('customer', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='notification_events', to='customers.customer')),
-                ('job', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='notification_events', to='jobs.job')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                ("recipient_email", models.EmailField(max_length=254)),
+                ("event_type", models.CharField(max_length=50)),
+                ("subject", models.CharField(max_length=255)),
+                (
+                    "status",
+                    models.CharField(
+                        choices=[("pending", "Pending"), ("sent", "Sent"), ("failed", "Failed")],
+                        default="pending",
+                        max_length=20,
+                    ),
+                ),
+                ("error_message", models.TextField(blank=True, null=True)),
+                ("sent_at", models.DateTimeField(blank=True, null=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "compliance_result",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="notification_events",
+                        to="compliance.complianceresult",
+                    ),
+                ),
+                (
+                    "customer",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="notification_events",
+                        to="customers.customer",
+                    ),
+                ),
+                (
+                    "job",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="notification_events",
+                        to="jobs.job",
+                    ),
+                ),
             ],
             options={
-                'ordering': ['-created_at'],
-                'indexes': [models.Index(fields=['customer'], name='notificatio_custome_edbb67_idx'), models.Index(fields=['event_type'], name='notificatio_event_t_144f55_idx'), models.Index(fields=['status'], name='notificatio_status_3ddfba_idx'), models.Index(fields=['created_at'], name='notificatio_created_07fd57_idx')],
+                "ordering": ["-created_at"],
+                "indexes": [
+                    models.Index(fields=["customer"], name="notificatio_custome_edbb67_idx"),
+                    models.Index(fields=["event_type"], name="notificatio_event_t_144f55_idx"),
+                    models.Index(fields=["status"], name="notificatio_status_3ddfba_idx"),
+                    models.Index(fields=["created_at"], name="notificatio_created_07fd57_idx"),
+                ],
             },
         ),
         migrations.CreateModel(
-            name='NotificationPreference',
+            name="NotificationPreference",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('event_type', models.CharField(choices=[('job_success', 'Job Completed (Success)'), ('job_failed', 'Job Failed'), ('job_partial', 'Job Partial Success'), ('compliance_violation', 'Compliance Violation Detected'), ('scheduled_backup_complete', 'Scheduled Backup Completed')], max_length=50)),
-                ('enabled', models.BooleanField(default=True)),
-                ('email_address', models.EmailField(blank=True, help_text="Override email (leave blank to use user's email)", max_length=254, null=True)),
-                ('job_types', models.JSONField(blank=True, help_text='Filter by job types (null = all types)', null=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('customer', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='notification_preferences', to='customers.customer')),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='notification_preferences', to=settings.AUTH_USER_MODEL)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                (
+                    "event_type",
+                    models.CharField(
+                        choices=[
+                            ("job_success", "Job Completed (Success)"),
+                            ("job_failed", "Job Failed"),
+                            ("job_partial", "Job Partial Success"),
+                            ("compliance_violation", "Compliance Violation Detected"),
+                            ("scheduled_backup_complete", "Scheduled Backup Completed"),
+                        ],
+                        max_length=50,
+                    ),
+                ),
+                ("enabled", models.BooleanField(default=True)),
+                (
+                    "email_address",
+                    models.EmailField(
+                        blank=True,
+                        help_text="Override email (leave blank to use user's email)",
+                        max_length=254,
+                        null=True,
+                    ),
+                ),
+                (
+                    "job_types",
+                    models.JSONField(
+                        blank=True, help_text="Filter by job types (null = all types)", null=True
+                    ),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "customer",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="notification_preferences",
+                        to="customers.customer",
+                    ),
+                ),
+                (
+                    "user",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="notification_preferences",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
             options={
-                'indexes': [models.Index(fields=['user'], name='notificatio_user_id_0299fd_idx'), models.Index(fields=['customer'], name='notificatio_custome_27c682_idx'), models.Index(fields=['event_type'], name='notificatio_event_t_b2be23_idx'), models.Index(fields=['enabled'], name='notificatio_enabled_d5f339_idx')],
-                'unique_together': {('user', 'customer', 'event_type')},
+                "indexes": [
+                    models.Index(fields=["user"], name="notificatio_user_id_0299fd_idx"),
+                    models.Index(fields=["customer"], name="notificatio_custome_27c682_idx"),
+                    models.Index(fields=["event_type"], name="notificatio_event_t_b2be23_idx"),
+                    models.Index(fields=["enabled"], name="notificatio_enabled_d5f339_idx"),
+                ],
+                "unique_together": {("user", "customer", "event_type")},
             },
         ),
     ]

@@ -74,23 +74,23 @@ class JobService:
         )
         # Broadcast job status change
         broadcast_job_update(job, action="updated")
-        
+
         # Send email notifications for completed jobs
         if status in {"success", "partial", "failed"}:
             self._send_job_notification(job, status)
-        
+
         return job
 
     def _send_job_notification(self, job: Job, status: str) -> None:
         """Send email notification for job completion.
-        
+
         Args:
             job: Completed job
             status: Job status (success, partial, failed)
         """
         try:
             from webnet.notifications.services import notify_job_event
-            
+
             # Map job status to notification event type
             event_type_map = {
                 "success": "job_success",
