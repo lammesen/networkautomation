@@ -3,6 +3,7 @@
 from rest_framework import serializers
 from webnet.users.models import User, APIKey
 from webnet.customers.models import Customer, CustomerIPRange
+from webnet.core.models import Region
 from webnet.devices.models import (
     Device,
     Credential,
@@ -877,8 +878,6 @@ class RegionSerializer(serializers.ModelSerializer):
     is_available = serializers.ReadOnlyField()
 
     class Meta:
-        from webnet.core.models import Region
-
         model = Region
         fields = [
             "id",

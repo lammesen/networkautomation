@@ -25,6 +25,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 
 from webnet.users.models import User, APIKey
 from webnet.customers.models import Customer, CustomerIPRange
+from webnet.core.models import Region
 from webnet.devices.models import (
     Device,
     Credential,
@@ -86,6 +87,9 @@ from .serializers import (
     NetBoxConfigSerializer,
     NetBoxSyncLogSerializer,
     NetBoxSyncRequestSerializer,
+    # Multi-region Deployment Support
+    RegionSerializer,
+    RegionHealthUpdateSerializer,
 )
 from .permissions import (
     RolePermission,
@@ -2074,21 +2078,16 @@ class NetBoxConfigViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
 class RegionViewSet(viewsets.ModelViewSet):
     """ViewSet for managing regions in multi-region deployment."""
 
-    from webnet.core.models import Region
-    from .serializers import RegionSerializer, RegionHealthUpdateSerializer
-
-    serializer_class = None  # Will be set in get_serializer_class
+    serializer_class = RegionSerializer
     permission_classes = [IsAuthenticated, RolePermission, ObjectCustomerPermission]
     customer_field = "customer_id"
 
     def get_serializer_class(self):
         if self.action == "update_health":
-            return self.RegionHealthUpdateSerializer
-        return self.RegionSerializer
+            return RegionHealthUpdateSerializer
+        return RegionSerializer
 
     def get_queryset(self):
-        from webnet.core.models import Region
-
         user = self.request.user
         if not user.is_authenticated:
             return Region.objects.none()
@@ -2111,7 +2110,7 @@ class RegionViewSet(viewsets.ModelViewSet):
     def update_health(self, request, pk=None):
         """Update health status of a region."""
         region = self.get_object()
-        serializer = self.RegionHealthUpdateSerializer(data=request.data)
+        serializer = RegionHealthUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         health_status = serializer.validated_data["health_status"]
@@ -2119,15 +2118,15 @@ class RegionViewSet(viewsets.ModelViewSet):
 
         region.update_health_status(health_status, message)
 
-        return Response(self.RegionSerializer(region).data)
+        return Response(RegionSerializer(region).data)
 
     @action(detail=True, methods=["get"])
     def jobs(self, request, pk=None):
         """Get jobs associated with this region."""
-        from .serializers import JobSerializer
-
         region = self.get_object()
-        jobs = Job.objects.filter(region=region).order_by("-requested_at")[:100]
+        jobs = Job.objects.filter(region=region, customer=region.customer).order_by(
+            "-requested_at"
+        )[:100]
 
         serializer = JobSerializer(jobs, many=True)
         return Response(serializer.data)
@@ -2135,10 +2134,10 @@ class RegionViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"])
     def devices(self, request, pk=None):
         """Get devices assigned to this region."""
-        from .serializers import DeviceSerializer
-
         region = self.get_object()
-        devices = Device.objects.filter(region=region).order_by("hostname")
+        devices = Device.objects.filter(region=region, customer=region.customer).order_by(
+            "hostname"
+        )[:100]
 
         serializer = DeviceSerializer(devices, many=True)
         return Response(serializer.data)

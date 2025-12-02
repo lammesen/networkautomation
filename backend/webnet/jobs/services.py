@@ -140,9 +140,7 @@ class JobService:
 
         # Get regions from target devices
         device_regions = (
-            devices_qs.exclude(region__isnull=True)
-            .values_list("region", flat=True)
-            .distinct()
+            devices_qs.exclude(region__isnull=True).values_list("region", flat=True).distinct()
         )
 
         if not device_regions:
@@ -150,11 +148,15 @@ class JobService:
             return None
 
         # If multiple regions, select the highest priority available one
-        regions = Region.objects.filter(
-            id__in=device_regions,
-            customer=job.customer,
-            enabled=True,
-        ).exclude(health_status=Region.STATUS_OFFLINE).order_by("-priority", "name")
+        regions = (
+            Region.objects.filter(
+                id__in=device_regions,
+                customer=job.customer,
+                enabled=True,
+            )
+            .exclude(health_status=Region.STATUS_OFFLINE)
+            .order_by("-priority", "name")
+        )
 
         if regions.exists():
             selected_region = regions.first()
@@ -268,11 +270,15 @@ class JobService:
             job.region = region
             job.save(update_fields=["region"])
             queue_name = region.queue_name
-            logger.info("Job %s assigned to region %s (queue=%s)", job.id, region.identifier, queue_name)
+            logger.info(
+                "Job %s assigned to region %s (queue=%s)", job.id, region.identifier, queue_name
+            )
 
         try:
             # Send task to appropriate queue
             self.dispatcher(task_name, args=args_fn(job), queue=queue_name)
         except Exception as e:
-            logger.error("Failed to enqueue job %s (type=%s, queue=%s): %s", job.id, job.type, queue_name, e)
+            logger.error(
+                "Failed to enqueue job %s (type=%s, queue=%s): %s", job.id, job.type, queue_name, e
+            )
             # leave job queued; caller may retry

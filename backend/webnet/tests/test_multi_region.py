@@ -190,6 +190,9 @@ class TestRegionAPI:
         )
         assert response.status_code == 200
         assert response.json()["health_status"] == "degraded"
+        # Verify message was stored
+        region_us_east.refresh_from_db()
+        assert region_us_east.worker_pool_config.get("last_health_message") == "High latency"
 
     def test_get_region_devices(self, user, region_us_east, device_in_us_east):
         """Test getting devices assigned to a region."""
@@ -211,9 +214,7 @@ class TestRegionAPI:
 class TestJobRegionRouting:
     """Test job routing to regional queues."""
 
-    def test_job_routed_to_device_region(
-        self, customer, user, device_in_us_east, region_us_east
-    ):
+    def test_job_routed_to_device_region(self, customer, user, device_in_us_east, region_us_east):
         """Test that jobs are routed to the device's region."""
         dispatched_tasks = []
 
@@ -318,6 +319,33 @@ class TestJobRegionRouting:
         """Test that jobs fall back to default queue when region is offline."""
         # Mark region as offline
         region_us_east.health_status = Region.STATUS_OFFLINE
+        region_us_east.save()
+
+        dispatched_tasks = []
+
+        def mock_dispatcher(task_name, args=None, queue=None):
+            dispatched_tasks.append({"task": task_name, "args": args, "queue": queue})
+
+        service = JobService(dispatcher=mock_dispatcher)
+        job = service.create_job(
+            job_type="run_commands",
+            user=user,
+            customer=customer,
+            target_summary={"filters": {"site": "us-east-datacenter"}},
+            payload={"commands": ["show version"]},
+        )
+
+        # Verify job falls back to default queue
+        job.refresh_from_db()
+        assert job.region is None
+        assert dispatched_tasks[0]["queue"] is None
+
+    def test_job_fallback_when_region_disabled(
+        self, customer, user, device_in_us_east, region_us_east
+    ):
+        """Test that jobs fall back to default queue when region is disabled."""
+        # Mark region as disabled
+        region_us_east.enabled = False
         region_us_east.save()
 
         dispatched_tasks = []

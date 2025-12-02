@@ -105,10 +105,16 @@ class Region(models.Model):
         Args:
             status: New health status (healthy, degraded, offline)
             message: Optional message describing the health status
+
+        Raises:
+            ValueError: If status is not a valid choice
         """
+        valid_statuses = {choice[0] for choice in self.STATUS_CHOICES}
+        if status not in valid_statuses:
+            raise ValueError(f"Invalid status: {status}. Must be one of {valid_statuses}")
+
         self.health_status = status
         self.last_health_check = timezone.now()
-        if message and self.worker_pool_config:
+        if message:
             self.worker_pool_config["last_health_message"] = message
         self.save(update_fields=["health_status", "last_health_check", "worker_pool_config"])
-

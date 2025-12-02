@@ -7,19 +7,26 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('core', '0001_add_region_model'),
-        ('customers', '0002_customer_ssh_host_key_policy'),
-        ('devices', '0007_merge_20251202_0016'),
+        ("core", "0001_add_region_model"),
+        ("customers", "0002_customer_ssh_host_key_policy"),
+        ("devices", "0007_merge_20251202_0016"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='device',
-            name='region',
-            field=models.ForeignKey(blank=True, help_text="Region where this device's automation jobs should be executed", null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='devices', to='core.region'),
+            model_name="device",
+            name="region",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="Region where this device's automation jobs should be executed",
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                related_name="devices",
+                to="core.region",
+            ),
         ),
         migrations.AddIndex(
-            model_name='device',
-            index=models.Index(fields=['region'], name='devices_dev_region__acea19_idx'),
+            model_name="device",
+            index=models.Index(fields=["region"], name="devices_dev_region__acea19_idx"),
         ),
     ]

@@ -8,20 +8,27 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('core', '0001_add_region_model'),
-        ('customers', '0002_customer_ssh_host_key_policy'),
-        ('jobs', '0004_git_integration'),
+        ("core", "0001_add_region_model"),
+        ("customers", "0002_customer_ssh_host_key_policy"),
+        ("jobs", "0004_git_integration"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='job',
-            name='region',
-            field=models.ForeignKey(blank=True, help_text='Region where this job is/was executed', null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='jobs', to='core.region'),
+            model_name="job",
+            name="region",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="Region where this job is/was executed",
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                related_name="jobs",
+                to="core.region",
+            ),
         ),
         migrations.AddIndex(
-            model_name='job',
-            index=models.Index(fields=['region'], name='jobs_job_region__e7ef88_idx'),
+            model_name="job",
+            index=models.Index(fields=["region"], name="jobs_job_region__e7ef88_idx"),
         ),
     ]
