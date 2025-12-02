@@ -108,23 +108,18 @@ def job_saved(sender, instance, created, **kwargs):
 
 
 @receiver(post_save, sender=Device)
-def device_saved(sender, instance, created, **kwargs):
+def device_saved(sender, instance, created, update_fields=None, **kwargs):
     """Trigger webhook when device is created or updated."""
-    # Track previous reachability status to detect status changes
     if created:
         action = "created"
         event_type = "device.created"
     else:
-        # Check if reachability status changed
-        try:
-            old_instance = Device.objects.get(pk=instance.pk)
-            if old_instance.reachability_status != instance.reachability_status:
-                event_type = "device.status_changed"
-                action = "status_changed"
-            else:
-                event_type = "device.updated"
-                action = "updated"
-        except Device.DoesNotExist:
+        # Check if reachability status changed based on update_fields
+        # If update_fields is None, all fields were potentially updated
+        if update_fields and "reachability_status" in update_fields:
+            event_type = "device.status_changed"
+            action = "status_changed"
+        else:
             event_type = "device.updated"
             action = "updated"
 

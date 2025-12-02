@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import logging
 import time
 from datetime import timedelta
@@ -60,8 +61,6 @@ def deliver_webhook(self, delivery_id: int) -> None:
         return
 
     # Prepare payload as JSON bytes
-    import json
-
     payload_str = json.dumps(delivery.payload)
     payload_bytes = payload_str.encode("utf-8")
 
