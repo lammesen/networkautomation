@@ -255,7 +255,12 @@ CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", "redis://localhost:6379/1")
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_ACKS_LATE = True
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
-CELERY_BEAT_SCHEDULE = {}
+CELERY_BEAT_SCHEDULE = {
+    "process-due-schedules": {
+        "task": "process_due_schedules",
+        "schedule": 60.0,  # Run every 60 seconds
+    },
+}
 
 # Logging (minimal; extend later)
 LOGGING = {

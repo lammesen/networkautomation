@@ -1476,3 +1476,21 @@ def auto_remediation_job(rule_id: int, compliance_result_id: int) -> None:
         action.finished_at = timezone.now()
         action.save(update_fields=["status", "error_message", "finished_at"])
         js.set_status(job, "failed", result_summary={"error": str(e)})
+
+
+@shared_task(name="process_due_schedules")
+def process_due_schedules() -> dict:
+    """
+    Process all schedules that are due to run.
+    This task should be run periodically (e.g., every minute) via Celery Beat.
+    """
+    from webnet.jobs.schedule_service import ScheduleService
+    
+    ss = ScheduleService()
+    try:
+        count = ss.process_due_schedules()
+        logger.info(f"Processed {count} due schedules")
+        return {"processed": count, "status": "success"}
+    except Exception as e:
+        logger.error(f"Failed to process due schedules: {e}", exc_info=True)
+        return {"processed": 0, "status": "failed", "error": str(e)}

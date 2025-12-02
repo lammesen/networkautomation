@@ -12,6 +12,7 @@ router.register(r"credentials", views.CredentialViewSet, basename="credential")
 router.register(r"devices", views.DeviceViewSet, basename="device")
 router.register(r"jobs", views.JobViewSet, basename="job")
 router.register(r"jobs/admin", views.JobAdminViewSet, basename="job-admin")
+router.register(r"schedules", views.ScheduleViewSet, basename="schedule")
 router.register(r"compliance/policies", views.CompliancePolicyViewSet, basename="compliance-policy")
 router.register(r"compliance/results", views.ComplianceResultViewSet, basename="compliance-result")
 router.register(
