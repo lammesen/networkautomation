@@ -14,5 +14,6 @@ urlpatterns = [
     path("login/", auth_views.LoginView.as_view(template_name="auth/login.html"), name="login"),
     path("logout/", ui_views.logout_view, name="logout"),
     path("api/v1/", include("webnet.api.urls")),
+    path("api/graphql/", include("webnet.graphql_api.urls")),
     path("", include("webnet.ui.urls")),
 ]
