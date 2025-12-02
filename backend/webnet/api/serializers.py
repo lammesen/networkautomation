@@ -885,6 +885,8 @@ class AnsibleConfigSerializer(serializers.ModelSerializer):
 
 
 class PlaybookSerializer(serializers.ModelSerializer):
+    uploaded_file = serializers.FileField(required=False, allow_null=True)
+
     class Meta:
         model = Playbook
         fields = [
@@ -897,6 +899,7 @@ class PlaybookSerializer(serializers.ModelSerializer):
             "git_repo_url",
             "git_branch",
             "git_path",
+            "uploaded_file",
             "variables",
             "tags",
             "enabled",

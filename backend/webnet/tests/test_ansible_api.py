@@ -5,9 +5,8 @@ from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 
 from webnet.customers.models import Customer
-from webnet.ansible_mgmt.models import Playbook, AnsibleConfig
+from webnet.ansible_mgmt.models import Playbook
 from webnet.jobs.models import Job
-from webnet.devices.models import Device, Credential
 
 User = get_user_model()
 
@@ -223,3 +222,68 @@ def test_playbook_customer_scoping():
     # User B should not see Playbook A
     resp = client.get(f"/api/v1/ansible/playbooks/{playbook_a.id}/")
     assert resp.status_code in {403, 404}
+
+
+@pytest.mark.django_db
+def test_playbook_git_source():
+    """Test creating a playbook with git source."""
+    customer = Customer.objects.create(name="Acme")
+    user = User.objects.create_user(username="admin", password="test123", role="admin")
+    user.customers.add(customer)
+
+    client = APIClient()
+    client.login(username="admin", password="test123")
+
+    resp = client.post(
+        "/api/v1/ansible/playbooks/",
+        {
+            "customer": customer.id,
+            "name": "Git Playbook",
+            "description": "A playbook from git",
+            "source_type": "git",
+            "git_repo_url": "https://github.com/example/playbooks.git",
+            "git_branch": "main",
+            "git_path": "playbooks/setup.yml",
+            "variables": {},
+            "tags": ["git"],
+        },
+        format="json",
+    )
+    assert resp.status_code == 201
+    assert resp.json()["source_type"] == "git"
+    assert resp.json()["git_repo_url"] == "https://github.com/example/playbooks.git"
+    assert resp.json()["git_branch"] == "main"
+    assert resp.json()["git_path"] == "playbooks/setup.yml"
+
+
+@pytest.mark.django_db
+def test_playbook_upload_source():
+    """Test creating a playbook with upload source."""
+    from io import BytesIO
+
+    customer = Customer.objects.create(name="Acme")
+    user = User.objects.create_user(username="admin", password="test123", role="admin")
+    user.customers.add(customer)
+
+    client = APIClient()
+    client.login(username="admin", password="test123")
+
+    playbook_content = b"---\n- hosts: all\n  tasks:\n    - debug: msg='test'\n"
+    file = BytesIO(playbook_content)
+    file.name = "test_playbook.yml"
+
+    # First create with minimal data
+    resp = client.post(
+        "/api/v1/ansible/playbooks/",
+        {
+            "customer": customer.id,
+            "name": "Uploaded Playbook",
+            "description": "A playbook from upload",
+            "source_type": "upload",
+            "uploaded_file": file,
+        },
+        format="multipart",
+    )
+    assert resp.status_code == 201
+    assert resp.json()["source_type"] == "upload"
+    assert "uploaded_file" in resp.json()

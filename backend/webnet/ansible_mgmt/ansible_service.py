@@ -15,6 +15,74 @@ from webnet.devices.models import Device
 logger = logging.getLogger(__name__)
 
 
+def fetch_playbook_from_git(
+    git_repo_url: str,
+    git_branch: str,
+    git_path: str,
+    timeout: int = 60,
+) -> tuple[bool, str, str]:
+    """Fetch playbook content from a Git repository.
+
+    Args:
+        git_repo_url: Git repository URL (HTTPS or SSH)
+        git_branch: Branch name to fetch from
+        git_path: Path to playbook file within the repository
+        timeout: Operation timeout in seconds
+
+    Returns:
+        Tuple of (success, content, error_message)
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmppath = Path(tmpdir)
+        repo_dir = tmppath / "repo"
+
+        try:
+            # Clone the repository (shallow clone for efficiency)
+            logger.info(f"Cloning Git repository: {git_repo_url} (branch: {git_branch})")
+            result = subprocess.run(
+                [
+                    "git",
+                    "clone",
+                    "--depth",
+                    "1",
+                    "--branch",
+                    git_branch,
+                    "--single-branch",
+                    git_repo_url,
+                    str(repo_dir),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+            )
+
+            if result.returncode != 0:
+                error_msg = result.stderr.strip() or "Failed to clone repository"
+                logger.error(f"Git clone failed: {error_msg}")
+                return False, "", error_msg
+
+            # Read the playbook file
+            playbook_file = repo_dir / git_path
+            if not playbook_file.exists():
+                error_msg = f"Playbook file not found at path: {git_path}"
+                logger.error(error_msg)
+                return False, "", error_msg
+
+            content = playbook_file.read_text()
+            logger.info(f"Successfully fetched playbook from Git: {len(content)} bytes")
+            return True, content, ""
+
+        except subprocess.TimeoutExpired:
+            error_msg = f"Git clone timed out after {timeout} seconds"
+            logger.error(error_msg)
+            return False, "", error_msg
+        except Exception as e:
+            error_msg = f"Error fetching playbook from Git: {str(e)}"
+            logger.exception(error_msg)
+            return False, "", error_msg
+
+
 def generate_ansible_inventory(
     filters: dict | None = None, customer_id: int | None = None
 ) -> dict[str, Any]:

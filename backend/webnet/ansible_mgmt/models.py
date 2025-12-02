@@ -89,6 +89,12 @@ class Playbook(models.Model):
         default="",
         help_text="Path to playbook within git repository",
     )
+    uploaded_file = models.FileField(
+        upload_to="playbooks/%Y/%m/",
+        blank=True,
+        null=True,
+        help_text="Uploaded playbook file (for upload source)",
+    )
     variables = models.JSONField(
         default=dict,
         blank=True,

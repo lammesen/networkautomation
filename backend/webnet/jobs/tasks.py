@@ -52,6 +52,7 @@ from webnet.config_mgmt.models import ConfigSnapshot
 from webnet.ansible_mgmt.ansible_service import (
     generate_ansible_inventory,
     execute_ansible_playbook,
+    fetch_playbook_from_git,
 )
 
 logger = logging.getLogger(__name__)
@@ -1559,17 +1560,36 @@ def ansible_playbook_job(
     if playbook.source_type == "inline":
         playbook_content = playbook.content
     elif playbook.source_type == "git":
-        js.append_log(
-            job, level="ERROR", message="Git repository source not yet implemented"
+        js.append_log(job, level="INFO", message="Fetching playbook from Git repository")
+        success, content, error = fetch_playbook_from_git(
+            git_repo_url=playbook.git_repo_url,
+            git_branch=playbook.git_branch or "main",
+            git_path=playbook.git_path,
         )
-        js.set_status(job, "failed", result_summary={"error": "git source not implemented"})
-        return
+        if not success:
+            js.append_log(job, level="ERROR", message=f"Failed to fetch from Git: {error}")
+            js.set_status(job, "failed", result_summary={"error": f"git fetch failed: {error}"})
+            return
+        playbook_content = content
+        js.append_log(
+            job, level="INFO", message=f"Successfully fetched playbook ({len(content)} bytes)"
+        )
     elif playbook.source_type == "upload":
-        js.append_log(
-            job, level="ERROR", message="File upload source not yet implemented"
-        )
-        js.set_status(job, "failed", result_summary={"error": "upload source not implemented"})
-        return
+        if not playbook.uploaded_file:
+            js.append_log(job, level="ERROR", message="No file uploaded for playbook")
+            js.set_status(job, "failed", result_summary={"error": "no uploaded file"})
+            return
+        try:
+            playbook_content = playbook.uploaded_file.read().decode("utf-8")
+            js.append_log(
+                job,
+                level="INFO",
+                message=f"Successfully loaded uploaded playbook ({len(playbook_content)} bytes)",
+            )
+        except Exception as e:
+            js.append_log(job, level="ERROR", message=f"Failed to read uploaded file: {str(e)}")
+            js.set_status(job, "failed", result_summary={"error": f"file read failed: {str(e)}"})
+            return
 
     if not playbook_content:
         js.append_log(job, level="ERROR", message="Playbook content is empty")
@@ -1632,4 +1652,3 @@ def ansible_playbook_job(
                 "playbook_name": playbook.name,
             },
         )
-
