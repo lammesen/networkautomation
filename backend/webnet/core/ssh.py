@@ -6,8 +6,12 @@ import asyncssh
 import logging
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from django.conf import settings
+
+if TYPE_CHECKING:
+    from webnet.devices.models import Device
 
 logger = logging.getLogger(__name__)
 
@@ -78,16 +82,51 @@ class SSHSessionError(Exception):
 
 
 class SSHSessionManager:
-    async def open_session(self, host: str, port: int, username: str, password: str) -> SSHSession:
+    async def open_session(
+        self, host: str, port: int, username: str, password: str, device: Device | None = None
+    ) -> SSHSession:
+        """Open an SSH session with optional database-backed host key verification.
+
+        Args:
+            host: Hostname or IP to connect to
+            port: SSH port
+            username: SSH username
+            password: SSH password
+            device: Optional Device instance for database-backed host key verification.
+                    If provided, uses customer's SSH policy. If None, falls back to file-based
+                    known_hosts verification.
+
+        Returns:
+            SSHSession instance
+
+        Raises:
+            SSHSessionError: If connection fails or host key verification fails
+        """
         try:
-            known_hosts = _resolve_known_hosts()
-            conn = await asyncssh.connect(
-                host=host,
-                port=port,
-                username=username,
-                password=password,
-                known_hosts=known_hosts,
-            )
+            # If device is provided, use database-backed verification
+            if device is not None:
+                from webnet.core.ssh_host_keys import DatabaseKnownHostsCallback
+
+                callback = DatabaseKnownHostsCallback(device)
+                # Use empty known_hosts to force validation callback
+                conn = await asyncssh.connect(
+                    host=host,
+                    port=port,
+                    username=username,
+                    password=password,
+                    known_hosts=b"",  # Empty known_hosts forces callback validation
+                    validate_host_public_key=callback.validate_host_public_key,
+                )
+            else:
+                # Fallback to file-based known_hosts
+                known_hosts = _resolve_known_hosts()
+                conn = await asyncssh.connect(
+                    host=host,
+                    port=port,
+                    username=username,
+                    password=password,
+                    known_hosts=known_hosts,
+                )
             return SSHSession(conn)
         except SSHSessionError:
             raise

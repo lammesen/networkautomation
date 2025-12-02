@@ -3,7 +3,13 @@
 from rest_framework import serializers
 from webnet.users.models import User, APIKey
 from webnet.customers.models import Customer, CustomerIPRange
-from webnet.devices.models import Device, Credential, TopologyLink, DiscoveredDevice
+from webnet.devices.models import (
+    Device,
+    Credential,
+    TopologyLink,
+    DiscoveredDevice,
+    SSHHostKey,
+)
 from webnet.devices.models import NetBoxConfig, NetBoxSyncLog
 from webnet.jobs.models import Job, JobLog
 from webnet.config_mgmt.models import ConfigSnapshot, ConfigTemplate, ConfigDrift, DriftAlert
@@ -48,7 +54,7 @@ class APIKeySerializer(serializers.ModelSerializer):
 class CustomerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Customer
-        fields = ["id", "name", "description", "created_at"]
+        fields = ["id", "name", "description", "ssh_host_key_policy", "created_at"]
 
 
 class CustomerIPRangeSerializer(serializers.ModelSerializer):
@@ -311,6 +317,66 @@ class TopologyLinkSerializer(serializers.ModelSerializer):
             "job_id",
         ]
         read_only_fields = ["discovered_at", "job_id"]
+
+
+class SSHHostKeySerializer(serializers.ModelSerializer):
+    """Serializer for SSH host keys."""
+
+    device_hostname = serializers.CharField(source="device.hostname", read_only=True)
+    verified_by_username = serializers.CharField(
+        source="verified_by.username", read_only=True, allow_null=True
+    )
+    fingerprint_display = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = SSHHostKey
+        fields = [
+            "id",
+            "device",
+            "device_hostname",
+            "key_type",
+            "public_key",
+            "fingerprint_sha256",
+            "fingerprint_display",
+            "first_seen_at",
+            "last_seen_at",
+            "verified",
+            "verified_by",
+            "verified_by_username",
+            "verified_at",
+        ]
+        read_only_fields = [
+            "first_seen_at",
+            "last_seen_at",
+            "verified_by",
+            "verified_at",
+        ]
+
+
+class SSHHostKeyVerifySerializer(serializers.Serializer):
+    """Serializer for manually verifying/unverifying SSH host keys."""
+
+    verified = serializers.BooleanField(required=True)
+
+
+class SSHHostKeyImportSerializer(serializers.Serializer):
+    """Serializer for importing SSH host keys from known_hosts format."""
+
+    device_id = serializers.IntegerField(required=True)
+    known_hosts_line = serializers.CharField(
+        required=True,
+        max_length=4096,
+        trim_whitespace=True,
+        help_text="OpenSSH known_hosts format line",
+    )
+
+    def validate_known_hosts_line(self, value):
+        parts = value.strip().split()
+        if len(parts) < 3:
+            raise serializers.ValidationError(
+                "Invalid format. Expected: hostname key_type key_data"
+            )
+        return value
 
 
 class DiscoveredDeviceSerializer(serializers.ModelSerializer):

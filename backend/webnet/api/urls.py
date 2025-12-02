@@ -25,6 +25,7 @@ router.register(
     basename="remediation-action",
 )
 router.register(r"topology/links", views.TopologyLinkViewSet, basename="topology-link")
+router.register(r"ssh/host-keys", views.SSHHostKeyViewSet, basename="ssh-host-key")
 router.register(
     r"topology/discovered-devices", views.DiscoveredDeviceViewSet, basename="discovered-device"
 )
