@@ -201,7 +201,10 @@ class PluginManager:
                 customer_config = CustomerPluginConfig.objects.get(customer=customer, plugin=config)
                 return bool(customer_config.enabled)
             except CustomerPluginConfig.DoesNotExist:
-                return True  # Default to enabled if no customer config exists
+                # Default to enabled if no customer-specific config exists
+                # This allows globally enabled plugins to work for all customers
+                # unless explicitly disabled for a specific customer
+                return True
 
         return True
 

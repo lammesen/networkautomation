@@ -160,7 +160,9 @@ class PluginAuditLogViewSet(viewsets.ReadOnlyModelViewSet):
         if user.role == "admin":
             return queryset
 
-        # Others see only their customers
-        return queryset.filter(customer__isnull=True) | queryset.filter(
-            customer__in=user.customers.all()
-        )
+        # Others see global logs (customer__isnull) and their customer logs
+        # Using select_related for performance optimization
+        return (
+            queryset.filter(customer__isnull=True)
+            | queryset.filter(customer__in=user.customers.all())
+        ).select_related("plugin", "customer", "user")

@@ -14,9 +14,9 @@ class Plugin(PluginBase):
     author = "Your Name"
 
     # Optional metadata
-    min_webnet_version = ""  # Minimum compatible webnet version
-    max_webnet_version = ""  # Maximum compatible webnet version
-    dependencies = []  # List of required plugin names
+    min_webnet_version = ""  # Minimum compatible webnet version (e.g., "1.0.0")
+    max_webnet_version = ""  # Maximum compatible webnet version (e.g., "2.0.0")
+    dependencies = []  # List of required plugin names (e.g., ["other_plugin"])
 
     def get_models(self):
         """Return list of Django models provided by this plugin."""

@@ -46,8 +46,10 @@ class PluginRegistry:
                 logger.info(f"Registered plugin: {plugin.name} v{plugin.version}")
             else:
                 logger.warning(f"Plugin app {plugin_app} has no Plugin class")
-        except ImportError:
-            logger.debug(f"No plugin module found in {plugin_app}")
+        except ImportError as e:
+            logger.debug(f"No plugin module found in {plugin_app}: {e}")
+        except AttributeError as e:
+            logger.error(f"Plugin {plugin_app} has malformed Plugin class: {e}", exc_info=True)
         except Exception as e:
             logger.error(f"Error loading plugin from {plugin_app}: {e}", exc_info=True)
 
