@@ -2123,13 +2123,8 @@ class PlaybookViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
         limit = serializer.validated_data.get("limit")
         tags = serializer.validated_data.get("tags")
 
-        # Resolve customer for request
-        customer = resolve_customer_for_request(request)
-        if not customer:
-            return Response(
-                {"detail": "No customer context available"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        # Use playbook's customer
+        customer = playbook.customer
 
         # Create job
         js = JobService()
