@@ -3,6 +3,7 @@
 from rest_framework import serializers
 from webnet.users.models import User, APIKey
 from webnet.customers.models import Customer, CustomerIPRange
+from webnet.core.models import Region
 from webnet.devices.models import (
     Device,
     Credential,
@@ -156,6 +157,7 @@ class DeviceSerializer(serializers.ModelSerializer):
             "reachability_status",
             "last_reachability_check",
             "discovery_protocol",
+            "region",
             "created_at",
             "updated_at",
             "custom_fields",
@@ -212,6 +214,7 @@ class JobSerializer(serializers.ModelSerializer):
             "type",
             "status",
             "user",
+            "region",
             "requested_at",
             "scheduled_for",
             "started_at",
@@ -1445,3 +1448,34 @@ class WebhookDeliverySerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+=======
+            "identifier",
+            "api_endpoint",
+            "worker_pool_config",
+            "health_status",
+            "last_health_check",
+            "health_check_interval_seconds",
+            "priority",
+            "enabled",
+            "description",
+            "queue_name",
+            "is_available",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at", "queue_name", "is_available"]
+
+
+class RegionHealthUpdateSerializer(serializers.Serializer):
+    """Serializer for updating region health status."""
+
+    health_status = serializers.ChoiceField(
+        choices=["healthy", "degraded", "offline"],
+        help_text="New health status for the region",
+    )
+    message = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="Optional message describing the health status",
+    )
+>>>>>>> origin/copilot/add-multi-region-deployment-support

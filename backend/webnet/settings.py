@@ -278,6 +278,19 @@ CELERY_BEAT_SCHEDULE = {
     },
 }
 
+# Multi-region deployment: Define task routes for regional queues
+# Workers can be started with specific queues using:
+# celery -A webnet.core.celery:celery_app worker -Q region_us-east-1,celery -l info
+# Default worker listens to 'celery' queue for jobs without region assignment
+CELERY_TASK_DEFAULT_QUEUE = "celery"
+CELERY_TASK_DEFAULT_EXCHANGE = "celery"
+CELERY_TASK_DEFAULT_ROUTING_KEY = "celery"
+
+# Workers should be configured per region, e.g.:
+# Region US-East worker: celery worker -Q region_us-east-1,celery
+# Region US-West worker: celery worker -Q region_us-west-1,celery
+# Central fallback worker: celery worker -Q celery (handles unrouted and fallback jobs)
+
 # Logging (minimal; extend later)
 LOGGING = {
     "version": 1,

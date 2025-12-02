@@ -25,7 +25,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 
 from webnet.users.models import User, APIKey
 from webnet.customers.models import Customer, CustomerIPRange
-from webnet.core.models import CustomFieldDefinition
+from webnet.core.models import CustomFieldDefinition, Region
 from webnet.devices.models import (
     Device,
     Credential,
@@ -114,6 +114,9 @@ from .serializers import (
     # Webhook Integration
     WebhookSerializer,
     WebhookDeliverySerializer,
+    # Multi-region Deployment Support
+    RegionSerializer,
+    RegionHealthUpdateSerializer,
 )
 from .permissions import (
     RolePermission,
@@ -2659,3 +2662,76 @@ class WebhookDeliveryViewSet(CustomerScopedQuerysetMixin, viewsets.ReadOnlyModel
             {"message": "Webhook delivery retry initiated"},
             status=status.HTTP_202_ACCEPTED,
         )
+
+
+# ==============================================================================
+# Multi-region Deployment ViewSets
+# ==============================================================================
+
+
+class RegionViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing regions in multi-region deployment."""
+
+    serializer_class = RegionSerializer
+    permission_classes = [IsAuthenticated, RolePermission, ObjectCustomerPermission]
+    customer_field = "customer_id"
+
+    def get_serializer_class(self):
+        if self.action == "update_health":
+            return RegionHealthUpdateSerializer
+        return RegionSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        if not user.is_authenticated:
+            return Region.objects.none()
+
+        customer_ids = user.customers.values_list("id", flat=True)
+        return Region.objects.filter(customer_id__in=customer_ids).order_by("-priority", "name")
+
+    def perform_create(self, serializer):
+        # Ensure customer is one of user's customers
+        customer_id = serializer.validated_data.get("customer")
+        if customer_id and customer_id.id not in self.request.user.customers.values_list(
+            "id", flat=True
+        ):
+            from rest_framework.exceptions import ValidationError
+
+            raise ValidationError({"customer": "Invalid customer"})
+        serializer.save()
+
+    @action(detail=True, methods=["post"])
+    def update_health(self, request, pk=None):
+        """Update health status of a region."""
+        region = self.get_object()
+        serializer = RegionHealthUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        health_status = serializer.validated_data["health_status"]
+        message = serializer.validated_data.get("message")
+
+        region.update_health_status(health_status, message)
+
+        return Response(RegionSerializer(region).data)
+
+    @action(detail=True, methods=["get"])
+    def jobs(self, request, pk=None):
+        """Get jobs associated with this region."""
+        region = self.get_object()
+        jobs = Job.objects.filter(region=region, customer=region.customer).order_by(
+            "-requested_at"
+        )[:100]
+
+        serializer = JobSerializer(jobs, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["get"])
+    def devices(self, request, pk=None):
+        """Get devices assigned to this region."""
+        region = self.get_object()
+        devices = Device.objects.filter(region=region, customer=region.customer).order_by(
+            "hostname"
+        )[:100]
+
+        serializer = DeviceSerializer(devices, many=True)
+        return Response(serializer.data)

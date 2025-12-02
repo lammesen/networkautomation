@@ -73,6 +73,8 @@ router.register(
     r"notifications/preferences", NotificationPreferenceViewSet, basename="notification-preference"
 )
 router.register(r"notifications/events", NotificationEventViewSet, basename="notification-event")
+# Multi-region Deployment Support
+router.register(r"regions", views.RegionViewSet, basename="region")
 
 urlpatterns = [
     path("auth/login", views.AuthViewSet.as_view({"post": "login"})),

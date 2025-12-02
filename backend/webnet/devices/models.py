@@ -395,6 +395,16 @@ class Device(CustomFieldMixin, models.Model):
     # Tag relationship (Issue #24)
     device_tags = models.ManyToManyField(Tag, blank=True, related_name="devices")
 
+    # Region assignment for multi-region deployment
+    region = models.ForeignKey(
+        "core.Region",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="devices",
+        help_text="Region where this device's automation jobs should be executed",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -404,6 +414,7 @@ class Device(CustomFieldMixin, models.Model):
             models.Index(fields=["role"]),
             models.Index(fields=["site"]),
             models.Index(fields=["vendor"]),
+            models.Index(fields=["region"]),
         ]
         ordering = ["hostname"]
 
