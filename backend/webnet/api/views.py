@@ -25,6 +25,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 
 from webnet.users.models import User, APIKey
 from webnet.customers.models import Customer, CustomerIPRange
+from webnet.core.models import CustomFieldDefinition
 from webnet.devices.models import (
     Device,
     Credential,
@@ -52,6 +53,7 @@ from .serializers import (
     APIKeySerializer,
     CustomerSerializer,
     CustomerIPRangeSerializer,
+    CustomFieldDefinitionSerializer,
     CredentialSerializer,
     DeviceSerializer,
     JobSerializer,
@@ -257,6 +259,16 @@ class CustomerViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
             return Response(status=status.HTTP_404_NOT_FOUND)
         customer.users.remove(user)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class CustomFieldDefinitionViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
+    """API viewset for managing custom field definitions."""
+
+    queryset = CustomFieldDefinition.objects.all()
+    serializer_class = CustomFieldDefinitionSerializer
+    permission_classes = [IsAuthenticated, RolePermission]
+    customer_field = "customer_id"
+    filterset_fields = ["model_type", "field_type", "is_active"]
 
 
 class CredentialViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):

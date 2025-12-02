@@ -19,6 +19,7 @@ from webnet.compliance.models import (
     RemediationRule,
     RemediationAction,
 )
+from webnet.core.models import CustomFieldDefinition
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -63,6 +64,31 @@ class CustomerIPRangeSerializer(serializers.ModelSerializer):
         fields = ["id", "customer", "cidr", "description", "created_at"]
 
 
+class CustomFieldDefinitionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomFieldDefinition
+        fields = [
+            "id",
+            "customer",
+            "name",
+            "label",
+            "model_type",
+            "field_type",
+            "description",
+            "required",
+            "default_value",
+            "choices",
+            "validation_regex",
+            "validation_min",
+            "validation_max",
+            "weight",
+            "is_active",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["created_at", "updated_at"]
+
+
 class CredentialSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
     enable_password = serializers.CharField(write_only=True, allow_null=True, required=False)
@@ -77,6 +103,7 @@ class CredentialSerializer(serializers.ModelSerializer):
             "password",
             "enable_password",
             "created_at",
+            "custom_fields",
         ]
 
     def create(self, validated_data):  # pragma: no cover - simple setter
@@ -122,6 +149,7 @@ class DeviceSerializer(serializers.ModelSerializer):
             "discovery_protocol",
             "created_at",
             "updated_at",
+            "custom_fields",
         ]
 
 
@@ -148,6 +176,7 @@ class JobSerializer(serializers.ModelSerializer):
             "target_summary_json",
             "result_summary_json",
             "payload_json",
+            "custom_fields",
         ]
 
 
@@ -160,7 +189,16 @@ class JobLogSerializer(serializers.ModelSerializer):
 class ConfigSnapshotSerializer(serializers.ModelSerializer):
     class Meta:
         model = ConfigSnapshot
-        fields = ["id", "device", "job", "created_at", "source", "hash", "config_text"]
+        fields = [
+            "id",
+            "device",
+            "job",
+            "created_at",
+            "source",
+            "hash",
+            "config_text",
+            "custom_fields",
+        ]
         read_only_fields = ["hash", "created_at"]
 
 
@@ -236,6 +274,7 @@ class CompliancePolicySerializer(serializers.ModelSerializer):
             "created_by",
             "created_at",
             "updated_at",
+            "custom_fields",
         ]
 
 
@@ -676,6 +715,7 @@ class ConfigTemplateSerializer(serializers.ModelSerializer):
             "created_by_username",
             "created_at",
             "updated_at",
+            "custom_fields",
         ]
         read_only_fields = ["created_at", "updated_at", "created_by"]
 

@@ -8,6 +8,7 @@ from . import views
 router = DefaultRouter()
 router.register(r"users", views.UserViewSet, basename="user")
 router.register(r"customers", views.CustomerViewSet, basename="customer")
+router.register(r"custom-fields", views.CustomFieldDefinitionViewSet, basename="custom-field")
 router.register(r"credentials", views.CredentialViewSet, basename="credential")
 router.register(r"devices", views.DeviceViewSet, basename="device")
 router.register(r"jobs", views.JobViewSet, basename="job")
