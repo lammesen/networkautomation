@@ -9,10 +9,35 @@ import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse, urlunparse
 
 from webnet.devices.models import Device
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_git_url(url: str) -> str:
+    """Sanitize Git URL by removing credentials for logging.
+
+    Args:
+        url: Git repository URL that may contain embedded credentials
+
+    Returns:
+        Sanitized URL with credentials removed
+    """
+    try:
+        parsed = urlparse(url)
+        if parsed.username or parsed.password:
+            # Remove credentials from URL for logging
+            netloc = parsed.hostname or ""
+            if parsed.port:
+                netloc += f":{parsed.port}"
+            sanitized = parsed._replace(netloc=netloc)
+            return urlunparse(sanitized)
+    except Exception:
+        # If parsing fails, return a generic message
+        return "[URL]"
+    return url
 
 
 def fetch_playbook_from_git(
@@ -38,7 +63,9 @@ def fetch_playbook_from_git(
 
         try:
             # Clone the repository (shallow clone for efficiency)
-            logger.info(f"Cloning Git repository: {git_repo_url} (branch: {git_branch})")
+            logger.info(
+                f"Cloning Git repository: {_sanitize_git_url(git_repo_url)} (branch: {git_branch})"
+            )
             result = subprocess.run(
                 [
                     "git",
@@ -62,14 +89,21 @@ def fetch_playbook_from_git(
                 logger.error(f"Git clone failed: {error_msg}")
                 return False, "", error_msg
 
-            # Read the playbook file
+            # Read the playbook file with path traversal protection
             playbook_file = repo_dir / git_path
-            if not playbook_file.exists():
+            # Resolve to canonical path and ensure it's within repo_dir
+            resolved_path = playbook_file.resolve()
+            repo_dir_resolved = repo_dir.resolve()
+            if not str(resolved_path).startswith(str(repo_dir_resolved)):
+                error_msg = f"Invalid path: {git_path} (path traversal detected)"
+                logger.error(error_msg)
+                return False, "", error_msg
+            if not resolved_path.exists():
                 error_msg = f"Playbook file not found at path: {git_path}"
                 logger.error(error_msg)
                 return False, "", error_msg
 
-            content = playbook_file.read_text()
+            content = resolved_path.read_text()
             logger.info(f"Successfully fetched playbook from Git: {len(content)} bytes")
             return True, content, ""
 
@@ -115,6 +149,9 @@ def generate_ansible_inventory(
     vendor_groups: set[str] = set()
 
     for dev in qs:
+        if not dev.credential:
+            logger.warning(f"Device {dev.hostname} has no credential, skipping")
+            continue
         cred = dev.credential
         hostname = dev.hostname
 
@@ -191,7 +228,7 @@ def execute_ansible_playbook(
         playbook_content: Playbook YAML content
         inventory: Ansible inventory dict
         extra_vars: Extra variables to pass to playbook
-        limit: Limit execution to specific hosts
+        limit: Limit execution to specific hosts (validated for safety)
         tags: Ansible tags to run
         ansible_cfg_content: Custom ansible.cfg content
         vault_password: Vault password for encrypted vars
@@ -201,6 +238,14 @@ def execute_ansible_playbook(
     Returns:
         Tuple of (return_code, stdout, stderr)
     """
+    import re
+
+    # Validate limit parameter to prevent command injection
+    if limit:
+        # Only allow safe characters: alphanumeric, dots, hyphens, wildcards, commas, colons, brackets
+        if not re.match(r"^[a-zA-Z0-9._\-*,:\[\]]+$", limit):
+            logger.error(f"Invalid limit pattern: {limit}")
+            return 1, "", f"Invalid limit pattern: {limit}"
     with tempfile.TemporaryDirectory() as tmpdir:
         tmppath = Path(tmpdir)
 

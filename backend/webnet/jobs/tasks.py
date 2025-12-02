@@ -1549,6 +1549,7 @@ def ansible_playbook_job(
     try:
         ansible_config = AnsibleConfig.objects.get(customer_id=job.customer_id)
     except AnsibleConfig.DoesNotExist:
+        # No AnsibleConfig for this customer; proceed with defaults
         pass
 
     # Merge extra_vars with playbook defaults
@@ -1580,7 +1581,8 @@ def ansible_playbook_job(
             js.set_status(job, "failed", result_summary={"error": "no uploaded file"})
             return
         try:
-            playbook_content = playbook.uploaded_file.read().decode("utf-8")
+            with playbook.uploaded_file.open("rb") as f:
+                playbook_content = f.read().decode("utf-8")
             js.append_log(
                 job,
                 level="INFO",
@@ -1599,56 +1601,69 @@ def ansible_playbook_job(
     # Execute playbook
     js.append_log(job, level="INFO", message="Starting Ansible playbook execution")
 
-    return_code, stdout, stderr = execute_ansible_playbook(
-        playbook_content=playbook_content,
-        inventory=inventory,
-        extra_vars=merged_vars,
-        limit=limit,
-        tags=tags,
-        ansible_cfg_content=ansible_config.ansible_cfg_content if ansible_config else None,
-        vault_password=ansible_config.vault_password if ansible_config else None,
-        environment_vars=ansible_config.environment_vars if ansible_config else None,
-    )
-
-    # Log stdout
-    if stdout:
-        for line in stdout.split("\n"):
-            if line.strip():
-                js.append_log(job, level="INFO", message=line)
-
-    # Log stderr
-    if stderr:
-        for line in stderr.split("\n"):
-            if line.strip():
-                js.append_log(job, level="WARN", message=line)
-
-    # Parse results and set job status
-    if return_code == 0:
-        js.append_log(job, level="INFO", message="Playbook execution completed successfully")
-        # Try to extract task results from output
-        result_summary = {
-            "playbook_id": playbook_id,
-            "playbook_name": playbook.name,
-            "hosts_count": len(inventory["_meta"]["hostvars"]),
-            "return_code": return_code,
-        }
-        # Parse recap if available
-        if "PLAY RECAP" in stdout:
-            recap_start = stdout.index("PLAY RECAP")
-            recap_lines = stdout[recap_start:].split("\n")[1:]
-            result_summary["recap"] = [line for line in recap_lines if line.strip()]
-
-        js.set_status(job, "success", result_summary=result_summary)
-    else:
-        js.append_log(
-            job, level="ERROR", message=f"Playbook execution failed with return code {return_code}"
+    try:
+        return_code, stdout, stderr = execute_ansible_playbook(
+            playbook_content=playbook_content,
+            inventory=inventory,
+            extra_vars=merged_vars,
+            limit=limit,
+            tags=tags,
+            ansible_cfg_content=ansible_config.ansible_cfg_content if ansible_config else None,
+            vault_password=ansible_config.vault_password if ansible_config else None,
+            environment_vars=ansible_config.environment_vars if ansible_config else None,
         )
-        js.set_status(
-            job,
-            "failed",
-            result_summary={
-                "error": f"return code {return_code}",
+
+        # Log stdout
+        if stdout:
+            for line in stdout.split("\n"):
+                if line.strip():
+                    js.append_log(job, level="INFO", message=line)
+
+        # Log stderr
+        if stderr:
+            for line in stderr.split("\n"):
+                if line.strip():
+                    js.append_log(job, level="WARN", message=line)
+
+        # Parse results and set job status
+        if return_code == 0:
+            js.append_log(job, level="INFO", message="Playbook execution completed successfully")
+            # Try to extract task results from output
+            result_summary = {
                 "playbook_id": playbook_id,
                 "playbook_name": playbook.name,
-            },
-        )
+                "hosts_count": len(inventory["_meta"]["hostvars"]),
+                "return_code": return_code,
+            }
+            # Parse recap if available
+            if "PLAY RECAP" in stdout:
+                recap_start = stdout.index("PLAY RECAP")
+                recap_lines = stdout[recap_start:].split("\n")[1:]
+                result_summary["recap"] = [line for line in recap_lines if line.strip()]
+
+            js.set_status(job, "success", result_summary=result_summary)
+        else:
+            js.append_log(
+                job,
+                level="ERROR",
+                message=f"Playbook execution failed with return code {return_code}",
+            )
+            js.set_status(
+                job,
+                "failed",
+                result_summary={
+                    "error": f"return code {return_code}",
+                    "playbook_id": playbook_id,
+                    "playbook_name": playbook.name,
+                },
+            )
+    except Exception as e:
+        logger.exception(f"Unexpected error in ansible_playbook_job: {e}")
+        try:
+            js.append_log(
+                job, level="ERROR", message=f"Task failed with unexpected error: {str(e)}"
+            )
+            js.set_status(job, "failed", result_summary={"error": f"unexpected error: {str(e)}"})
+        except Exception:
+            # If we can't even log, just log to system logger
+            logger.error(f"Failed to update job {job_id} after unexpected error")

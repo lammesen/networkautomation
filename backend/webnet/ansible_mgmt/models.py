@@ -20,7 +20,11 @@ class AnsibleConfig(models.Model):
     vault_password = models.TextField(
         blank=True,
         default="",
-        help_text="Encrypted vault password for Ansible Vault",
+        help_text=(
+            "Vault password for Ansible Vault. "
+            "WARNING: Currently stored as plain text. "
+            "Consider using the same encryption mechanism as device credentials for production use."
+        ),
     )
     collections = models.JSONField(
         default=list,

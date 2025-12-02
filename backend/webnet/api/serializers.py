@@ -909,6 +909,32 @@ class PlaybookSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["created_by", "created_at", "updated_at"]
 
+    def validate(self, attrs):
+        """Validate that required fields are provided based on source_type."""
+        source_type = attrs.get("source_type", "inline")
+
+        if source_type == "inline" and not attrs.get("content"):
+            raise serializers.ValidationError(
+                {"content": "Content is required for inline playbooks"}
+            )
+        elif source_type == "git":
+            if not attrs.get("git_repo_url"):
+                raise serializers.ValidationError(
+                    {"git_repo_url": "Git repository URL is required for git source"}
+                )
+            if not attrs.get("git_path"):
+                raise serializers.ValidationError(
+                    {"git_path": "Git path is required for git source"}
+                )
+        elif source_type == "upload" and not attrs.get("uploaded_file"):
+            # Only validate on create, not update
+            if not self.instance:
+                raise serializers.ValidationError(
+                    {"uploaded_file": "File upload is required for upload source"}
+                )
+
+        return attrs
+
     def create(self, validated_data):
         # Set created_by to the current user
         request = self.context.get("request")
