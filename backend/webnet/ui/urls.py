@@ -71,6 +71,9 @@ from .views import (
     SSHHostKeyVerifyView,
     SSHHostKeyDeleteView,
     SSHHostKeyImportView,
+    # Webhook Integration
+    WebhookListView,
+    WebhookDeliveryListView,
 )
 
 urlpatterns = [
@@ -176,4 +179,9 @@ urlpatterns = [
         "ssh/host-keys/<int:pk>/delete/", SSHHostKeyDeleteView.as_view(), name="ssh-host-key-delete"
     ),
     path("ssh/host-keys/import/", SSHHostKeyImportView.as_view(), name="ssh-host-key-import"),
+    # Webhook Integration
+    path("settings/webhooks/", WebhookListView.as_view(), name="webhooks-list"),
+    path(
+        "settings/webhooks/deliveries", WebhookDeliveryListView.as_view(), name="webhook-deliveries"
+    ),
 ]
