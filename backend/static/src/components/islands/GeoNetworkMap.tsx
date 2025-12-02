@@ -101,6 +101,35 @@ export function GeoNetworkMap({
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Track dark mode for tile layer
+  const tileLayerRef = useRef<L.TileLayer | null>(null);
+  const [isDark, setIsDark] = useState(() => 
+    typeof document !== "undefined" && document.documentElement.classList.contains("dark")
+  );
+
+  // Listen for theme changes
+  useEffect(() => {
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.type === "attributes" && mutation.attributeName === "class") {
+          setIsDark(document.documentElement.classList.contains("dark"));
+        }
+      });
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, []);
+
+  // Update tile layer when theme changes
+  useEffect(() => {
+    if (!mapRef.current || !tileLayerRef.current) return;
+    
+    const lightTiles = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+    const darkTiles = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
+    
+    tileLayerRef.current.setUrl(isDark ? darkTiles : lightTiles);
+  }, [isDark]);
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
@@ -108,10 +137,17 @@ export function GeoNetworkMap({
       initialCenter as LatLngExpression,
       initialZoom
     );
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+    
+    // Use dark or light tiles based on current theme
+    const lightTiles = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+    const darkTiles = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
+    const tileLayer = L.tileLayer(isDark ? darkTiles : lightTiles, {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
       maxZoom: 19,
-    }).addTo(map);
+    });
+    tileLayer.addTo(map);
+    tileLayerRef.current = tileLayer;
+    
     L.control.zoom({ position: "bottomright" }).addTo(map);
     markersRef.current = L.layerGroup().addTo(map);
     linksRef.current = L.layerGroup().addTo(map);

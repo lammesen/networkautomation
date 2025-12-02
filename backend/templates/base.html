@@ -1,9 +1,21 @@
 <!doctype html>
-<html lang="en" class="h-full dark">
+<html lang="en" class="h-full">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>{% block title %}webnet{% endblock %}</title>
+  <!-- Theme initialization script - prevents FOUC -->
+  <script>
+    (function() {
+      var theme = localStorage.getItem('theme');
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      var shouldBeDark = theme === 'dark' || ((!theme || theme === 'auto') && prefersDark);
+      if (shouldBeDark) {
+        document.documentElement.classList.add('dark');
+      }
+      document.documentElement.dataset.theme = theme || 'auto';
+    })();
+  </script>
   <script src="https://unpkg.com/htmx.org@1.9.10"></script>
   <script src="https://unpkg.com/htmx-ext-ws@2.0.0/ws.js"></script>
   <link rel="stylesheet" href="/static/css/tailwind.css" />
@@ -353,6 +365,8 @@
         </div>
         {% if user.is_authenticated %}
         <div class="flex items-center gap-3">
+          <!-- Theme Toggle -->
+          <div data-island="ThemeToggle"></div>
           <button class="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground" title="Notifications">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V4a2 2 0 10-4 0v1.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
