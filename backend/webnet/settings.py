@@ -71,6 +71,7 @@ INSTALLED_APPS = [
     "webnet.plugins",
     "webnet.api",
     "webnet.ui",
+    "webnet.graphql_api",
 ]
 
 MIDDLEWARE = [

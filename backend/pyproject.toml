@@ -29,6 +29,7 @@ dependencies = [
     "nornir-netmiko>=1.0.0",
     "asyncssh>=2.14.2",
     "django-auth-ldap>=5.0.0",
+    "strawberry-graphql-django>=0.49.4",
 ]
 
 [project.optional-dependencies]
@@ -64,6 +65,7 @@ packages = [
     "webnet.networkops",
     "webnet.api",
     "webnet.ui",
+    "webnet.graphql_api",
 ]
 
 [tool.black]
