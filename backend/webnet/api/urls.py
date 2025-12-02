@@ -57,6 +57,9 @@ router.register(
 # Ansible Integration
 router.register(r"ansible/configs", views.AnsibleConfigViewSet, basename="ansible-config")
 router.register(r"ansible/playbooks", views.PlaybookViewSet, basename="playbook")
+# Webhook Integration
+router.register(r"webhooks", views.WebhookViewSet, basename="webhook")
+router.register(r"webhook-deliveries", views.WebhookDeliveryViewSet, basename="webhook-delivery")
 
 urlpatterns = [
     path("auth/login", views.AuthViewSet.as_view({"post": "login"})),

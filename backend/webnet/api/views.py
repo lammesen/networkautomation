@@ -52,6 +52,7 @@ from webnet.servicenow.models import (
     ServiceNowIncident,
     ServiceNowChangeRequest,
 )
+from webnet.webhooks.models import Webhook, WebhookDelivery
 
 from .serializers import (
     UserSerializer,
@@ -107,6 +108,9 @@ from .serializers import (
     ServiceNowChangeRequestSerializer,
     ServiceNowChangeRequestCreateSerializer,
     ServiceNowChangeRequestUpdateSerializer,
+    # Webhook Integration
+    WebhookSerializer,
+    WebhookDeliverySerializer,
 )
 from .permissions import (
     RolePermission,
@@ -2526,3 +2530,100 @@ class ServiceNowChangeRequestViewSet(CustomerScopedQuerysetMixin, viewsets.Model
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+
+# ==============================================================================
+# Webhook ViewSets
+# ==============================================================================
+
+
+class WebhookViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
+    """ViewSet for managing webhooks."""
+
+    queryset = Webhook.objects.all()
+    serializer_class = WebhookSerializer
+    permission_classes = [IsAuthenticated, RolePermission]
+    customer_field = "customer_id"
+    filterset_fields = ["enabled", "customer"]
+    search_fields = ["name", "url"]
+    ordering_fields = ["name", "created_at"]
+
+    def perform_create(self, serializer):
+        """Set created_by when creating webhook."""
+        serializer.save(created_by=self.request.user)
+
+    @action(detail=True, methods=["post"])
+    def test(self, request, pk=None):
+        """Test webhook delivery with a sample payload."""
+        webhook = self.get_object()
+
+        # Create a test delivery
+        test_payload = {
+            "event_timestamp": timezone.now().isoformat(),
+            "event_type": "webhook.test",
+            "message": "This is a test webhook delivery",
+            "webhook": {
+                "id": webhook.id,
+                "name": webhook.name,
+            },
+        }
+
+        delivery = WebhookDelivery.objects.create(
+            webhook=webhook,
+            event_type="webhook.test",
+            event_id=webhook.id,
+            payload=test_payload,
+            status=WebhookDelivery.STATUS_PENDING,
+        )
+
+        # Trigger delivery asynchronously
+        from webnet.webhooks.tasks import deliver_webhook
+
+        deliver_webhook.delay(delivery.id)
+
+        return Response(
+            {
+                "message": "Test webhook delivery initiated",
+                "delivery_id": delivery.id,
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+
+class WebhookDeliveryViewSet(CustomerScopedQuerysetMixin, viewsets.ReadOnlyModelViewSet):
+    """ViewSet for viewing webhook delivery history."""
+
+    queryset = WebhookDelivery.objects.select_related("webhook").all()
+    serializer_class = WebhookDeliverySerializer
+    permission_classes = [IsAuthenticated, RolePermission]
+    customer_field = "webhook__customer_id"
+    filterset_fields = ["webhook", "status", "event_type"]
+    search_fields = ["event_type", "error_message"]
+    ordering_fields = ["created_at", "status"]
+    ordering = ["-created_at"]
+
+    @action(detail=True, methods=["post"])
+    def retry(self, request, pk=None):
+        """Manually retry a failed webhook delivery."""
+        delivery = self.get_object()
+
+        if delivery.status not in [WebhookDelivery.STATUS_FAILED, WebhookDelivery.STATUS_RETRYING]:
+            return Response(
+                {"detail": "Only failed or retrying deliveries can be manually retried"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Reset delivery state for retry
+        delivery.status = WebhookDelivery.STATUS_PENDING
+        delivery.next_retry_at = None
+        delivery.save()
+
+        # Trigger delivery
+        from webnet.webhooks.tasks import deliver_webhook
+
+        deliver_webhook.delay(delivery.id)
+
+        return Response(
+            {"message": "Webhook delivery retry initiated"},
+            status=status.HTTP_202_ACCEPTED,
+        )

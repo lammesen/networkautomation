@@ -2868,3 +2868,43 @@ class CustomerPluginUpdateSettingsView(LoginRequiredMixin, View):
             return HttpResponse("Settings updated successfully")
         else:
             return HttpResponseBadRequest(message)
+
+
+# Webhook Views
+class WebhookListView(TenantScopedView):
+    """List webhooks."""
+
+    template_name = "settings/webhook_list.html"
+
+    def get(self, request):
+        from webnet.webhooks.models import Webhook
+
+        qs = Webhook.objects.select_related("customer", "created_by").order_by("-created_at")
+        webhooks = self.filter_by_customer(qs)
+
+        context = {
+            "webhooks": webhooks,
+        }
+
+        return render(request, self.template_name, context)
+
+
+class WebhookDeliveryListView(TenantScopedView):
+    """List webhook deliveries."""
+
+    template_name = "settings/webhook_deliveries.html"
+    customer_field = "webhook__customer_id"
+
+    def get(self, request):
+        from webnet.webhooks.models import WebhookDelivery
+
+        qs = WebhookDelivery.objects.select_related("webhook", "webhook__customer").order_by(
+            "-created_at"
+        )[:100]
+        deliveries = self.filter_by_customer(qs)
+
+        context = {
+            "deliveries": deliveries,
+        }
+
+        return render(request, self.template_name, context)

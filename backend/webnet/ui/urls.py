@@ -83,6 +83,9 @@ from .views import (
     CustomerPluginEnableView,
     CustomerPluginDisableView,
     CustomerPluginUpdateSettingsView,
+    # Webhook Integration
+    WebhookListView,
+    WebhookDeliveryListView,
 )
 
 urlpatterns = [
@@ -223,5 +226,10 @@ urlpatterns = [
         "settings/plugins/customer-config/<int:pk>/update-settings/",
         CustomerPluginUpdateSettingsView.as_view(),
         name="customer-plugin-update-settings",
+    ),
+    # Webhook Integration
+    path("settings/webhooks/", WebhookListView.as_view(), name="webhooks-list"),
+    path(
+        "settings/webhooks/deliveries", WebhookDeliveryListView.as_view(), name="webhook-deliveries"
     ),
 ]
