@@ -1,6 +1,5 @@
 """URL configuration for plugin API."""
 
-from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
 from webnet.plugins.views import (

@@ -9,10 +9,10 @@ from webnet.plugins.models import PluginConfig, CustomerPluginConfig, PluginAudi
 
 class PluginConfigSerializer(serializers.ModelSerializer):
     """Serializer for PluginConfig."""
-    
+
     is_loaded = serializers.SerializerMethodField()
     health_status = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = PluginConfig
         fields = [
@@ -45,15 +45,17 @@ class PluginConfigSerializer(serializers.ModelSerializer):
             "is_loaded",
             "health_status",
         ]
-    
+
     def get_is_loaded(self, obj: PluginConfig) -> bool:
         """Check if plugin is loaded."""
         from webnet.plugins.registry import plugin_registry
+
         return plugin_registry.is_plugin_loaded(obj.name)
-    
+
     def get_health_status(self, obj: PluginConfig) -> dict:
         """Get plugin health status."""
         from webnet.plugins.manager import PluginManager
+
         if not obj.enabled:
             return {"healthy": False, "message": "Plugin disabled", "details": {}}
         return PluginManager.get_plugin_health(obj.name)
@@ -61,12 +63,12 @@ class PluginConfigSerializer(serializers.ModelSerializer):
 
 class CustomerPluginConfigSerializer(serializers.ModelSerializer):
     """Serializer for CustomerPluginConfig."""
-    
+
     plugin_name = serializers.CharField(source="plugin.name", read_only=True)
     plugin_verbose_name = serializers.CharField(source="plugin.verbose_name", read_only=True)
     plugin_version = serializers.CharField(source="plugin.version", read_only=True)
     customer_name = serializers.CharField(source="customer.name", read_only=True)
-    
+
     class Meta:
         model = CustomerPluginConfig
         fields = [
@@ -95,12 +97,12 @@ class CustomerPluginConfigSerializer(serializers.ModelSerializer):
 
 class PluginAuditLogSerializer(serializers.ModelSerializer):
     """Serializer for PluginAuditLog."""
-    
+
     plugin_name = serializers.CharField(source="plugin.name", read_only=True)
     plugin_verbose_name = serializers.CharField(source="plugin.verbose_name", read_only=True)
     customer_name = serializers.CharField(source="customer.name", read_only=True)
     user_username = serializers.CharField(source="user.username", read_only=True)
-    
+
     class Meta:
         model = PluginAuditLog
         fields = [
@@ -123,5 +125,5 @@ class PluginAuditLogSerializer(serializers.ModelSerializer):
 
 class PluginSettingsSerializer(serializers.Serializer):
     """Serializer for updating plugin settings."""
-    
+
     settings = serializers.JSONField()

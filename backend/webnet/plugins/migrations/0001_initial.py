@@ -11,69 +11,201 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('customers', '0002_customer_ssh_host_key_policy'),
+        ("customers", "0002_customer_ssh_host_key_policy"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='PluginConfig',
+            name="PluginConfig",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('name', models.CharField(help_text='Unique plugin identifier', max_length=255, unique=True)),
-                ('verbose_name', models.CharField(help_text='Human-readable plugin name', max_length=255)),
-                ('description', models.TextField(blank=True, help_text='Plugin description')),
-                ('version', models.CharField(help_text='Plugin version', max_length=50)),
-                ('author', models.CharField(blank=True, help_text='Plugin author', max_length=255)),
-                ('enabled', models.BooleanField(default=True, help_text='Whether plugin is globally enabled')),
-                ('installed_at', models.DateTimeField(default=django.utils.timezone.now, help_text='Installation timestamp')),
-                ('settings', models.JSONField(blank=True, default=dict, help_text='Plugin-specific settings')),
-                ('min_webnet_version', models.CharField(blank=True, help_text='Minimum compatible webnet version', max_length=50)),
-                ('max_webnet_version', models.CharField(blank=True, help_text='Maximum compatible webnet version', max_length=50)),
-                ('dependencies', models.JSONField(blank=True, default=list, help_text='List of required plugin dependencies')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                (
+                    "name",
+                    models.CharField(
+                        help_text="Unique plugin identifier", max_length=255, unique=True
+                    ),
+                ),
+                (
+                    "verbose_name",
+                    models.CharField(help_text="Human-readable plugin name", max_length=255),
+                ),
+                ("description", models.TextField(blank=True, help_text="Plugin description")),
+                ("version", models.CharField(help_text="Plugin version", max_length=50)),
+                ("author", models.CharField(blank=True, help_text="Plugin author", max_length=255)),
+                (
+                    "enabled",
+                    models.BooleanField(
+                        default=True, help_text="Whether plugin is globally enabled"
+                    ),
+                ),
+                (
+                    "installed_at",
+                    models.DateTimeField(
+                        default=django.utils.timezone.now, help_text="Installation timestamp"
+                    ),
+                ),
+                (
+                    "settings",
+                    models.JSONField(
+                        blank=True, default=dict, help_text="Plugin-specific settings"
+                    ),
+                ),
+                (
+                    "min_webnet_version",
+                    models.CharField(
+                        blank=True, help_text="Minimum compatible webnet version", max_length=50
+                    ),
+                ),
+                (
+                    "max_webnet_version",
+                    models.CharField(
+                        blank=True, help_text="Maximum compatible webnet version", max_length=50
+                    ),
+                ),
+                (
+                    "dependencies",
+                    models.JSONField(
+                        blank=True, default=list, help_text="List of required plugin dependencies"
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Plugin Configuration',
-                'verbose_name_plural': 'Plugin Configurations',
-                'ordering': ['verbose_name'],
+                "verbose_name": "Plugin Configuration",
+                "verbose_name_plural": "Plugin Configurations",
+                "ordering": ["verbose_name"],
             },
         ),
         migrations.CreateModel(
-            name='PluginAuditLog',
+            name="PluginAuditLog",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('action', models.CharField(choices=[('install', 'Install'), ('uninstall', 'Uninstall'), ('enable', 'Enable'), ('disable', 'Disable'), ('configure', 'Configure'), ('error', 'Error')], max_length=20)),
-                ('timestamp', models.DateTimeField(default=django.utils.timezone.now)),
-                ('details', models.JSONField(blank=True, default=dict, help_text='Action details and metadata')),
-                ('success', models.BooleanField(default=True, help_text='Whether action succeeded')),
-                ('error_message', models.TextField(blank=True, help_text='Error message if failed')),
-                ('customer', models.ForeignKey(blank=True, help_text='Customer context if applicable', null=True, on_delete=django.db.models.deletion.CASCADE, related_name='plugin_audit_logs', to='customers.customer')),
-                ('user', models.ForeignKey(blank=True, help_text='User who performed the action', null=True, on_delete=django.db.models.deletion.SET_NULL, to=settings.AUTH_USER_MODEL)),
-                ('plugin', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='audit_logs', to='plugins.pluginconfig')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                (
+                    "action",
+                    models.CharField(
+                        choices=[
+                            ("install", "Install"),
+                            ("uninstall", "Uninstall"),
+                            ("enable", "Enable"),
+                            ("disable", "Disable"),
+                            ("configure", "Configure"),
+                            ("error", "Error"),
+                        ],
+                        max_length=20,
+                    ),
+                ),
+                ("timestamp", models.DateTimeField(default=django.utils.timezone.now)),
+                (
+                    "details",
+                    models.JSONField(
+                        blank=True, default=dict, help_text="Action details and metadata"
+                    ),
+                ),
+                (
+                    "success",
+                    models.BooleanField(default=True, help_text="Whether action succeeded"),
+                ),
+                (
+                    "error_message",
+                    models.TextField(blank=True, help_text="Error message if failed"),
+                ),
+                (
+                    "customer",
+                    models.ForeignKey(
+                        blank=True,
+                        help_text="Customer context if applicable",
+                        null=True,
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="plugin_audit_logs",
+                        to="customers.customer",
+                    ),
+                ),
+                (
+                    "user",
+                    models.ForeignKey(
+                        blank=True,
+                        help_text="User who performed the action",
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+                (
+                    "plugin",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="audit_logs",
+                        to="plugins.pluginconfig",
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Plugin Audit Log',
-                'verbose_name_plural': 'Plugin Audit Logs',
-                'ordering': ['-timestamp'],
-                'indexes': [models.Index(fields=['-timestamp'], name='plugins_plu_timesta_94637e_idx'), models.Index(fields=['plugin', '-timestamp'], name='plugins_plu_plugin__203392_idx')],
+                "verbose_name": "Plugin Audit Log",
+                "verbose_name_plural": "Plugin Audit Logs",
+                "ordering": ["-timestamp"],
+                "indexes": [
+                    models.Index(fields=["-timestamp"], name="plugins_plu_timesta_94637e_idx"),
+                    models.Index(
+                        fields=["plugin", "-timestamp"], name="plugins_plu_plugin__203392_idx"
+                    ),
+                ],
             },
         ),
         migrations.CreateModel(
-            name='CustomerPluginConfig',
+            name="CustomerPluginConfig",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('enabled', models.BooleanField(default=True, help_text='Whether plugin is enabled for this customer')),
-                ('settings', models.JSONField(blank=True, default=dict, help_text='Customer-specific plugin settings')),
-                ('enabled_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('customer', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='plugin_configs', to='customers.customer')),
-                ('plugin', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='customer_configs', to='plugins.pluginconfig')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                (
+                    "enabled",
+                    models.BooleanField(
+                        default=True, help_text="Whether plugin is enabled for this customer"
+                    ),
+                ),
+                (
+                    "settings",
+                    models.JSONField(
+                        blank=True, default=dict, help_text="Customer-specific plugin settings"
+                    ),
+                ),
+                ("enabled_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "customer",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="plugin_configs",
+                        to="customers.customer",
+                    ),
+                ),
+                (
+                    "plugin",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="customer_configs",
+                        to="plugins.pluginconfig",
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Customer Plugin Configuration',
-                'verbose_name_plural': 'Customer Plugin Configurations',
-                'ordering': ['customer', 'plugin'],
-                'unique_together': {('customer', 'plugin')},
+                "verbose_name": "Customer Plugin Configuration",
+                "verbose_name_plural": "Customer Plugin Configurations",
+                "ordering": ["customer", "plugin"],
+                "unique_together": {("customer", "plugin")},
             },
         ),
     ]

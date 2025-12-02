@@ -16,68 +16,59 @@ from webnet.plugins.serializers import (
     PluginSettingsSerializer,
 )
 from webnet.plugins.manager import PluginManager
-from webnet.plugins.registry import plugin_registry
 
 
 class PluginViewSet(viewsets.ModelViewSet):
     """API viewset for managing plugins."""
-    
+
     queryset = PluginConfig.objects.all()
     serializer_class = PluginConfigSerializer
     permission_classes = [IsAuthenticated, RolePermission]
-    
+
     @action(detail=True, methods=["post"])
     def enable(self, request, pk=None):
         """Enable a plugin globally."""
         plugin_config = self.get_object()
-        success, message = PluginManager.enable_plugin(
-            plugin_config.name,
-            user=request.user
-        )
-        
+        success, message = PluginManager.enable_plugin(plugin_config.name, user=request.user)
+
         if success:
             return Response({"message": message}, status=status.HTTP_200_OK)
         return Response({"error": message}, status=status.HTTP_400_BAD_REQUEST)
-    
+
     @action(detail=True, methods=["post"])
     def disable(self, request, pk=None):
         """Disable a plugin globally."""
         plugin_config = self.get_object()
-        success, message = PluginManager.disable_plugin(
-            plugin_config.name,
-            user=request.user
-        )
-        
+        success, message = PluginManager.disable_plugin(plugin_config.name, user=request.user)
+
         if success:
             return Response({"message": message}, status=status.HTTP_200_OK)
         return Response({"error": message}, status=status.HTTP_400_BAD_REQUEST)
-    
+
     @action(detail=True, methods=["post"])
     def update_settings(self, request, pk=None):
         """Update plugin settings."""
         plugin_config = self.get_object()
         serializer = PluginSettingsSerializer(data=request.data)
-        
+
         if serializer.is_valid():
             success, message = PluginManager.update_plugin_settings(
-                plugin_config.name,
-                serializer.validated_data["settings"],
-                user=request.user
+                plugin_config.name, serializer.validated_data["settings"], user=request.user
             )
-            
+
             if success:
                 return Response({"message": message}, status=status.HTTP_200_OK)
             return Response({"error": message}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
+
     @action(detail=True, methods=["get"])
     def health(self, request, pk=None):
         """Get plugin health status."""
         plugin_config = self.get_object()
         health_status = PluginManager.get_plugin_health(plugin_config.name)
         return Response(health_status, status=status.HTTP_200_OK)
-    
+
     @action(detail=False, methods=["post"])
     def sync(self, request):
         """Sync plugins from registry to database."""
@@ -87,91 +78,87 @@ class PluginViewSet(viewsets.ModelViewSet):
 
 class CustomerPluginConfigViewSet(viewsets.ModelViewSet):
     """API viewset for customer-specific plugin configurations."""
-    
+
     queryset = CustomerPluginConfig.objects.all()
     serializer_class = CustomerPluginConfigSerializer
     permission_classes = [IsAuthenticated, RolePermission]
     filterset_fields = ["customer", "plugin", "enabled"]
-    
+
     def get_queryset(self):
         """Filter by customer based on user role."""
         queryset = super().get_queryset()
         user = self.request.user
-        
+
         # Admins see all
         if user.role == "admin":
             return queryset
-        
+
         # Others see only their customers
         return queryset.filter(customer__in=user.customers.all())
-    
+
     @action(detail=True, methods=["post"])
     def enable(self, request, pk=None):
         """Enable a plugin for a customer."""
         customer_config = self.get_object()
         success, message = PluginManager.enable_plugin(
-            customer_config.plugin.name,
-            customer=customer_config.customer,
-            user=request.user
+            customer_config.plugin.name, customer=customer_config.customer, user=request.user
         )
-        
+
         if success:
             return Response({"message": message}, status=status.HTTP_200_OK)
         return Response({"error": message}, status=status.HTTP_400_BAD_REQUEST)
-    
+
     @action(detail=True, methods=["post"])
     def disable(self, request, pk=None):
         """Disable a plugin for a customer."""
         customer_config = self.get_object()
         success, message = PluginManager.disable_plugin(
-            customer_config.plugin.name,
-            customer=customer_config.customer,
-            user=request.user
+            customer_config.plugin.name, customer=customer_config.customer, user=request.user
         )
-        
+
         if success:
             return Response({"message": message}, status=status.HTTP_200_OK)
         return Response({"error": message}, status=status.HTTP_400_BAD_REQUEST)
-    
+
     @action(detail=True, methods=["post"])
     def update_settings(self, request, pk=None):
         """Update customer-specific plugin settings."""
         customer_config = self.get_object()
         serializer = PluginSettingsSerializer(data=request.data)
-        
+
         if serializer.is_valid():
             success, message = PluginManager.update_plugin_settings(
                 customer_config.plugin.name,
                 serializer.validated_data["settings"],
                 customer=customer_config.customer,
-                user=request.user
+                user=request.user,
             )
-            
+
             if success:
                 return Response({"message": message}, status=status.HTTP_200_OK)
             return Response({"error": message}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class PluginAuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     """API viewset for plugin audit logs."""
-    
+
     queryset = PluginAuditLog.objects.all()
     serializer_class = PluginAuditLogSerializer
     permission_classes = [IsAuthenticated, RolePermission]
     filterset_fields = ["plugin", "customer", "user", "action", "success"]
-    
+
     def get_queryset(self):
         """Filter by customer based on user role."""
         queryset = super().get_queryset()
         user = self.request.user
-        
+
         # Admins see all
         if user.role == "admin":
             return queryset
-        
+
         # Others see only their customers
-        return queryset.filter(
-            customer__isnull=True
-        ) | queryset.filter(customer__in=user.customers.all())
+        return queryset.filter(customer__isnull=True) | queryset.filter(
+            customer__in=user.customers.all()
+        )
