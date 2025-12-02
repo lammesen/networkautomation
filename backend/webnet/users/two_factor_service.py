@@ -49,8 +49,8 @@ class TwoFactorService:
     @staticmethod
     def enable_totp_for_user(user: User, device_name: str = "default") -> TOTPDevice:
         """Enable TOTP device for user."""
-        # Delete any existing devices
-        TOTPDevice.objects.filter(user=user, name=device_name).delete()
+        # Only delete unconfirmed devices to prevent accidental deletion of confirmed 2FA
+        TOTPDevice.objects.filter(user=user, name=device_name, confirmed=False).delete()
 
         # Create new device
         device = TOTPDevice.objects.create(

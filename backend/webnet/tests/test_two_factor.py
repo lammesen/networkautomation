@@ -293,3 +293,87 @@ class TestUserModel:
         user.two_factor_enabled = True
         user.save()
         assert user.is_2fa_enabled()
+
+
+class TestSecurityFixes:
+    """Test security fixes for 2FA."""
+
+    def test_open_redirect_prevention(self, client: Client, user: User):
+        """Test that open redirect is prevented in 2FA verify."""
+        # Enable 2FA
+        device = TwoFactorService.enable_totp_for_user(user)
+        token = device.token()
+        TwoFactorService.confirm_totp_device(device, token)
+        
+        # Try to login with malicious next URL
+        response = client.post(
+            reverse("login"),
+            {"username": "testuser", "password": "testpass123"},
+        )
+        assert response.status_code == 302
+        assert response.url == reverse("2fa-verify")
+        
+        # Try to verify with malicious redirect
+        new_token = device.token()
+        response = client.post(
+            reverse("2fa-verify") + "?next=https://evil-site.com",
+            {"token": new_token},
+        )
+        
+        # Should redirect to safe URL, not evil site
+        assert response.status_code == 302
+        assert "evil-site.com" not in response.url
+        assert response.url == "/"
+
+    def test_setup_page_with_confirmed_2fa(self, client_logged_in: Client, user: User):
+        """Test that users with confirmed 2FA can't access setup page."""
+        # Enable and confirm 2FA
+        device = TwoFactorService.enable_totp_for_user(user)
+        token = device.token()
+        TwoFactorService.confirm_totp_device(device, token)
+        
+        # Try to access setup page
+        response = client_logged_in.get(reverse("2fa-setup"))
+        
+        # Should redirect to manage page
+        assert response.status_code == 302
+        assert response.url == reverse("2fa-manage")
+        
+        # Verify device still exists and is confirmed
+        device.refresh_from_db()
+        assert device.confirmed
+        user.refresh_from_db()
+        assert user.two_factor_enabled
+
+    def test_enable_totp_preserves_confirmed_devices(self, user: User):
+        """Test that enable_totp_for_user doesn't delete confirmed devices."""
+        # Create and confirm a device
+        device = TwoFactorService.enable_totp_for_user(user)
+        token = device.token()
+        TwoFactorService.confirm_totp_device(device, token)
+        confirmed_device_id = device.id
+        
+        # Try to enable again (should only delete unconfirmed)
+        new_device = TwoFactorService.enable_totp_for_user(user)
+        
+        # Confirmed device should still exist
+        assert TOTPDevice.objects.filter(id=confirmed_device_id, confirmed=True).exists()
+        # New unconfirmed device should be created
+        assert not new_device.confirmed
+        assert new_device.id != confirmed_device_id
+
+    def test_session_cycle_on_login(self, client: Client, user: User):
+        """Test that session key is regenerated after password auth."""
+        # Get initial session key
+        response = client.get(reverse("login"))
+        initial_session_key = client.session.session_key
+        
+        # Login
+        response = client.post(
+            reverse("login"),
+            {"username": "testuser", "password": "testpass123"},
+        )
+        
+        # Session key should be different after login
+        new_session_key = client.session.session_key
+        assert new_session_key != initial_session_key

@@ -29,6 +29,9 @@ class CustomLoginView(DjangoLoginView):
         """Process valid login form and redirect to 2FA verification if needed."""
         user = form.get_user()
         
+        # Regenerate session to prevent session fixation attacks
+        self.request.session.cycle_key()
+        
         # Check if user has 2FA enabled
         if user.is_2fa_enabled():
             # Store user ID in session for 2FA verification
@@ -113,7 +116,12 @@ class TwoFactorVerifyView(View):
             user.backend = backend
             login(request, user)
             
-            return redirect(request.GET.get("next", "/"))
+            # Validate redirect URL to prevent open redirect vulnerability
+            from django.utils.http import url_has_allowed_host_and_scheme
+            next_url = request.GET.get("next", "/")
+            if not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+                next_url = "/"
+            return redirect(next_url)
         
         # Invalid token
         context = {
@@ -132,6 +140,11 @@ class TwoFactorSetupView(LoginRequiredMixin, View):
     def get(self, request: Any) -> HttpResponse:
         """Display 2FA setup page."""
         user = request.user
+        
+        # Prevent users with confirmed 2FA from accessing setup page
+        if user.two_factor_enabled:
+            messages.info(request, "Two-factor authentication is already enabled. Manage it from settings.")
+            return redirect("2fa-manage")
         
         # Create or get unconfirmed TOTP device
         device = TwoFactorService.enable_totp_for_user(user)
@@ -316,11 +329,19 @@ class WebAuthnRegisterStartView(LoginRequiredMixin, View):
                 json.dumps(result["options"]),
                 content_type="application/json",
             )
-        except Exception as e:
+        except ValueError as e:
+            # Expected errors (e.g., validation issues)
             return HttpResponse(
-                json.dumps({"error": str(e)}),
+                json.dumps({"error": "Failed to start registration"}),
                 content_type="application/json",
                 status=400,
+            )
+        except Exception:
+            # Unexpected errors - log but don't expose details
+            return HttpResponse(
+                json.dumps({"error": "An error occurred during registration"}),
+                content_type="application/json",
+                status=500,
             )
 
 
@@ -364,11 +385,17 @@ class WebAuthnRegisterCompleteView(LoginRequiredMixin, View):
                 json.dumps({"success": True, "credential_id": credential.id}),
                 content_type="application/json",
             )
-        except Exception as e:
+        except ValueError:
             return HttpResponse(
-                json.dumps({"error": str(e)}),
+                json.dumps({"error": "Failed to verify registration"}),
                 content_type="application/json",
                 status=400,
+            )
+        except Exception:
+            return HttpResponse(
+                json.dumps({"error": "An error occurred during registration"}),
+                content_type="application/json",
+                status=500,
             )
 
 
@@ -397,11 +424,17 @@ class WebAuthnAuthStartView(View):
                 json.dumps(result["options"]),
                 content_type="application/json",
             )
-        except Exception as e:
+        except ValueError:
             return HttpResponse(
-                json.dumps({"error": str(e)}),
+                json.dumps({"error": "No registered security keys found"}),
                 content_type="application/json",
                 status=400,
+            )
+        except Exception:
+            return HttpResponse(
+                json.dumps({"error": "An error occurred during authentication"}),
+                content_type="application/json",
+                status=500,
             )
 
 
@@ -443,15 +476,18 @@ class WebAuthnAuthCompleteView(View):
                 # Clear session data
                 del request.session["webauthn_auth_challenge"]
                 del request.session["2fa_user_id"]
-                if "2fa_backend" in request.session:
+                
+                # Use stored backend from session
+                if backend and "2fa_backend" in request.session:
+                    user.backend = backend
                     del request.session["2fa_backend"]
-
-                # Log user in with validated backend
-                # Use default backend for security
-                from django.contrib.auth import get_backends
-                backends = get_backends()
-                if backends:
-                    user.backend = f"{backends[0].__module__}.{backends[0].__class__.__name__}"
+                else:
+                    # Fallback to default backend if not in session
+                    from django.contrib.auth import get_backends
+                    backends = get_backends()
+                    if backends:
+                        user.backend = f"{backends[0].__module__}.{backends[0].__class__.__name__}"
+                
                 login(request, user)
 
                 return HttpResponse(
@@ -464,11 +500,17 @@ class WebAuthnAuthCompleteView(View):
                     content_type="application/json",
                     status=400,
                 )
-        except Exception as e:
+        except ValueError:
             return HttpResponse(
-                json.dumps({"error": str(e)}),
+                json.dumps({"error": "Authentication failed"}),
                 content_type="application/json",
                 status=400,
+            )
+        except Exception:
+            return HttpResponse(
+                json.dumps({"error": "An error occurred during authentication"}),
+                content_type="application/json",
+                status=500,
             )
 
 
