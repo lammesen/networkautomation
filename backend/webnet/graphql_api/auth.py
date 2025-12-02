@@ -36,6 +36,7 @@ def get_user_from_request(request) -> Optional[User]:
     auth_header = request.headers.get("Authorization", "")
     if auth_header.lower().startswith("bearer "):
         from rest_framework_simplejwt.authentication import JWTAuthentication
+        from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 
         jwt_auth = JWTAuthentication()
         try:
@@ -43,7 +44,7 @@ def get_user_from_request(request) -> Optional[User]:
             user = jwt_auth.get_user(validated_token)
             if user and user.is_active:
                 return user
-        except Exception:
+        except (InvalidToken, TokenError):
             pass  # Fall through to API key authentication
 
     # Check for API key authentication
