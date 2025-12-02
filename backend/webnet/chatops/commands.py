@@ -34,7 +34,7 @@ class CommandHandler:
         ChatOpsCommand.objects.create(
             workspace=self.workspace,
             user=self.user,
-            slack_user_id=self.slack_user_id,
+            platform_user_id=self.slack_user_id,
             channel_id=self.channel_id,
             command=command,
             response_status=status,

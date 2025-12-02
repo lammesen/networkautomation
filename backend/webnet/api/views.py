@@ -2235,13 +2235,12 @@ class PlaybookViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        except Exception as e:
+        except Exception:
             logger.exception("Error validating playbook %s", playbook.id)
             return Response(
                 {
                     "valid": False,
-                    "message": "Validation failed",
-                    "error": str(e),
+                    "message": "Validation failed due to an internal error",
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )

@@ -120,7 +120,10 @@ class Migration(migrations.Migration):
                         auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
                     ),
                 ),
-                ("slack_user_id", models.CharField(help_text="Slack user ID", max_length=100)),
+                (
+                    "platform_user_id",
+                    models.CharField(help_text="Platform user ID", max_length=100),
+                ),
                 (
                     "channel_id",
                     models.CharField(help_text="Channel where command was issued", max_length=100),

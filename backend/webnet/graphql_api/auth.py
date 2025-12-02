@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
-from typing import Optional
 import hashlib
+import logging
+from typing import Optional
 
 from django.utils import timezone
+from rest_framework_simplejwt.tokens import AccessToken
+from rest_framework_simplejwt.exceptions import TokenError
 from strawberry.types import Info
 from strawberry.permission import BasePermission
 
 from webnet.users.models import APIKey, User
+
+logger = logging.getLogger(__name__)
 
 
 class IsAuthenticated(BasePermission):
@@ -29,13 +34,31 @@ def get_user_from_request(request) -> Optional[User]:
     This supports:
     - JWT token from Authorization: Bearer <token>
     - API key from Authorization: ApiKey <key> or X-API-Key header
+    - Session authentication (if user is already authenticated)
     """
-    # Check for JWT authentication (handled by DRF middleware)
+    # Check for session authentication (already authenticated)
     if hasattr(request, "user") and request.user and request.user.is_authenticated:
         return request.user
 
-    # Check for API key authentication
     auth_header = request.headers.get("Authorization", "")
+
+    # Check for JWT Bearer token authentication
+    if auth_header.lower().startswith("bearer "):
+        jwt_token = auth_header.split(" ", 1)[1].strip()
+        try:
+            access_token = AccessToken(jwt_token)
+            user_id = access_token.get("user_id")
+            if user_id:
+                user = User.objects.filter(pk=user_id, is_active=True).first()
+                if user:
+                    return user
+        except TokenError as e:
+            logger.debug(f"JWT token validation failed: {e}")
+        except Exception as e:
+            logger.warning(f"Unexpected error validating JWT token: {e}")
+        return None
+
+    # Check for API key authentication
     api_key_token = None
 
     if auth_header.lower().startswith("apikey "):

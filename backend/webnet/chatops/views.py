@@ -199,7 +199,7 @@ def slack_command_webhook(request) -> HttpResponse:
         return JsonResponse(
             {
                 "response_type": "ephemeral",
-                "text": f"An error occurred: {str(e)}",
+                "text": "An internal error occurred. Please try again later.",
             }
         )
 
@@ -234,7 +234,7 @@ def slack_events_webhook(request) -> HttpResponse:
 
     except Exception as e:
         logger.error(f"Error handling Slack event: {e}", exc_info=True)
-        return JsonResponse({"ok": False, "error": str(e)})
+        return JsonResponse({"ok": False, "error": "Internal error"})
 
 
 @csrf_exempt
@@ -277,4 +277,4 @@ def slack_interactions_webhook(request) -> HttpResponse:
 
     except Exception as e:
         logger.error(f"Error handling Slack interaction: {e}", exc_info=True)
-        return JsonResponse({"ok": False, "error": str(e)})
+        return JsonResponse({"ok": False, "error": "Internal error"})

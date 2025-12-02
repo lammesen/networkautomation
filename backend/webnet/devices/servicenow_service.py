@@ -617,9 +617,9 @@ class ServiceNowService:
         """
         # Validate input parameters
         if not 1 <= impact <= 3:
-            raise ValueError("Impact must be between 1 and 3")
+            raise ValueError(f"Invalid impact value: {impact}. Impact must be between 1 and 3.")
         if not 1 <= urgency <= 3:
-            raise ValueError("Urgency must be between 1 and 3")
+            raise ValueError(f"Invalid urgency value: {urgency}. Urgency must be between 1 and 3.")
 
         try:
             incident_data = {
@@ -744,9 +744,9 @@ class ServiceNowService:
         """
         # Validate input parameters
         if not 1 <= risk <= 3:
-            raise ValueError("Risk must be between 1 and 3")
+            raise ValueError(f"Invalid risk value: {risk}. Risk must be between 1 and 3.")
         if not 1 <= impact <= 3:
-            raise ValueError("Impact must be between 1 and 3")
+            raise ValueError(f"Invalid impact value: {impact}. Impact must be between 1 and 3.")
 
         try:
             change_data = {
