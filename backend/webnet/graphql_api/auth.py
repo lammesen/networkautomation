@@ -32,12 +32,21 @@ def get_user_from_request(request) -> Optional[User]:
     - JWT token from Authorization: Bearer <token>
     - API key from Authorization: ApiKey <key> or X-API-Key header
     """
-    # Check for JWT authentication (handled by DRF middleware)
-    if hasattr(request, "user") and request.user and request.user.is_authenticated:
-        return request.user
+    # Try JWT authentication first
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.lower().startswith("bearer "):
+        from rest_framework_simplejwt.authentication import JWTAuthentication
+
+        jwt_auth = JWTAuthentication()
+        try:
+            validated_token = jwt_auth.get_validated_token(auth_header.split(" ", 1)[1])
+            user = jwt_auth.get_user(validated_token)
+            if user and user.is_active:
+                return user
+        except Exception:
+            pass  # Fall through to API key authentication
 
     # Check for API key authentication
-    auth_header = request.headers.get("Authorization", "")
     api_key_token = None
 
     if auth_header.lower().startswith("apikey "):
@@ -60,6 +69,7 @@ def get_user_from_request(request) -> Optional[User]:
                 APIKey.objects.filter(pk=api_key.pk).update(last_used_at=timezone.now())
                 return api_key.user
         except APIKey.DoesNotExist:
+            # API key not found: authentication fails silently (return None below)
             pass
 
     return None

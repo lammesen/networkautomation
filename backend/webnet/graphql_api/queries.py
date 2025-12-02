@@ -3,31 +3,35 @@
 from __future__ import annotations
 
 from typing import List, Optional
-import strawberry
-from strawberry.types import Info
-from django.db.models import Q
 
-from webnet.customers.models import Customer
-from webnet.devices.models import Device, Credential, Tag, TopologyLink
-from webnet.jobs.models import Job
-from webnet.config_mgmt.models import ConfigSnapshot, ConfigTemplate
+import strawberry
+from django.db.models import Q
+from strawberry.types import Info
+
 from webnet.compliance.models import CompliancePolicy, ComplianceResult
+from webnet.config_mgmt.models import ConfigSnapshot, ConfigTemplate
+from webnet.customers.models import Customer
+from webnet.devices.models import Credential, Device, Tag, TopologyLink
+from webnet.jobs.models import Job
 from webnet.users.models import User
 
+from .auth import IsAuthenticated
 from .types import (
-    CustomerType,
-    UserType,
-    DeviceType,
-    CredentialType,
-    TagType,
-    JobType,
-    ConfigSnapshotType,
-    ConfigTemplateType,
     CompliancePolicyType,
     ComplianceResultType,
+    ConfigSnapshotType,
+    ConfigTemplateType,
+    CredentialType,
+    CustomerType,
+    DeviceType,
+    JobType,
+    TagType,
     TopologyLinkType,
+    UserType,
 )
-from .auth import IsAuthenticated
+
+# Maximum number of items that can be returned in a single query
+MAX_LIMIT = 1000
 
 
 def get_user_from_info(info: Info) -> Optional[User]:
@@ -94,6 +98,9 @@ class Query:
         user = get_user_from_info(info)
         customer_ids = get_customer_ids_for_user(user)
 
+        # Enforce maximum limit
+        limit = min(limit, MAX_LIMIT)
+
         queryset = Device.objects.filter(customer_id__in=customer_ids)
 
         if customer_id is not None:
@@ -137,6 +144,9 @@ class Query:
         user = get_user_from_info(info)
         customer_ids = get_customer_ids_for_user(user)
 
+        # Enforce maximum limit
+        limit = min(limit, MAX_LIMIT)
+
         queryset = Credential.objects.filter(customer_id__in=customer_ids)
         if customer_id is not None:
             if customer_id in customer_ids:
@@ -153,6 +163,9 @@ class Query:
         """List tags."""
         user = get_user_from_info(info)
         customer_ids = get_customer_ids_for_user(user)
+
+        # Enforce maximum limit
+        limit = min(limit, MAX_LIMIT)
 
         queryset = Tag.objects.filter(customer_id__in=customer_ids)
         if customer_id is not None:
@@ -175,6 +188,9 @@ class Query:
         """List jobs with filtering."""
         user = get_user_from_info(info)
         customer_ids = get_customer_ids_for_user(user)
+
+        # Enforce maximum limit
+        limit = min(limit, MAX_LIMIT)
 
         queryset = Job.objects.filter(customer_id__in=customer_ids)
 
@@ -215,6 +231,9 @@ class Query:
         user = get_user_from_info(info)
         customer_ids = get_customer_ids_for_user(user)
 
+        # Enforce maximum limit
+        limit = min(limit, MAX_LIMIT)
+
         queryset = ConfigSnapshot.objects.filter(device__customer_id__in=customer_ids)
 
         if customer_id is not None:
@@ -236,6 +255,9 @@ class Query:
         user = get_user_from_info(info)
         customer_ids = get_customer_ids_for_user(user)
 
+        # Enforce maximum limit
+        limit = min(limit, MAX_LIMIT)
+
         queryset = ConfigTemplate.objects.filter(customer_id__in=customer_ids)
         if customer_id is not None:
             if customer_id in customer_ids:
@@ -252,6 +274,9 @@ class Query:
         """List compliance policies."""
         user = get_user_from_info(info)
         customer_ids = get_customer_ids_for_user(user)
+
+        # Enforce maximum limit
+        limit = min(limit, MAX_LIMIT)
 
         queryset = CompliancePolicy.objects.filter(customer_id__in=customer_ids)
         if customer_id is not None:
@@ -274,6 +299,9 @@ class Query:
         user = get_user_from_info(info)
         customer_ids = get_customer_ids_for_user(user)
 
+        # Enforce maximum limit
+        limit = min(limit, MAX_LIMIT)
+
         queryset = ComplianceResult.objects.filter(policy__customer_id__in=customer_ids)
 
         if policy_id is not None:
@@ -294,6 +322,9 @@ class Query:
         """List topology links."""
         user = get_user_from_info(info)
         customer_ids = get_customer_ids_for_user(user)
+
+        # Enforce maximum limit
+        limit = min(limit, MAX_LIMIT)
 
         queryset = TopologyLink.objects.filter(local_device__customer_id__in=customer_ids)
 

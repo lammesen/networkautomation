@@ -2,20 +2,18 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional, List
-from strawberry import auto
+from typing import List, Optional
+
 import strawberry_django
+from strawberry import auto
 from strawberry_django import type as strawberry_django_type
 
-from webnet.customers.models import Customer
-from webnet.users.models import User
-from webnet.devices.models import Device, Credential, Tag, DeviceGroup, TopologyLink
-from webnet.jobs.models import Job, JobLog
-from webnet.config_mgmt.models import ConfigSnapshot, ConfigTemplate
 from webnet.compliance.models import CompliancePolicy, ComplianceResult
-
-if TYPE_CHECKING:
-    pass
+from webnet.config_mgmt.models import ConfigSnapshot, ConfigTemplate
+from webnet.customers.models import Customer
+from webnet.devices.models import Credential, Device, DeviceGroup, Tag, TopologyLink
+from webnet.jobs.models import Job, JobLog
+from webnet.users.models import User
 
 
 @strawberry_django_type(Customer)

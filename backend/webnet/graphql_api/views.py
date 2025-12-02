@@ -1,14 +1,14 @@
 """GraphQL views for webnet."""
 
-from strawberry.django.views import AsyncGraphQLView as BaseAsyncGraphQLView
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
+from strawberry.django.views import GraphQLView as BaseGraphQLView
 
 from .auth import get_user_from_request
 
 
 @method_decorator(csrf_exempt, name="dispatch")
-class GraphQLView(BaseAsyncGraphQLView):
+class GraphQLView(BaseGraphQLView):
     """GraphQL view with custom authentication support."""
 
     def get_context(self, request, response=None):
