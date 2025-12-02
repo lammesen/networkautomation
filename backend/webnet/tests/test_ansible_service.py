@@ -198,6 +198,4 @@ def test_fetch_playbook_from_git_invalid_path():
 
     # Skip this test as cloning linux repo takes too long
     # Instead test with a lighter repo or skip
-    import pytest
-
     pytest.skip("Skipping test that requires cloning large repository")
