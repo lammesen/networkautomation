@@ -12,6 +12,7 @@ from django.contrib.auth.views import LoginView as DjangoLoginView
 from django.http import HttpResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
 
 import qrcode
@@ -117,7 +118,6 @@ class TwoFactorVerifyView(View):
             login(request, user)
             
             # Validate redirect URL to prevent open redirect vulnerability
-            from django.utils.http import url_has_allowed_host_and_scheme
             next_url = request.GET.get("next", "/")
             if not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
                 next_url = "/"
@@ -478,8 +478,9 @@ class WebAuthnAuthCompleteView(View):
                 del request.session["2fa_user_id"]
                 
                 # Use stored backend from session
-                if backend and "2fa_backend" in request.session:
-                    user.backend = backend
+                stored_backend = request.session.get("2fa_backend")
+                if stored_backend:
+                    user.backend = stored_backend
                     del request.session["2fa_backend"]
                 else:
                     # Fallback to default backend if not in session
