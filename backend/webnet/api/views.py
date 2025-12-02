@@ -2095,7 +2095,7 @@ class WebhookViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
     def test(self, request, pk=None):
         """Test webhook delivery with a sample payload."""
         webhook = self.get_object()
-        
+
         # Create a test delivery
         test_payload = {
             "event_timestamp": timezone.now().isoformat(),
@@ -2106,7 +2106,7 @@ class WebhookViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
                 "name": webhook.name,
             },
         }
-        
+
         delivery = WebhookDelivery.objects.create(
             webhook=webhook,
             event_type="webhook.test",
@@ -2114,11 +2114,12 @@ class WebhookViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
             payload=test_payload,
             status=WebhookDelivery.STATUS_PENDING,
         )
-        
+
         # Trigger delivery asynchronously
         from webnet.webhooks.tasks import deliver_webhook
+
         deliver_webhook.delay(delivery.id)
-        
+
         return Response(
             {
                 "message": "Test webhook delivery initiated",
@@ -2144,22 +2145,23 @@ class WebhookDeliveryViewSet(CustomerScopedQuerysetMixin, viewsets.ReadOnlyModel
     def retry(self, request, pk=None):
         """Manually retry a failed webhook delivery."""
         delivery = self.get_object()
-        
+
         if delivery.status not in [WebhookDelivery.STATUS_FAILED, WebhookDelivery.STATUS_RETRYING]:
             return Response(
                 {"detail": "Only failed or retrying deliveries can be manually retried"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
         # Reset delivery state for retry
         delivery.status = WebhookDelivery.STATUS_PENDING
         delivery.next_retry_at = None
         delivery.save()
-        
+
         # Trigger delivery
         from webnet.webhooks.tasks import deliver_webhook
+
         deliver_webhook.delay(delivery.id)
-        
+
         return Response(
             {"message": "Webhook delivery retry initiated"},
             status=status.HTTP_202_ACCEPTED,
