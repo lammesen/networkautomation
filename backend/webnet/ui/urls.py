@@ -71,6 +71,18 @@ from .views import (
     SSHHostKeyVerifyView,
     SSHHostKeyDeleteView,
     SSHHostKeyImportView,
+    # Plugin Management
+    PluginListView,
+    PluginDetailView,
+    PluginEnableView,
+    PluginDisableView,
+    PluginHealthView,
+    PluginUpdateSettingsView,
+    PluginCustomersView,
+    PluginAuditLogView,
+    CustomerPluginEnableView,
+    CustomerPluginDisableView,
+    CustomerPluginUpdateSettingsView,
 )
 
 urlpatterns = [
@@ -176,4 +188,40 @@ urlpatterns = [
         "ssh/host-keys/<int:pk>/delete/", SSHHostKeyDeleteView.as_view(), name="ssh-host-key-delete"
     ),
     path("ssh/host-keys/import/", SSHHostKeyImportView.as_view(), name="ssh-host-key-import"),
+    # Plugin Management
+    path("settings/plugins/", PluginListView.as_view(), name="plugins-list"),
+    path("settings/plugins/<int:pk>/", PluginDetailView.as_view(), name="plugins-detail"),
+    path("settings/plugins/<int:pk>/enable/", PluginEnableView.as_view(), name="plugins-enable"),
+    path("settings/plugins/<int:pk>/disable/", PluginDisableView.as_view(), name="plugins-disable"),
+    path("settings/plugins/<int:pk>/health/", PluginHealthView.as_view(), name="plugins-health"),
+    path(
+        "settings/plugins/<int:pk>/update-settings/",
+        PluginUpdateSettingsView.as_view(),
+        name="plugins-update-settings",
+    ),
+    path(
+        "settings/plugins/<int:pk>/customers/",
+        PluginCustomersView.as_view(),
+        name="plugins-customers",
+    ),
+    path(
+        "settings/plugins/<int:pk>/audit-log/",
+        PluginAuditLogView.as_view(),
+        name="plugins-audit-log",
+    ),
+    path(
+        "settings/plugins/customer-config/<int:pk>/enable/",
+        CustomerPluginEnableView.as_view(),
+        name="customer-plugin-enable",
+    ),
+    path(
+        "settings/plugins/customer-config/<int:pk>/disable/",
+        CustomerPluginDisableView.as_view(),
+        name="customer-plugin-disable",
+    ),
+    path(
+        "settings/plugins/customer-config/<int:pk>/update-settings/",
+        CustomerPluginUpdateSettingsView.as_view(),
+        name="customer-plugin-update-settings",
+    ),
 ]

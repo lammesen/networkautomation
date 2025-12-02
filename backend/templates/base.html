@@ -191,6 +191,12 @@
                 </svg>
                 Users & Roles
               </a>
+              <a href="/settings/plugins/" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium transition-colors {% if '/settings/plugins' in request.path %}bg-accent text-accent-foreground{% else %}hover:bg-accent hover:text-accent-foreground{% endif %}">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
+                Plugins
+              </a>
               <a href="#" class="flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium text-muted-foreground cursor-not-allowed" aria-disabled="true" title="Audit log coming soon">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />

@@ -2652,3 +2652,223 @@ class RemediationActionListView(TenantScopedView):
         if request.headers.get("HX-Request"):
             return render(request, self.partial_name, context)
         return render(request, self.template_name, context)
+
+
+# Plugin Management Views
+
+
+class PluginListView(LoginRequiredMixin, View):
+    """Plugin list view."""
+
+    template_name = "plugins/list.html"
+
+    def get(self, request):
+        from webnet.plugins.models import PluginConfig
+        from webnet.plugins.registry import plugin_registry
+
+        plugins = PluginConfig.objects.all()
+        # Annotate with loaded status
+        for plugin in plugins:
+            plugin.is_loaded = plugin_registry.is_plugin_loaded(plugin.name)
+
+        context = {"plugins": plugins}
+        return render(request, self.template_name, context)
+
+
+class PluginDetailView(LoginRequiredMixin, View):
+    """Plugin detail/settings view."""
+
+    template_name = "plugins/detail.html"
+
+    def get(self, request, pk):
+        from webnet.plugins.models import PluginConfig
+        from webnet.plugins.registry import plugin_registry
+
+        plugin = get_object_or_404(PluginConfig, pk=pk)
+        plugin.is_loaded = plugin_registry.is_plugin_loaded(plugin.name)
+
+        context = {"plugin": plugin}
+        return render(request, self.template_name, context)
+
+
+class PluginEnableView(LoginRequiredMixin, View):
+    """Enable a plugin (HTMX partial)."""
+
+    def post(self, request, pk):
+        from webnet.plugins.models import PluginConfig
+        from webnet.plugins.manager import PluginManager
+        from webnet.plugins.registry import plugin_registry
+
+        plugin = get_object_or_404(PluginConfig, pk=pk)
+        success, message = PluginManager.enable_plugin(plugin.name, user=request.user)
+
+        if success:
+            plugin.refresh_from_db()
+            plugin.is_loaded = plugin_registry.is_plugin_loaded(plugin.name)
+            return render(request, "plugins/_plugin_card.html", {"plugin": plugin})
+        else:
+            return HttpResponseBadRequest(message)
+
+
+class PluginDisableView(LoginRequiredMixin, View):
+    """Disable a plugin (HTMX partial)."""
+
+    def post(self, request, pk):
+        from webnet.plugins.models import PluginConfig
+        from webnet.plugins.manager import PluginManager
+        from webnet.plugins.registry import plugin_registry
+
+        plugin = get_object_or_404(PluginConfig, pk=pk)
+        success, message = PluginManager.disable_plugin(plugin.name, user=request.user)
+
+        if success:
+            plugin.refresh_from_db()
+            plugin.is_loaded = plugin_registry.is_plugin_loaded(plugin.name)
+            return render(request, "plugins/_plugin_card.html", {"plugin": plugin})
+        else:
+            return HttpResponseBadRequest(message)
+
+
+class PluginHealthView(LoginRequiredMixin, View):
+    """Get plugin health status (HTMX partial)."""
+
+    def get(self, request, pk):
+        import json as json_lib
+        from webnet.plugins.models import PluginConfig
+        from webnet.plugins.manager import PluginManager
+
+        plugin = get_object_or_404(PluginConfig, pk=pk)
+        health = PluginManager.get_plugin_health(plugin.name)
+
+        # Format details as JSON string for display
+        if health.get("details"):
+            health["details"] = json_lib.dumps(health["details"], indent=2)
+
+        context = {"health": health}
+        return render(request, "plugins/_health.html", context)
+
+
+class PluginUpdateSettingsView(LoginRequiredMixin, View):
+    """Update plugin settings."""
+
+    def post(self, request, pk):
+        import json as json_lib
+        from webnet.plugins.models import PluginConfig
+        from webnet.plugins.manager import PluginManager
+
+        plugin = get_object_or_404(PluginConfig, pk=pk)
+
+        try:
+            settings_str = request.POST.get("settings", "{}")
+            settings = json_lib.loads(settings_str)
+        except json_lib.JSONDecodeError:
+            return HttpResponseBadRequest("Invalid JSON in settings")
+
+        success, message = PluginManager.update_plugin_settings(
+            plugin.name, settings, user=request.user
+        )
+
+        if success:
+            return HttpResponse("Settings updated successfully")
+        else:
+            return HttpResponseBadRequest(message)
+
+
+class PluginCustomersView(LoginRequiredMixin, View):
+    """Get customer configurations for a plugin (HTMX partial)."""
+
+    def get(self, request, pk):
+        from webnet.plugins.models import PluginConfig, CustomerPluginConfig
+
+        plugin = get_object_or_404(PluginConfig, pk=pk)
+        customer_configs = CustomerPluginConfig.objects.filter(plugin=plugin).select_related(
+            "customer"
+        )
+
+        context = {"customer_configs": customer_configs}
+        return render(request, "plugins/_customers.html", context)
+
+
+class PluginAuditLogView(LoginRequiredMixin, View):
+    """Get audit logs for a plugin (HTMX partial)."""
+
+    def get(self, request, pk):
+        import json as json_lib
+        from webnet.plugins.models import PluginConfig, PluginAuditLog
+
+        plugin = get_object_or_404(PluginConfig, pk=pk)
+        audit_logs = PluginAuditLog.objects.filter(plugin=plugin).select_related(
+            "customer", "user"
+        )[:50]
+
+        # Format details as JSON string for display
+        for log in audit_logs:
+            if log.details:
+                log.details = json_lib.dumps(log.details, indent=2)
+
+        context = {"audit_logs": audit_logs}
+        return render(request, "plugins/_audit_log.html", context)
+
+
+class CustomerPluginEnableView(LoginRequiredMixin, View):
+    """Enable plugin for a customer (HTMX partial)."""
+
+    def post(self, request, pk):
+        from webnet.plugins.models import CustomerPluginConfig
+        from webnet.plugins.manager import PluginManager
+
+        config = get_object_or_404(CustomerPluginConfig, pk=pk)
+        success, message = PluginManager.enable_plugin(
+            config.plugin.name, customer=config.customer, user=request.user
+        )
+
+        if success:
+            config.refresh_from_db()
+            return render(request, "plugins/_customers.html", {"customer_configs": [config]})
+        else:
+            return HttpResponseBadRequest(message)
+
+
+class CustomerPluginDisableView(LoginRequiredMixin, View):
+    """Disable plugin for a customer (HTMX partial)."""
+
+    def post(self, request, pk):
+        from webnet.plugins.models import CustomerPluginConfig
+        from webnet.plugins.manager import PluginManager
+
+        config = get_object_or_404(CustomerPluginConfig, pk=pk)
+        success, message = PluginManager.disable_plugin(
+            config.plugin.name, customer=config.customer, user=request.user
+        )
+
+        if success:
+            config.refresh_from_db()
+            return render(request, "plugins/_customers.html", {"customer_configs": [config]})
+        else:
+            return HttpResponseBadRequest(message)
+
+
+class CustomerPluginUpdateSettingsView(LoginRequiredMixin, View):
+    """Update customer-specific plugin settings."""
+
+    def post(self, request, pk):
+        import json as json_lib
+        from webnet.plugins.models import CustomerPluginConfig
+        from webnet.plugins.manager import PluginManager
+
+        config = get_object_or_404(CustomerPluginConfig, pk=pk)
+
+        try:
+            settings_str = request.POST.get("settings", "{}")
+            settings = json_lib.loads(settings_str)
+        except json_lib.JSONDecodeError:
+            return HttpResponseBadRequest("Invalid JSON in settings")
+
+        success, message = PluginManager.update_plugin_settings(
+            config.plugin.name, settings, customer=config.customer, user=request.user
+        )
+
+        if success:
+            return HttpResponse("Settings updated successfully")
+        else:
+            return HttpResponseBadRequest(message)
