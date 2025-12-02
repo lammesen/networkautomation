@@ -71,6 +71,13 @@ from .views import (
     SSHHostKeyVerifyView,
     SSHHostKeyDeleteView,
     SSHHostKeyImportView,
+    # Schedule Management
+    ScheduleListView,
+    ScheduleDetailView,
+    ScheduleCreateView,
+    ScheduleEditView,
+    ScheduleDeleteView,
+    ScheduleCalendarView,
 )
 
 urlpatterns = [
@@ -176,4 +183,11 @@ urlpatterns = [
         "ssh/host-keys/<int:pk>/delete/", SSHHostKeyDeleteView.as_view(), name="ssh-host-key-delete"
     ),
     path("ssh/host-keys/import/", SSHHostKeyImportView.as_view(), name="ssh-host-key-import"),
+    # Schedule Management
+    path("schedules/", ScheduleListView.as_view(), name="schedules-list"),
+    path("schedules/calendar", ScheduleCalendarView.as_view(), name="schedules-calendar"),
+    path("schedules/new", ScheduleCreateView.as_view(), name="schedule-create"),
+    path("schedules/<int:pk>/", ScheduleDetailView.as_view(), name="schedule-detail"),
+    path("schedules/<int:pk>/edit", ScheduleEditView.as_view(), name="schedule-edit"),
+    path("schedules/<int:pk>/delete", ScheduleDeleteView.as_view(), name="schedule-delete"),
 ]

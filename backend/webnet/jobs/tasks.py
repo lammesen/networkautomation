@@ -1485,7 +1485,7 @@ def process_due_schedules() -> dict:
     This task should be run periodically (e.g., every minute) via Celery Beat.
     """
     from webnet.jobs.schedule_service import ScheduleService
-    
+
     ss = ScheduleService()
     try:
         count = ss.process_due_schedules()
