@@ -44,6 +44,30 @@ class User(AbstractUser):
         return self.two_factor_enabled
 
 
+class WebAuthnCredential(models.Model):
+    """WebAuthn/FIDO2 security key credential."""
+    
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="webauthn_credentials")
+    name = models.CharField(max_length=100, help_text="User-friendly name for this security key")
+    credential_id = models.BinaryField(unique=True, help_text="WebAuthn credential ID")
+    public_key = models.BinaryField(help_text="Public key for this credential")
+    sign_count = models.PositiveIntegerField(default=0, help_text="Signature counter")
+    aaguid = models.BinaryField(help_text="Authenticator AAGUID")
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=["user"]),
+            models.Index(fields=["credential_id"]),
+        ]
+        verbose_name = "WebAuthn Credential"
+        verbose_name_plural = "WebAuthn Credentials"
+    
+    def __str__(self) -> str:
+        return f"{self.user.username}: {self.name}"
+
+
 class APIKey(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="api_keys")
     name = models.CharField(max_length=100)

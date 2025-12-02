@@ -203,6 +203,7 @@ LOGIN_EXEMPT_PREFIXES = (
     "/login",
     "/logout",
     "/2fa/",
+    "/webauthn/",
     "/api/",
     "/ws/",  # WebSocket paths - auth handled by Channels AuthMiddlewareStack
     "/static/",
@@ -213,6 +214,11 @@ LOGIN_EXEMPT_PREFIXES = (
 )
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# WebAuthn settings
+WEBAUTHN_RP_ID = env("WEBAUTHN_RP_ID", "localhost")
+WEBAUTHN_RP_NAME = env("WEBAUTHN_RP_NAME", "webnet Network Automation")
+WEBAUTHN_ORIGIN = env("WEBAUTHN_ORIGIN", "http://localhost:8000")
 
 
 # REST framework

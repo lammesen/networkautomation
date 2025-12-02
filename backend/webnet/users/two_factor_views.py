@@ -69,6 +69,7 @@ class TwoFactorVerifyView(View):
         context = {
             "username": user.username,
             "has_backup_codes": user.has_backup_codes(),
+            "has_webauthn": user.webauthn_credentials.exists(),
         }
         return render(request, self.template_name, context)
 
@@ -216,11 +217,15 @@ class TwoFactorManageView(LoginRequiredMixin, View):
         """Display 2FA management page."""
         user = request.user
         
+        # Get WebAuthn credentials
+        webauthn_credentials = list(user.webauthn_credentials.all())
+        
         context = {
             "two_factor_enabled": user.two_factor_enabled,
             "two_factor_required": user.two_factor_required,
             "has_backup_codes": user.has_backup_codes(),
             "backup_codes_count": len(user.backup_codes) if user.backup_codes else 0,
+            "webauthn_credentials": webauthn_credentials,
         }
         return render(request, self.template_name, context)
 
@@ -289,3 +294,191 @@ class TwoFactorAdminResetView(LoginRequiredMixin, View):
         
         # Redirect to user management or admin
         return redirect("admin:users_user_change", user_id)
+
+
+# WebAuthn Views
+
+class WebAuthnRegisterStartView(LoginRequiredMixin, View):
+    """Start WebAuthn registration process."""
+
+    def post(self, request: Any) -> HttpResponse:
+        """Generate registration options."""
+        from webnet.users.webauthn_service import WebAuthnService
+        import json
+
+        user = request.user
+
+        try:
+            result = WebAuthnService.start_registration(user)
+            # Store challenge in session
+            request.session["webauthn_challenge"] = result["challenge"]
+            return HttpResponse(
+                json.dumps(result["options"]),
+                content_type="application/json",
+            )
+        except Exception as e:
+            return HttpResponse(
+                json.dumps({"error": str(e)}),
+                content_type="application/json",
+                status=400,
+            )
+
+
+class WebAuthnRegisterCompleteView(LoginRequiredMixin, View):
+    """Complete WebAuthn registration."""
+
+    def post(self, request: Any) -> HttpResponse:
+        """Verify registration response."""
+        from webnet.users.webauthn_service import WebAuthnService
+        import json
+
+        user = request.user
+
+        try:
+            data = json.loads(request.body)
+            credential_name = data.get("name", "Security Key")
+            credential_data = data.get("credential")
+            challenge = request.session.get("webauthn_challenge")
+
+            if not challenge:
+                return HttpResponse(
+                    json.dumps({"error": "No challenge found"}),
+                    content_type="application/json",
+                    status=400,
+                )
+
+            # Verify and create credential
+            credential = WebAuthnService.verify_registration(
+                user, credential_name, credential_data, challenge
+            )
+
+            # Clear challenge from session
+            del request.session["webauthn_challenge"]
+
+            # Enable 2FA if not already enabled
+            if not user.two_factor_enabled:
+                user.two_factor_enabled = True
+                user.save(update_fields=["two_factor_enabled"])
+
+            return HttpResponse(
+                json.dumps({"success": True, "credential_id": credential.id}),
+                content_type="application/json",
+            )
+        except Exception as e:
+            return HttpResponse(
+                json.dumps({"error": str(e)}),
+                content_type="application/json",
+                status=400,
+            )
+
+
+class WebAuthnAuthStartView(View):
+    """Start WebAuthn authentication process."""
+
+    def post(self, request: Any) -> HttpResponse:
+        """Generate authentication options."""
+        from webnet.users.webauthn_service import WebAuthnService
+        import json
+
+        user_id = request.session.get("2fa_user_id")
+        if not user_id:
+            return HttpResponse(
+                json.dumps({"error": "No user found"}),
+                content_type="application/json",
+                status=400,
+            )
+
+        try:
+            user = User.objects.get(id=user_id)
+            result = WebAuthnService.start_authentication(user)
+            # Store challenge in session
+            request.session["webauthn_auth_challenge"] = result["challenge"]
+            return HttpResponse(
+                json.dumps(result["options"]),
+                content_type="application/json",
+            )
+        except Exception as e:
+            return HttpResponse(
+                json.dumps({"error": str(e)}),
+                content_type="application/json",
+                status=400,
+            )
+
+
+class WebAuthnAuthCompleteView(View):
+    """Complete WebAuthn authentication."""
+
+    def post(self, request: Any) -> HttpResponse:
+        """Verify authentication response."""
+        from webnet.users.webauthn_service import WebAuthnService
+        import json
+
+        user_id = request.session.get("2fa_user_id")
+        backend = request.session.get("2fa_backend")
+        
+        if not user_id:
+            return HttpResponse(
+                json.dumps({"error": "No user found"}),
+                content_type="application/json",
+                status=400,
+            )
+
+        try:
+            user = User.objects.get(id=user_id)
+            data = json.loads(request.body)
+            credential_data = data.get("credential")
+            challenge = request.session.get("webauthn_auth_challenge")
+
+            if not challenge:
+                return HttpResponse(
+                    json.dumps({"error": "No challenge found"}),
+                    content_type="application/json",
+                    status=400,
+                )
+
+            # Verify authentication
+            valid = WebAuthnService.verify_authentication(user, credential_data, challenge)
+
+            if valid:
+                # Clear session data
+                del request.session["webauthn_auth_challenge"]
+                del request.session["2fa_user_id"]
+                if "2fa_backend" in request.session:
+                    del request.session["2fa_backend"]
+
+                # Log user in
+                user.backend = backend
+                login(request, user)
+
+                return HttpResponse(
+                    json.dumps({"success": True, "redirect": "/"}),
+                    content_type="application/json",
+                )
+            else:
+                return HttpResponse(
+                    json.dumps({"error": "Invalid authentication"}),
+                    content_type="application/json",
+                    status=400,
+                )
+        except Exception as e:
+            return HttpResponse(
+                json.dumps({"error": str(e)}),
+                content_type="application/json",
+                status=400,
+            )
+
+
+class WebAuthnCredentialDeleteView(LoginRequiredMixin, View):
+    """Delete a WebAuthn credential."""
+
+    def post(self, request: Any, credential_id: int) -> HttpResponse:
+        """Delete credential."""
+        from webnet.users.webauthn_service import WebAuthnService
+
+        try:
+            WebAuthnService.delete_credential(credential_id, request.user)
+            messages.success(request, "Security key removed successfully.")
+        except Exception:
+            messages.error(request, "Failed to remove security key.")
+
+        return redirect("2fa-manage")

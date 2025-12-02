@@ -134,6 +134,63 @@
         </div>
       </div>
     </div>
+
+    <!-- Security Keys (WebAuthn) -->
+    <div class="rounded-lg border bg-card text-card-foreground shadow-sm">
+      <div class="p-6">
+        <div class="flex items-start justify-between mb-4">
+          <div>
+            <h2 class="text-lg font-semibold mb-1">Security Keys</h2>
+            <p class="text-sm text-muted-foreground">
+              Use hardware security keys (YubiKey, etc.) for enhanced security
+            </p>
+          </div>
+          <span class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold bg-blue-500/10 text-blue-700 border border-blue-500/20">
+            {{ webauthn_credentials|length }} key(s)
+          </span>
+        </div>
+
+        {% if webauthn_credentials %}
+        <div class="space-y-2 mb-4">
+          {% for credential in webauthn_credentials %}
+          <div class="flex items-center justify-between p-3 bg-muted rounded-md">
+            <div class="flex items-center gap-3">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+              </svg>
+              <div>
+                <p class="text-sm font-medium">{{ credential.name }}</p>
+                <p class="text-xs text-muted-foreground">
+                  Added {{ credential.created_at|date:"M d, Y" }}
+                  {% if credential.last_used_at %} • Last used {{ credential.last_used_at|date:"M d, Y" }}{% endif %}
+                </p>
+              </div>
+            </div>
+            <form method="post" action="{% url 'webauthn-credential-delete' credential.id %}" onsubmit="return confirm('Remove this security key?');">
+              {% csrf_token %}
+              <button type="submit" class="text-destructive hover:text-destructive/80 text-sm">
+                Remove
+              </button>
+            </form>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="pt-4 border-t">
+          <button 
+            type="button"
+            onclick="registerSecurityKey()"
+            class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+            Add Security Key
+          </button>
+        </div>
+      </div>
+    </div>
     {% endif %}
 
     <!-- Security Tips -->
@@ -159,4 +216,91 @@
     </a>
   </div>
 </div>
+
+<script>
+async function registerSecurityKey() {
+  try {
+    // Get registration options
+    const startResponse = await fetch('{% url "webauthn-register-start" %}', {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': '{{ csrf_token }}',
+      },
+    });
+    
+    if (!startResponse.ok) {
+      throw new Error('Failed to start registration');
+    }
+    
+    const options = await startResponse.json();
+    
+    // Convert base64url to Uint8Array
+    options.challenge = base64urlToUint8Array(options.challenge);
+    options.user.id = base64urlToUint8Array(options.user.id);
+    if (options.excludeCredentials) {
+      options.excludeCredentials = options.excludeCredentials.map(cred => ({
+        ...cred,
+        id: base64urlToUint8Array(cred.id),
+      }));
+    }
+    
+    // Create credential
+    const credential = await navigator.credentials.create({ publicKey: options });
+    
+    // Get key name from user
+    const keyName = prompt('Enter a name for this security key:', 'Security Key');
+    if (!keyName) return;
+    
+    // Prepare credential for server
+    const credentialData = {
+      id: credential.id,
+      rawId: uint8ArrayToBase64url(new Uint8Array(credential.rawId)),
+      response: {
+        clientDataJSON: uint8ArrayToBase64url(new Uint8Array(credential.response.clientDataJSON)),
+        attestationObject: uint8ArrayToBase64url(new Uint8Array(credential.response.attestationObject)),
+      },
+      type: credential.type,
+    };
+    
+    // Send to server
+    const completeResponse = await fetch('{% url "webauthn-register-complete" %}', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': '{{ csrf_token }}',
+      },
+      body: JSON.stringify({
+        name: keyName,
+        credential: credentialData,
+      }),
+    });
+    
+    if (!completeResponse.ok) {
+      throw new Error('Failed to register security key');
+    }
+    
+    alert('Security key registered successfully!');
+    window.location.reload();
+  } catch (error) {
+    console.error('Registration error:', error);
+    alert('Failed to register security key: ' + error.message);
+  }
+}
+
+function base64urlToUint8Array(base64url) {
+  const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function uint8ArrayToBase64url(array) {
+  const binary = String.fromCharCode(...array);
+  const base64 = btoa(binary);
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+</script>
 {% endblock content %}

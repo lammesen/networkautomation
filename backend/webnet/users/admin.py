@@ -5,7 +5,7 @@ from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.urls import reverse
 from django.utils.html import format_html
 
-from webnet.users.models import User, APIKey
+from webnet.users.models import User, APIKey, WebAuthnCredential
 from webnet.users.two_factor_service import TwoFactorService
 
 
@@ -120,6 +120,43 @@ class APIKeyAdmin(admin.ModelAdmin):
             "Usage",
             {
                 "fields": ("last_used_at", "created_at"),
+            },
+        ),
+    )
+
+
+@admin.register(WebAuthnCredential)
+class WebAuthnCredentialAdmin(admin.ModelAdmin):
+    """Admin for WebAuthn credentials."""
+
+    list_display = (
+        "user",
+        "name",
+        "created_at",
+        "last_used_at",
+    )
+    list_filter = ("created_at", "last_used_at")
+    search_fields = ("user__username", "name")
+    readonly_fields = ("credential_id", "public_key", "sign_count", "aaguid", "created_at", "last_used_at")
+    date_hierarchy = "created_at"
+
+    fieldsets = (
+        (
+            None,
+            {
+                "fields": ("user", "name"),
+            },
+        ),
+        (
+            "Credential Information",
+            {
+                "fields": ("credential_id", "public_key", "sign_count", "aaguid"),
+            },
+        ),
+        (
+            "Usage",
+            {
+                "fields": ("created_at", "last_used_at"),
             },
         ),
     )

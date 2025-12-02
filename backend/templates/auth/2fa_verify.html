@@ -70,6 +70,18 @@
         </button>
       </div>
       {% endif %}
+
+      {% if has_webauthn %}
+      <div class="mt-4 pt-4 border-t">
+        <button 
+          type="button" 
+          class="text-sm text-muted-foreground hover:text-primary transition-colors"
+          onclick="useSecurityKey()"
+        >
+          Use security key instead
+        </button>
+      </div>
+      {% endif %}
     </div>
   </div>
 
@@ -83,6 +95,91 @@ function useBackupCode() {
   document.getElementById('use_backup').value = 'true';
   document.getElementById('id_token').placeholder = 'Enter backup code';
   document.querySelector('label[for="id_token"]').textContent = 'Backup Code';
+}
+
+async function useSecurityKey() {
+  try {
+    // Get authentication options
+    const startResponse = await fetch('{% url "webauthn-auth-start" %}', {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': '{{ csrf_token }}',
+      },
+    });
+    
+    if (!startResponse.ok) {
+      throw new Error('Failed to start authentication');
+    }
+    
+    const options = await startResponse.json();
+    
+    // Convert base64url to Uint8Array
+    options.challenge = base64urlToUint8Array(options.challenge);
+    if (options.allowCredentials) {
+      options.allowCredentials = options.allowCredentials.map(cred => ({
+        ...cred,
+        id: base64urlToUint8Array(cred.id),
+      }));
+    }
+    
+    // Get credential
+    const credential = await navigator.credentials.get({ publicKey: options });
+    
+    // Prepare credential for server
+    const credentialData = {
+      id: credential.id,
+      rawId: uint8ArrayToBase64url(new Uint8Array(credential.rawId)),
+      response: {
+        clientDataJSON: uint8ArrayToBase64url(new Uint8Array(credential.response.clientDataJSON)),
+        authenticatorData: uint8ArrayToBase64url(new Uint8Array(credential.response.authenticatorData)),
+        signature: uint8ArrayToBase64url(new Uint8Array(credential.response.signature)),
+        userHandle: credential.response.userHandle ? uint8ArrayToBase64url(new Uint8Array(credential.response.userHandle)) : null,
+      },
+      type: credential.type,
+    };
+    
+    // Send to server
+    const completeResponse = await fetch('{% url "webauthn-auth-complete" %}', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': '{{ csrf_token }}',
+      },
+      body: JSON.stringify({
+        credential: credentialData,
+      }),
+    });
+    
+    if (!completeResponse.ok) {
+      throw new Error('Authentication failed');
+    }
+    
+    const result = await completeResponse.json();
+    if (result.success) {
+      window.location.href = result.redirect || '/';
+    } else {
+      alert('Authentication failed');
+    }
+  } catch (error) {
+    console.error('Authentication error:', error);
+    alert('Failed to authenticate with security key: ' + error.message);
+  }
+}
+
+function base64urlToUint8Array(base64url) {
+  const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function uint8ArrayToBase64url(array) {
+  const binary = String.fromCharCode(...array);
+  const base64 = btoa(binary);
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 </script>
 {% endblock auth_content %}
