@@ -45,6 +45,7 @@ from webnet.compliance.models import (
     RemediationRule,
     RemediationAction,
 )
+from webnet.ansible_mgmt.models import Playbook, AnsibleConfig
 
 from .serializers import (
     UserSerializer,
@@ -86,6 +87,10 @@ from .serializers import (
     NetBoxConfigSerializer,
     NetBoxSyncLogSerializer,
     NetBoxSyncRequestSerializer,
+    # Ansible Integration
+    AnsibleConfigSerializer,
+    PlaybookSerializer,
+    PlaybookExecuteSerializer,
 )
 from .permissions import (
     RolePermission,
@@ -2068,4 +2073,123 @@ class NetBoxConfigViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
             return Response(
                 {"detail": "Preview failed due to an internal error."},
                 status=status.HTTP_400_BAD_REQUEST,
+            )
+
+
+class AnsibleConfigViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
+    """ViewSet for Ansible configuration management."""
+
+    queryset = AnsibleConfig.objects.all()
+    serializer_class = AnsibleConfigSerializer
+    permission_classes = [IsAuthenticated, RolePermission, ObjectCustomerPermission]
+    customer_field = "customer_id"
+
+
+class PlaybookViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
+    """ViewSet for Ansible playbook management."""
+
+    queryset = Playbook.objects.all()
+    serializer_class = PlaybookSerializer
+    permission_classes = [IsAuthenticated, RolePermission, ObjectCustomerPermission]
+    customer_field = "customer_id"
+
+    def get_queryset(self):
+        """Filter playbooks by customer."""
+        qs = super().get_queryset()
+        # Optionally filter by tags
+        tags = self.request.query_params.get("tags")
+        if tags:
+            tag_list = [t.strip() for t in tags.split(",")]
+            for tag in tag_list:
+                qs = qs.filter(tags__contains=[tag])
+        return qs
+
+    @action(detail=True, methods=["post"])
+    def execute(self, request, pk=None) -> Response:
+        """Execute a playbook against managed devices.
+
+        Request body:
+        - targets: Device filter targets (site, role, vendor, device_ids)
+        - extra_vars: Extra variables to pass to playbook
+        - limit: Limit execution to specific hosts
+        - tags: Ansible tags to run
+        """
+        playbook = self.get_object()
+        serializer = PlaybookExecuteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        targets = serializer.validated_data.get("targets", {})
+        extra_vars = serializer.validated_data.get("extra_vars", {})
+        limit = serializer.validated_data.get("limit")
+        tags = serializer.validated_data.get("tags")
+
+        # Use playbook's customer
+        customer = playbook.customer
+
+        # Create job
+        js = JobService()
+        job = js.create_job(
+            job_type="ansible_playbook",
+            user=request.user,
+            customer=customer,
+            target_summary={"filters": targets},
+            payload={
+                "playbook_id": playbook.id,
+                "extra_vars": extra_vars,
+                "limit": limit,
+                "tags": tags or [],
+            },
+        )
+
+        return Response(
+            {
+                "job_id": job.id,
+                "status": job.status,
+                "message": f"Playbook '{playbook.name}' execution started",
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=["get"])
+    def validate(self, request, pk=None) -> Response:
+        """Validate playbook YAML syntax.
+
+        Returns validation result with any syntax errors.
+        """
+        playbook = self.get_object()
+
+        if playbook.source_type != "inline":
+            return Response(
+                {"detail": "Validation only supported for inline playbooks"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            import yaml
+
+            yaml.safe_load(playbook.content)
+            return Response(
+                {
+                    "valid": True,
+                    "message": "Playbook syntax is valid",
+                }
+            )
+        except yaml.YAMLError as e:
+            return Response(
+                {
+                    "valid": False,
+                    "message": "Playbook syntax error",
+                    "error": str(e),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except Exception as e:
+            logger.exception("Error validating playbook %s", playbook.id)
+            return Response(
+                {
+                    "valid": False,
+                    "message": "Validation failed",
+                    "error": str(e),
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )

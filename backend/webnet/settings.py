@@ -69,6 +69,7 @@ INSTALLED_APPS = [
     "webnet.compliance",
     "webnet.networkops",
     "webnet.plugins",
+    "webnet.ansible_mgmt",
     "webnet.api",
     "webnet.ui",
     "webnet.graphql_api",

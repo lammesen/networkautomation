@@ -19,6 +19,7 @@ from webnet.compliance.models import (
     RemediationRule,
     RemediationAction,
 )
+from webnet.ansible_mgmt.models import Playbook, AnsibleConfig
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -865,4 +866,101 @@ class NetBoxSyncRequestSerializer(serializers.Serializer):
 
     full_sync = serializers.BooleanField(
         default=False, help_text="If true, sync all devices (not just delta)"
+    )
+
+
+class AnsibleConfigSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AnsibleConfig
+        fields = [
+            "id",
+            "customer",
+            "ansible_cfg_content",
+            "collections",
+            "environment_vars",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["created_at", "updated_at"]
+
+
+class PlaybookSerializer(serializers.ModelSerializer):
+    uploaded_file = serializers.FileField(required=False, allow_null=True)
+
+    class Meta:
+        model = Playbook
+        fields = [
+            "id",
+            "customer",
+            "name",
+            "description",
+            "source_type",
+            "content",
+            "git_repo_url",
+            "git_branch",
+            "git_path",
+            "uploaded_file",
+            "variables",
+            "tags",
+            "enabled",
+            "created_by",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["created_by", "created_at", "updated_at"]
+
+    def validate(self, attrs):
+        """Validate that required fields are provided based on source_type."""
+        source_type = attrs.get("source_type", "inline")
+
+        if source_type == "inline" and not attrs.get("content"):
+            raise serializers.ValidationError(
+                {"content": "Content is required for inline playbooks"}
+            )
+        elif source_type == "git":
+            if not attrs.get("git_repo_url"):
+                raise serializers.ValidationError(
+                    {"git_repo_url": "Git repository URL is required for git source"}
+                )
+            if not attrs.get("git_path"):
+                raise serializers.ValidationError(
+                    {"git_path": "Git path is required for git source"}
+                )
+        elif source_type == "upload" and not attrs.get("uploaded_file"):
+            # Only validate on create, not update
+            if not self.instance:
+                raise serializers.ValidationError(
+                    {"uploaded_file": "File upload is required for upload source"}
+                )
+
+        return attrs
+
+    def create(self, validated_data):
+        # Set created_by to the current user
+        request = self.context.get("request")
+        if request and hasattr(request, "user"):
+            validated_data["created_by"] = request.user
+        return super().create(validated_data)
+
+
+class PlaybookExecuteSerializer(serializers.Serializer):
+    """Serializer for executing a playbook."""
+
+    targets = serializers.DictField(
+        required=False,
+        help_text="Device filter targets (site, role, vendor, device_ids)",
+    )
+    extra_vars = serializers.DictField(
+        required=False,
+        help_text="Extra variables to pass to the playbook",
+    )
+    limit = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="Limit execution to specific hosts (Ansible limit pattern)",
+    )
+    tags = serializers.ListField(
+        child=serializers.CharField(),
+        required=False,
+        help_text="Ansible tags to run",
     )
