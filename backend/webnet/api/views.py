@@ -34,6 +34,10 @@ from webnet.devices.models import (
     DeviceGroup,
     NetBoxConfig,
     NetBoxSyncLog,
+    ServiceNowConfig,
+    ServiceNowSyncLog,
+    ServiceNowIncident,
+    ServiceNowChangeRequest,
     SSHHostKey,
 )
 from webnet.jobs.models import Job, JobLog
@@ -86,6 +90,15 @@ from .serializers import (
     NetBoxConfigSerializer,
     NetBoxSyncLogSerializer,
     NetBoxSyncRequestSerializer,
+    # ServiceNow Integration
+    ServiceNowConfigSerializer,
+    ServiceNowSyncLogSerializer,
+    ServiceNowSyncRequestSerializer,
+    ServiceNowIncidentSerializer,
+    ServiceNowIncidentUpdateSerializer,
+    ServiceNowChangeRequestSerializer,
+    ServiceNowChangeRequestCreateSerializer,
+    ServiceNowChangeRequestUpdateSerializer,
 )
 from .permissions import (
     RolePermission,
@@ -2069,3 +2082,327 @@ class NetBoxConfigViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
                 {"detail": "Preview failed due to an internal error."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+
+# ==============================================================================
+# ServiceNow Integration ViewSets
+# ==============================================================================
+
+
+class ServiceNowConfigViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
+    """ViewSet for managing ServiceNow configurations.
+
+    Each customer can have one ServiceNow configuration for CMDB sync,
+    incident management, and change requests.
+    """
+
+    queryset = ServiceNowConfig.objects.select_related("customer", "default_credential")
+    serializer_class = ServiceNowConfigSerializer
+    permission_classes = [IsAuthenticated, RolePermission, ObjectCustomerPermission]
+    customer_field = "customer_id"
+
+    @action(detail=True, methods=["post"])
+    def sync(self, request, pk=None) -> Response:
+        """Trigger a manual sync with ServiceNow CMDB.
+
+        Request body:
+        - direction: "import" (from ServiceNow), "export" (to ServiceNow), or "both"
+        - device_ids: Optional list of device IDs to sync (only for export)
+
+        Returns:
+        - detail: Status message
+        - config_id: ID of the ServiceNow configuration
+        """
+        config = self.get_object()
+
+        if not config.auto_sync_enabled:
+            return Response(
+                {"detail": "ServiceNow sync is disabled for this configuration"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not config.has_password():
+            return Response(
+                {"detail": "ServiceNow password is not configured"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = ServiceNowSyncRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        direction = serializer.validated_data.get("direction", "both")
+        device_ids = serializer.validated_data.get("device_ids")
+
+        # Queue the sync task
+        from webnet.jobs.tasks import servicenow_sync_job
+
+        servicenow_sync_job.delay(config.id, direction=direction, device_ids=device_ids)
+
+        return Response(
+            {
+                "detail": "ServiceNow sync queued",
+                "config_id": config.id,
+                "direction": direction,
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+    @action(detail=True, methods=["post"], url_path="test-connection")
+    def test_connection(self, request, pk=None) -> Response:
+        """Test the ServiceNow API connection.
+
+        Returns:
+        - success: Whether the connection was successful
+        - message: Success or error message
+        - servicenow_version: ServiceNow version if available
+        """
+        config = self.get_object()
+
+        if not config.has_password():
+            return Response(
+                {
+                    "success": False,
+                    "message": "Password is not configured",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from webnet.devices.servicenow_service import ServiceNowService
+
+        service = ServiceNowService(config)
+        result = service.test_connection()
+
+        return Response(
+            {
+                "success": result.success,
+                "message": result.message,
+                "servicenow_version": getattr(result, "servicenow_version", None),
+            },
+            status=status.HTTP_200_OK if result.success else status.HTTP_400_BAD_REQUEST,
+        )
+
+    @action(detail=True, methods=["get"])
+    def logs(self, request, pk=None) -> Response:
+        """Get sync logs for this configuration."""
+        config = self.get_object()
+        logs = ServiceNowSyncLog.objects.filter(config=config).order_by("-started_at")[:50]
+        return Response(ServiceNowSyncLogSerializer(logs, many=True).data)
+
+
+class ServiceNowIncidentViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
+    """ViewSet for managing ServiceNow incidents."""
+
+    queryset = ServiceNowIncident.objects.select_related("config", "job")
+    serializer_class = ServiceNowIncidentSerializer
+    permission_classes = [IsAuthenticated, RolePermission, ObjectCustomerPermission]
+    customer_field = "config__customer_id"
+
+    @action(detail=True, methods=["patch"])
+    def update_state(self, request, pk=None) -> Response:
+        """Update an incident's state in ServiceNow.
+
+        Request body:
+        - state: New state (1=New, 2=In Progress, 3=On Hold, 6=Resolved, 7=Closed)
+        - work_notes: Optional work notes
+        - resolution_notes: Optional resolution notes
+        """
+        incident = self.get_object()
+        serializer = ServiceNowIncidentUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        from webnet.devices.servicenow_service import ServiceNowService
+
+        service = ServiceNowService(incident.config)
+        result = service.update_incident(
+            incident.incident_sys_id,
+            state=serializer.validated_data.get("state"),
+            work_notes=serializer.validated_data.get("work_notes"),
+            resolution_notes=serializer.validated_data.get("resolution_notes"),
+        )
+
+        if result.success:
+            # Update local record
+            if serializer.validated_data.get("state"):
+                incident.state = serializer.validated_data["state"]
+            if incident.state in [6, 7] and not incident.resolved_at:
+                incident.resolved_at = timezone.now()
+            incident.save()
+
+            return Response(
+                {
+                    "success": True,
+                    "message": result.message,
+                    "incident_number": result.incident_number,
+                },
+                status=status.HTTP_200_OK,
+            )
+        else:
+            return Response(
+                {
+                    "success": False,
+                    "message": result.message or "Failed to update incident",
+                    "error": result.error,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+
+class ServiceNowChangeRequestViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
+    """ViewSet for managing ServiceNow change requests."""
+
+    queryset = ServiceNowChangeRequest.objects.select_related("config", "job")
+    serializer_class = ServiceNowChangeRequestSerializer
+    permission_classes = [IsAuthenticated, RolePermission, ObjectCustomerPermission]
+    customer_field = "config__customer_id"
+
+    def create(self, request, *args, **kwargs) -> Response:
+        """Create a new change request in ServiceNow.
+
+        Request body must include:
+        - config_id: ServiceNow configuration ID
+        - job_id: Job ID to link to the change
+        - short_description: Brief summary
+        - description: Detailed description
+        - justification: Business justification
+        - risk: Risk level (1-3)
+        - impact: Impact level (1-3)
+        - device_ids: Optional list of device IDs affected
+        """
+        serializer = ServiceNowChangeRequestCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        # Get config and validate access
+        config_id = request.data.get("config_id")
+        job_id = request.data.get("job_id")
+
+        if not config_id:
+            return Response(
+                {"detail": "config_id is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not job_id:
+            return Response(
+                {"detail": "job_id is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            config = ServiceNowConfig.objects.get(id=config_id)
+            if not user_has_customer_access(request.user, config.customer_id):
+                return Response(
+                    {"detail": "You do not have access to this configuration"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+        except ServiceNowConfig.DoesNotExist:
+            return Response(
+                {"detail": "ServiceNow configuration not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            job = Job.objects.get(id=job_id, customer_id=config.customer_id)
+        except Job.DoesNotExist:
+            return Response(
+                {"detail": "Job not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Get device sys_ids if device_ids provided
+        ci_sys_ids = []
+        device_ids = serializer.validated_data.get("device_ids")
+        if device_ids:
+            devices = Device.objects.filter(id__in=device_ids, customer_id=config.customer_id)
+            for device in devices:
+                tags = device.tags or {}
+                if sys_id := tags.get("servicenow_sys_id"):
+                    ci_sys_ids.append(sys_id)
+
+        # Create change request in ServiceNow
+        from webnet.devices.servicenow_service import ServiceNowService
+
+        service = ServiceNowService(config)
+        result = service.create_change_request(
+            short_description=serializer.validated_data["short_description"],
+            description=serializer.validated_data["description"],
+            justification=serializer.validated_data["justification"],
+            risk=serializer.validated_data.get("risk", 3),
+            impact=serializer.validated_data.get("impact", 3),
+            assignment_group=config.change_assignment_group,
+            configuration_items=ci_sys_ids if ci_sys_ids else None,
+        )
+
+        if result.success:
+            # Create local record
+            change = ServiceNowChangeRequest.objects.create(
+                config=config,
+                job=job,
+                change_number=result.change_number,
+                change_sys_id=result.change_sys_id,
+                short_description=serializer.validated_data["short_description"],
+                description=serializer.validated_data["description"],
+                justification=serializer.validated_data["justification"],
+            )
+
+            return Response(
+                ServiceNowChangeRequestSerializer(change).data,
+                status=status.HTTP_201_CREATED,
+            )
+        else:
+            return Response(
+                {
+                    "success": False,
+                    "message": result.message or "Failed to create change request",
+                    "error": result.error,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    @action(detail=True, methods=["patch"])
+    def update_state(self, request, pk=None) -> Response:
+        """Update a change request's state in ServiceNow.
+
+        Request body:
+        - state: New state (-5=New, 0=Assess, 1=Authorize, 2=Scheduled, 3=Implement, 4=Review, 6=Closed)
+        - work_notes: Optional work notes
+        - close_notes: Optional closing notes
+        """
+        change = self.get_object()
+        serializer = ServiceNowChangeRequestUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        from webnet.devices.servicenow_service import ServiceNowService
+
+        service = ServiceNowService(change.config)
+        result = service.update_change_request(
+            change.change_sys_id,
+            state=serializer.validated_data.get("state"),
+            work_notes=serializer.validated_data.get("work_notes"),
+            close_notes=serializer.validated_data.get("close_notes"),
+        )
+
+        if result.success:
+            # Update local record
+            if serializer.validated_data.get("state"):
+                change.state = serializer.validated_data["state"]
+            if change.state == 6 and not change.closed_at:
+                change.closed_at = timezone.now()
+            change.save()
+
+            return Response(
+                {
+                    "success": True,
+                    "message": result.message,
+                    "change_number": result.change_number,
+                },
+                status=status.HTTP_200_OK,
+            )
+        else:
+            return Response(
+                {
+                    "success": False,
+                    "message": result.message or "Failed to update change request",
+                    "error": result.error,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+

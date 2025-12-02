@@ -10,7 +10,14 @@ from webnet.devices.models import (
     DiscoveredDevice,
     SSHHostKey,
 )
-from webnet.devices.models import NetBoxConfig, NetBoxSyncLog
+from webnet.devices.models import (
+    NetBoxConfig,
+    NetBoxSyncLog,
+    ServiceNowConfig,
+    ServiceNowSyncLog,
+    ServiceNowIncident,
+    ServiceNowChangeRequest,
+)
 from webnet.jobs.models import Job, JobLog
 from webnet.config_mgmt.models import ConfigSnapshot, ConfigTemplate, ConfigDrift, DriftAlert
 from webnet.compliance.models import (
@@ -865,4 +872,274 @@ class NetBoxSyncRequestSerializer(serializers.Serializer):
 
     full_sync = serializers.BooleanField(
         default=False, help_text="If true, sync all devices (not just delta)"
+    )
+
+
+# ==============================================================================
+# ServiceNow Integration Serializers
+# ==============================================================================
+
+
+class ServiceNowConfigSerializer(serializers.ModelSerializer):
+    """Serializer for ServiceNow configuration."""
+
+    password = serializers.CharField(
+        write_only=True, required=False, allow_blank=True, help_text="ServiceNow password"
+    )
+    has_password = serializers.SerializerMethodField()
+    default_credential_name = serializers.CharField(
+        source="default_credential.name", read_only=True, allow_null=True
+    )
+
+    class Meta:
+        model = ServiceNowConfig
+        fields = [
+            "id",
+            "customer",
+            "name",
+            "instance_url",
+            "username",
+            "password",
+            "has_password",
+            "cmdb_table",
+            "ci_class",
+            "ci_query_filter",
+            "company_sys_id",
+            "device_to_cmdb_mappings",
+            "cmdb_to_device_mappings",
+            "sync_frequency",
+            "bidirectional_sync",
+            "auto_sync_enabled",
+            "default_credential",
+            "default_credential_name",
+            "create_incidents_on_failure",
+            "incident_category",
+            "incident_assignment_group",
+            "create_changes_on_deploy",
+            "change_category",
+            "change_assignment_group",
+            "last_sync_at",
+            "last_sync_status",
+            "last_sync_message",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "last_sync_at",
+            "last_sync_status",
+            "last_sync_message",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_has_password(self, obj) -> bool:
+        return obj.has_password()
+
+    def validate_customer(self, value: Customer) -> Customer:
+        """Validate that the user has access to the specified customer."""
+        from webnet.api.permissions import user_has_customer_access
+
+        request = self.context.get("request")
+        if request and not user_has_customer_access(request.user, value.id):
+            raise serializers.ValidationError("You do not have access to this customer.")
+        return value
+
+    def validate(self, attrs):
+        """Validate the serializer data."""
+        # Require password on creation
+        if self.instance is None:  # Create operation
+            password = attrs.get("password")
+            if not password:
+                raise serializers.ValidationError(
+                    {"password": "Password is required when creating a ServiceNow configuration."}
+                )
+
+        # Validate default_credential belongs to the same customer
+        default_credential = attrs.get("default_credential")
+        customer = attrs.get("customer") or (self.instance.customer if self.instance else None)
+
+        if default_credential and customer:
+            if default_credential.customer_id != customer.id:
+                raise serializers.ValidationError(
+                    {"default_credential": "Credential must belong to the same customer."}
+                )
+
+        return attrs
+
+    def create(self, validated_data):
+        password = validated_data.pop("password", None)
+        instance = ServiceNowConfig(**validated_data)
+        if password:
+            instance.password = password
+        instance.save()
+        return instance
+
+    def update(self, instance, validated_data):
+        password = validated_data.pop("password", None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        if password:
+            instance.password = password
+        instance.save()
+        return instance
+
+
+class ServiceNowSyncLogSerializer(serializers.ModelSerializer):
+    """Serializer for ServiceNow sync logs."""
+
+    class Meta:
+        model = ServiceNowSyncLog
+        fields = [
+            "id",
+            "config",
+            "direction",
+            "status",
+            "devices_created",
+            "devices_updated",
+            "devices_skipped",
+            "devices_failed",
+            "message",
+            "details",
+            "started_at",
+            "finished_at",
+        ]
+        read_only_fields = [
+            "status",
+            "devices_created",
+            "devices_updated",
+            "devices_skipped",
+            "devices_failed",
+            "message",
+            "details",
+            "started_at",
+            "finished_at",
+        ]
+
+
+class ServiceNowSyncRequestSerializer(serializers.Serializer):
+    """Serializer for triggering a ServiceNow sync."""
+
+    direction = serializers.ChoiceField(
+        choices=["import", "export", "both"],
+        default="both",
+        help_text="Sync direction: import (from ServiceNow), export (to ServiceNow), or both",
+    )
+    device_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        allow_null=True,
+        help_text="Optional list of device IDs to sync (only for export)",
+    )
+
+
+class ServiceNowIncidentSerializer(serializers.ModelSerializer):
+    """Serializer for ServiceNow incidents."""
+
+    job_type = serializers.CharField(source="job.type", read_only=True)
+
+    class Meta:
+        model = ServiceNowIncident
+        fields = [
+            "id",
+            "config",
+            "job",
+            "job_type",
+            "incident_number",
+            "incident_sys_id",
+            "state",
+            "short_description",
+            "description",
+            "created_at",
+            "updated_at",
+            "resolved_at",
+        ]
+        read_only_fields = [
+            "incident_number",
+            "incident_sys_id",
+            "created_at",
+            "updated_at",
+            "resolved_at",
+        ]
+
+
+class ServiceNowIncidentUpdateSerializer(serializers.Serializer):
+    """Serializer for updating ServiceNow incidents."""
+
+    state = serializers.ChoiceField(
+        choices=[1, 2, 3, 6, 7],
+        required=False,
+        help_text="New incident state: 1=New, 2=In Progress, 3=On Hold, 6=Resolved, 7=Closed",
+    )
+    work_notes = serializers.CharField(
+        required=False, allow_blank=True, help_text="Work notes to add to the incident"
+    )
+    resolution_notes = serializers.CharField(
+        required=False, allow_blank=True, help_text="Resolution notes (when resolving)"
+    )
+
+
+class ServiceNowChangeRequestSerializer(serializers.ModelSerializer):
+    """Serializer for ServiceNow change requests."""
+
+    job_type = serializers.CharField(source="job.type", read_only=True)
+
+    class Meta:
+        model = ServiceNowChangeRequest
+        fields = [
+            "id",
+            "config",
+            "job",
+            "job_type",
+            "change_number",
+            "change_sys_id",
+            "state",
+            "short_description",
+            "description",
+            "justification",
+            "created_at",
+            "updated_at",
+            "closed_at",
+        ]
+        read_only_fields = [
+            "change_number",
+            "change_sys_id",
+            "created_at",
+            "updated_at",
+            "closed_at",
+        ]
+
+
+class ServiceNowChangeRequestCreateSerializer(serializers.Serializer):
+    """Serializer for creating ServiceNow change requests."""
+
+    short_description = serializers.CharField(max_length=255, help_text="Brief summary of the change")
+    description = serializers.CharField(help_text="Detailed description of the change")
+    justification = serializers.CharField(help_text="Business justification for the change")
+    risk = serializers.IntegerField(
+        default=3, min_value=1, max_value=3, help_text="Risk level: 1=High, 2=Medium, 3=Low"
+    )
+    impact = serializers.IntegerField(
+        default=3, min_value=1, max_value=3, help_text="Impact level: 1=High, 2=Medium, 3=Low"
+    )
+    device_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        allow_null=True,
+        help_text="Optional list of device IDs affected by the change",
+    )
+
+
+class ServiceNowChangeRequestUpdateSerializer(serializers.Serializer):
+    """Serializer for updating ServiceNow change requests."""
+
+    state = serializers.ChoiceField(
+        choices=[-5, 0, 1, 2, 3, 4, 6],
+        required=False,
+        help_text="New state: -5=New, 0=Assess, 1=Authorize, 2=Scheduled, 3=Implement, 4=Review, 6=Closed",
+    )
+    work_notes = serializers.CharField(
+        required=False, allow_blank=True, help_text="Work notes to add to the change"
+    )
+    close_notes = serializers.CharField(
+        required=False, allow_blank=True, help_text="Closing notes (when closing)"
     )

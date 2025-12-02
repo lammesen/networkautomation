@@ -1476,3 +1476,198 @@ def auto_remediation_job(rule_id: int, compliance_result_id: int) -> None:
         action.finished_at = timezone.now()
         action.save(update_fields=["status", "error_message", "finished_at"])
         js.set_status(job, "failed", result_summary={"error": str(e)})
+
+
+# ==============================================================================
+# ServiceNow Integration Tasks
+# ==============================================================================
+
+
+@shared_task(name="servicenow_sync_job")
+def servicenow_sync_job(
+    config_id: int, direction: str = "both", device_ids: list[int] | None = None
+) -> dict:
+    """Sync devices with ServiceNow CMDB.
+
+    Args:
+        config_id: ServiceNowConfig ID
+        direction: Sync direction - "import", "export", or "both"
+        device_ids: Optional list of device IDs to export (only used for export)
+
+    Returns:
+        Dict with sync result details
+    """
+    from webnet.devices.models import ServiceNowConfig, Device
+    from webnet.devices.servicenow_service import ServiceNowService
+
+    try:
+        config = ServiceNowConfig.objects.get(pk=config_id)
+    except ServiceNowConfig.DoesNotExist:
+        logger.warning("ServiceNowConfig %s not found", config_id)
+        return {"success": False, "error": "Config not found"}
+
+    service = ServiceNowService(config)
+    results = []
+
+    # Export to ServiceNow
+    if direction in ["export", "both"]:
+        devices = None
+        if device_ids:
+            devices = list(
+                Device.objects.filter(id__in=device_ids, customer_id=config.customer_id)
+            )
+
+        result = service.sync_to_cmdb(devices=devices)
+        results.append(
+            {
+                "direction": "export",
+                "success": result.success,
+                "message": result.message,
+                "created": result.created,
+                "updated": result.updated,
+                "skipped": result.skipped,
+                "failed": result.failed,
+                "errors": result.errors,
+            }
+        )
+
+    # Import from ServiceNow
+    if direction in ["import", "both"]:
+        result = service.sync_from_cmdb()
+        results.append(
+            {
+                "direction": "import",
+                "success": result.success,
+                "message": result.message,
+                "created": result.created,
+                "updated": result.updated,
+                "skipped": result.skipped,
+                "failed": result.failed,
+                "errors": result.errors,
+            }
+        )
+
+    return {"success": True, "results": results}
+
+
+@shared_task(name="scheduled_servicenow_sync")
+def scheduled_servicenow_sync() -> None:
+    """Scheduled task to sync with ServiceNow for all enabled configurations.
+
+    This task runs periodically and triggers syncs based on each config's
+    sync_frequency setting.
+    """
+    from webnet.devices.models import ServiceNowConfig
+    from django.utils import timezone
+    from datetime import timedelta
+
+    now = timezone.now()
+
+    for config in ServiceNowConfig.objects.filter(auto_sync_enabled=True).exclude(
+        sync_frequency="manual"
+    ):
+        # Determine if sync is due based on frequency
+        last_sync = config.last_sync_at
+        should_sync = False
+
+        if not last_sync:
+            should_sync = True
+        elif config.sync_frequency == "hourly":
+            should_sync = now - last_sync >= timedelta(hours=1)
+        elif config.sync_frequency == "daily":
+            should_sync = now - last_sync >= timedelta(days=1)
+        elif config.sync_frequency == "weekly":
+            should_sync = now - last_sync >= timedelta(weeks=1)
+
+        if should_sync:
+            # Update last_sync_at immediately to prevent duplicate syncs
+            config.last_sync_at = now
+            config.save(update_fields=["last_sync_at"])
+
+            # Sync based on configuration
+            direction = "both" if config.bidirectional_sync else "export"
+            servicenow_sync_job.delay(config.id, direction=direction)
+
+
+@shared_task(name="create_servicenow_incident")
+def create_servicenow_incident(job_id: int) -> dict:
+    """Create a ServiceNow incident for a failed job.
+
+    Args:
+        job_id: Job ID that failed
+
+    Returns:
+        Dict with incident creation result
+    """
+    from webnet.jobs.models import Job
+    from webnet.devices.models import ServiceNowConfig, ServiceNowIncident
+    from webnet.devices.servicenow_service import ServiceNowService
+
+    try:
+        job = Job.objects.select_related("customer", "user").get(pk=job_id)
+    except Job.DoesNotExist:
+        logger.warning("Job %s not found", job_id)
+        return {"success": False, "error": "Job not found"}
+
+    # Check if there's an active ServiceNow config with incident creation enabled
+    try:
+        config = ServiceNowConfig.objects.get(
+            customer=job.customer, create_incidents_on_failure=True
+        )
+    except ServiceNowConfig.DoesNotExist:
+        logger.debug("No ServiceNow config with incident creation for customer %s", job.customer_id)
+        return {"success": False, "error": "No incident creation config"}
+
+    # Check if incident already exists for this job
+    if ServiceNowIncident.objects.filter(job=job).exists():
+        logger.debug("Incident already exists for job %s", job_id)
+        return {"success": False, "error": "Incident already exists"}
+
+    # Create incident
+    service = ServiceNowService(config)
+
+    short_description = f"Network Automation Job Failed: {job.type} (Job #{job.id})"
+    description = f"""
+Job Type: {job.type}
+Job ID: {job.id}
+Customer: {job.customer.name}
+User: {job.user.username if job.user else 'System'}
+Status: {job.status}
+Started: {job.started_at}
+Finished: {job.finished_at}
+
+Result Summary:
+{job.result_summary_json}
+
+Please review the job logs for more details.
+"""
+
+    result = service.create_incident(
+        short_description=short_description,
+        description=description,
+        impact=2,  # Medium impact
+        urgency=2,  # Medium urgency
+        assignment_group=config.incident_assignment_group,
+    )
+
+    if result.success:
+        # Create local incident record
+        ServiceNowIncident.objects.create(
+            config=config,
+            job=job,
+            incident_number=result.incident_number,
+            incident_sys_id=result.incident_sys_id,
+            short_description=short_description,
+            description=description,
+        )
+
+        logger.info("Created ServiceNow incident %s for job %s", result.incident_number, job_id)
+        return {
+            "success": True,
+            "incident_number": result.incident_number,
+            "incident_sys_id": result.incident_sys_id,
+        }
+    else:
+        logger.error("Failed to create ServiceNow incident for job %s: %s", job_id, result.error)
+        return {"success": False, "error": result.error}
+
