@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -26,7 +28,7 @@ class PluginViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, RolePermission]
 
     @action(detail=True, methods=["post"])
-    def enable(self, request, pk=None):
+    def enable(self, request: Any, pk: Any = None) -> Response:
         """Enable a plugin globally."""
         plugin_config = self.get_object()
         success, message = PluginManager.enable_plugin(plugin_config.name, user=request.user)
@@ -36,7 +38,7 @@ class PluginViewSet(viewsets.ModelViewSet):
         return Response({"error": message}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=["post"])
-    def disable(self, request, pk=None):
+    def disable(self, request: Any, pk: Any = None) -> Response:
         """Disable a plugin globally."""
         plugin_config = self.get_object()
         success, message = PluginManager.disable_plugin(plugin_config.name, user=request.user)
@@ -46,7 +48,7 @@ class PluginViewSet(viewsets.ModelViewSet):
         return Response({"error": message}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=["post"])
-    def update_settings(self, request, pk=None):
+    def update_settings(self, request: Any, pk: Any = None) -> Response:
         """Update plugin settings."""
         plugin_config = self.get_object()
         serializer = PluginSettingsSerializer(data=request.data)
@@ -63,14 +65,14 @@ class PluginViewSet(viewsets.ModelViewSet):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=["get"])
-    def health(self, request, pk=None):
+    def health(self, request: Any, pk: Any = None) -> Response:
         """Get plugin health status."""
         plugin_config = self.get_object()
         health_status = PluginManager.get_plugin_health(plugin_config.name)
         return Response(health_status, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["post"])
-    def sync(self, request):
+    def sync(self, request: Any) -> Response:
         """Sync plugins from registry to database."""
         PluginManager.sync_plugins()
         return Response({"message": "Plugins synced successfully"}, status=status.HTTP_200_OK)
@@ -84,7 +86,7 @@ class CustomerPluginConfigViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, RolePermission]
     filterset_fields = ["customer", "plugin", "enabled"]
 
-    def get_queryset(self):
+    def get_queryset(self) -> Any:
         """Filter by customer based on user role."""
         queryset = super().get_queryset()
         user = self.request.user
@@ -97,7 +99,7 @@ class CustomerPluginConfigViewSet(viewsets.ModelViewSet):
         return queryset.filter(customer__in=user.customers.all())
 
     @action(detail=True, methods=["post"])
-    def enable(self, request, pk=None):
+    def enable(self, request: Any, pk: Any = None) -> Response:
         """Enable a plugin for a customer."""
         customer_config = self.get_object()
         success, message = PluginManager.enable_plugin(
@@ -109,7 +111,7 @@ class CustomerPluginConfigViewSet(viewsets.ModelViewSet):
         return Response({"error": message}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=["post"])
-    def disable(self, request, pk=None):
+    def disable(self, request: Any, pk: Any = None) -> Response:
         """Disable a plugin for a customer."""
         customer_config = self.get_object()
         success, message = PluginManager.disable_plugin(
@@ -121,7 +123,7 @@ class CustomerPluginConfigViewSet(viewsets.ModelViewSet):
         return Response({"error": message}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=["post"])
-    def update_settings(self, request, pk=None):
+    def update_settings(self, request: Any, pk: Any = None) -> Response:
         """Update customer-specific plugin settings."""
         customer_config = self.get_object()
         serializer = PluginSettingsSerializer(data=request.data)
@@ -149,7 +151,7 @@ class PluginAuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated, RolePermission]
     filterset_fields = ["plugin", "customer", "user", "action", "success"]
 
-    def get_queryset(self):
+    def get_queryset(self) -> Any:
         """Filter by customer based on user role."""
         queryset = super().get_queryset()
         user = self.request.user

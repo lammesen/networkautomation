@@ -1,5 +1,7 @@
 """Management command to sync plugins."""
 
+from typing import Any
+
 from django.core.management.base import BaseCommand
 
 from webnet.plugins.manager import PluginManager
@@ -11,7 +13,7 @@ class Command(BaseCommand):
 
     help = "Sync plugin registry with database configuration"
 
-    def handle(self, *args, **options):
+    def handle(self, *args: Any, **options: Any) -> None:
         """Execute the command."""
         self.stdout.write("Syncing plugins...")
 
@@ -23,13 +25,9 @@ class Command(BaseCommand):
 
         self.stdout.write(f"Found {len(plugins)} plugin(s):")
         for name, plugin in plugins.items():
-            self.stdout.write(
-                f"  - {plugin.verbose_name} ({name}) v{plugin.version}"
-            )
+            self.stdout.write(f"  - {plugin.verbose_name} ({name}) v{plugin.version}")
 
         # Sync to database
         PluginManager.sync_plugins()
 
-        self.stdout.write(
-            self.style.SUCCESS("Successfully synced plugins to database")
-        )
+        self.stdout.write(self.style.SUCCESS("Successfully synced plugins to database"))

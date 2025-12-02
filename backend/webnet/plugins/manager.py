@@ -199,7 +199,7 @@ class PluginManager:
         if customer:
             try:
                 customer_config = CustomerPluginConfig.objects.get(customer=customer, plugin=config)
-                return customer_config.enabled
+                return bool(customer_config.enabled)
             except CustomerPluginConfig.DoesNotExist:
                 return True  # Default to enabled if no customer config exists
 
