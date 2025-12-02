@@ -1578,10 +1578,6 @@ def scheduled_servicenow_sync() -> None:
             should_sync = now - last_sync >= timedelta(weeks=1)
 
         if should_sync:
-            # Update last_sync_at immediately to prevent duplicate syncs
-            config.last_sync_at = now
-            config.save(update_fields=["last_sync_at"])
-
             # Sync based on configuration
             direction = "both" if config.bidirectional_sync else "export"
             servicenow_sync_job.delay(config.id, direction=direction)
@@ -1625,6 +1621,16 @@ def create_servicenow_incident(job_id: int) -> dict:
     service = ServiceNowService(config)
 
     short_description = f"Network Automation Job Failed: {job.type} (Job #{job.id})"
+    
+    # Sanitize result_summary_json to prevent sensitive information disclosure
+    result_summary = job.result_summary_json or {}
+    # Remove potentially sensitive keys
+    sanitized_summary = {
+        k: v
+        for k, v in result_summary.items()
+        if k not in ["password", "token", "credential", "secret", "key"]
+    }
+    
     description = f"""
 Job Type: {job.type}
 Job ID: {job.id}
@@ -1635,7 +1641,7 @@ Started: {job.started_at}
 Finished: {job.finished_at}
 
 Result Summary:
-{job.result_summary_json}
+{sanitized_summary}
 
 Please review the job logs for more details.
 """

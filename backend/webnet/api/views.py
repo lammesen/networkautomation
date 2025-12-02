@@ -2115,12 +2115,6 @@ class ServiceNowConfigViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet
         """
         config = self.get_object()
 
-        if not config.auto_sync_enabled:
-            return Response(
-                {"detail": "ServiceNow sync is disabled for this configuration"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         if not config.has_password():
             return Response(
                 {"detail": "ServiceNow password is not configured"},

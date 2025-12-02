@@ -8,9 +8,7 @@ from rest_framework import status
 
 from webnet.devices.models import (
     ServiceNowConfig,
-    ServiceNowSyncLog,
     ServiceNowIncident,
-    ServiceNowChangeRequest,
     Device,
 )
 from webnet.jobs.models import Job

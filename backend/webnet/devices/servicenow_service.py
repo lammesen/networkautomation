@@ -108,7 +108,6 @@ class ServiceNowService:
             "Accept": "application/json",
             "Content-Type": "application/json",
         }
-        self.auth = (config.username, config.password)
 
         # Merge custom field mappings with defaults
         self.device_to_cmdb_mappings = {**self.DEFAULT_DEVICE_TO_CMDB_MAPPINGS}
@@ -129,12 +128,18 @@ class ServiceNowService:
         """Make a request to ServiceNow API."""
         url = f"{self.instance_url}/{endpoint.lstrip('/')}"
 
-        with httpx.Client(timeout=30) as client:
+        # Access password only when needed
+        auth = (self.config.username, self.config.password)
+
+        # Use configurable timeout, with longer timeout for potentially slow operations
+        timeout = 60 if params and params.get("sysparm_limit") else 30
+
+        with httpx.Client(timeout=timeout) as client:
             response = client.request(
                 method=method,
                 url=url,
                 headers=self.headers,
-                auth=self.auth,
+                auth=auth,
                 params=params,
                 json=json_data,
             )
@@ -261,7 +266,10 @@ class ServiceNowService:
             "sysparm_display_value": "true",
         }
 
-        while True:
+        max_pages = 1000  # Safety limit to prevent infinite loops
+        page_count = 0
+
+        while page_count < max_pages:
             result = self._request(
                 "GET",
                 f"/api/now/table/{self.config.cmdb_table}",
@@ -273,6 +281,7 @@ class ServiceNowService:
             # Check if there are more pages
             if len(results) < 100:
                 break
+            page_count += 1
             params["sysparm_offset"] += 100
 
         return cis
@@ -321,7 +330,9 @@ class ServiceNowService:
                 )
 
         except Exception as e:
-            logger.exception("Failed to export device %s to CMDB", device.hostname)
+            logger.exception(
+                "Failed to export device %s (ID: %s) to CMDB", device.hostname, device.id
+            )
             return SyncResult(
                 success=False,
                 message=f"Failed to export {device.hostname}: {e}",
@@ -370,6 +381,7 @@ class ServiceNowService:
                             updated=1,
                         )
                     else:
+                        device.save()  # Save tags even if no other fields changed
                         return SyncResult(
                             success=True,
                             message=f"No changes for {hostname}",
@@ -412,7 +424,11 @@ class ServiceNowService:
                 )
 
         except Exception as e:
-            logger.exception("Failed to import CI to device")
+            logger.exception(
+                "Failed to import CI %s (name: %s) to device",
+                ci.get("sys_id"),
+                ci.get("name"),
+            )
             return SyncResult(
                 success=False,
                 message=f"Failed to import CI: {e}",
@@ -476,7 +492,7 @@ class ServiceNowService:
             self.config.save()
 
             return SyncResult(
-                success=not errors,
+                success=(failed == 0) or (created > 0 or updated > 0),
                 message=sync_log.message,
                 created=created,
                 updated=updated,
@@ -549,7 +565,7 @@ class ServiceNowService:
             self.config.save()
 
             return SyncResult(
-                success=not errors,
+                success=(failed == 0) or (created > 0 or updated > 0),
                 message=sync_log.message,
                 created=created,
                 updated=updated,
@@ -599,6 +615,12 @@ class ServiceNowService:
         Returns:
             IncidentResult with incident details
         """
+        # Validate input parameters
+        if not 1 <= impact <= 3:
+            raise ValueError("Impact must be between 1 and 3")
+        if not 1 <= urgency <= 3:
+            raise ValueError("Urgency must be between 1 and 3")
+
         try:
             incident_data = {
                 "short_description": short_description,
@@ -720,6 +742,12 @@ class ServiceNowService:
         Returns:
             ChangeRequestResult with change details
         """
+        # Validate input parameters
+        if not 1 <= risk <= 3:
+            raise ValueError("Risk must be between 1 and 3")
+        if not 1 <= impact <= 3:
+            raise ValueError("Impact must be between 1 and 3")
+
         try:
             change_data = {
                 "short_description": short_description,

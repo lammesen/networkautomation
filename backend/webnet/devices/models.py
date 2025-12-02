@@ -779,6 +779,7 @@ class ServiceNowConfig(models.Model):
     _password = models.TextField(
         db_column="password",
         blank=False,
+        null=False,
         help_text="Encrypted ServiceNow password (required)",
     )
     
@@ -910,9 +911,12 @@ class ServiceNowConfig(models.Model):
         return f"{self.customer.name} - {self.name}"
 
     @property
-    def password(self) -> str | None:
+    def password(self) -> str:
         """Decrypt and return the password."""
-        return decrypt_text(self._password)
+        decrypted = decrypt_text(self._password)
+        if decrypted is None:
+            raise ValueError("Failed to decrypt password")
+        return decrypted
 
     @password.setter
     def password(self, value: str | None) -> None:

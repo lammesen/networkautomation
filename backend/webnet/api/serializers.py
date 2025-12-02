@@ -811,7 +811,7 @@ class NetBoxConfigSerializer(serializers.ModelSerializer):
         customer = attrs.get("customer") or (self.instance.customer if self.instance else None)
 
         if default_credential and customer:
-            if default_credential.customer_id != customer.id:
+            if default_credential.customer != customer:
                 raise serializers.ValidationError(
                     {"default_credential": "Credential must belong to the same customer."}
                 )
@@ -959,7 +959,7 @@ class ServiceNowConfigSerializer(serializers.ModelSerializer):
         customer = attrs.get("customer") or (self.instance.customer if self.instance else None)
 
         if default_credential and customer:
-            if default_credential.customer_id != customer.id:
+            if default_credential.customer != customer:
                 raise serializers.ValidationError(
                     {"default_credential": "Credential must belong to the same customer."}
                 )
