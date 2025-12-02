@@ -25,8 +25,8 @@ Automated notifications are sent to configured Slack channels for:
 
 - **Job Completion** - When automation jobs complete successfully
 - **Job Failure** - When automation jobs fail
-- **Compliance Violations** - When compliance checks detect violations (optional)
-- **Configuration Drift** - When configuration drift is detected (optional)
+- **Compliance Violations** - When compliance checks detect policy violations
+- **Configuration Drift** - When configuration drift is detected between snapshots
 
 ### Security
 

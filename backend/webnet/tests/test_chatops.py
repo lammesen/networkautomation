@@ -59,6 +59,8 @@ def slack_channel(db, slack_workspace):
         channel_name="general",
         notify_job_completion=True,
         notify_job_failure=True,
+        notify_compliance_violations=True,
+        notify_drift_detected=True,
     )
 
 
@@ -358,4 +360,91 @@ class TestNotifications:
         notify_job_completion(job)
 
         # Verify that send_message was called for failure
+        assert mock_send.called
+
+    @patch("webnet.chatops.slack_service.SlackService.send_message")
+    def test_compliance_violation_notification(
+        self, mock_send, customer, user, device, slack_channel
+    ):
+        from webnet.chatops.slack_service import notify_compliance_violation
+        from webnet.compliance.models import CompliancePolicy, ComplianceResult
+        from webnet.jobs.models import Job
+
+        # Create a compliance policy
+        policy = CompliancePolicy.objects.create(
+            customer=customer,
+            name="Test Policy",
+            scope_json={"role": "router"},
+            definition_yaml="test: value",
+            created_by=user,
+        )
+
+        # Create a job
+        job = Job.objects.create(
+            customer=customer,
+            type="compliance_check",
+            status="success",
+            user=user,
+        )
+
+        # Create a compliance result with violation
+        result = ComplianceResult.objects.create(
+            policy=policy,
+            device=device,
+            job=job,
+            status="fail",
+            details_json={"violation": "test"},
+        )
+
+        notify_compliance_violation(result)
+
+        # Verify that send_message was called
+        assert mock_send.called
+
+    @patch("webnet.chatops.slack_service.SlackService.send_message")
+    def test_drift_detection_notification(self, mock_send, customer, user, device, slack_channel):
+        from webnet.chatops.slack_service import notify_drift_detected
+        from webnet.config_mgmt.models import ConfigSnapshot, ConfigDrift
+        from webnet.jobs.models import Job
+
+        # Create a job for the snapshots
+        job = Job.objects.create(
+            customer=customer,
+            type="config_backup",
+            status="success",
+            user=user,
+        )
+
+        # Create snapshots
+        snapshot1 = ConfigSnapshot.objects.create(
+            device=device,
+            job=job,
+            config_text="config line 1\nconfig line 2",
+            hash="hash1",
+        )
+
+        snapshot2 = ConfigSnapshot.objects.create(
+            device=device,
+            job=job,
+            config_text="config line 1\nconfig line 2\nconfig line 3",
+            hash="hash2",
+        )
+
+        # Create drift
+        drift = ConfigDrift.objects.create(
+            device=device,
+            snapshot_from=snapshot1,
+            snapshot_to=snapshot2,
+            additions=1,
+            deletions=0,
+            changes=1,
+            total_lines=3,
+            has_changes=True,
+            diff_summary="Added config line 3",
+            triggered_by=user,
+        )
+
+        notify_drift_detected(drift)
+
+        # Verify that send_message was called
         assert mock_send.called

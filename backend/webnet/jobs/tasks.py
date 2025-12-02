@@ -300,6 +300,15 @@ def compliance_check_job(job_id: int, policy_id: int) -> None:
                 level="INFO",
                 message=f"Found {violations.count()} violations, checking for auto-remediation rules",
             )
+            # Send ChatOps notifications for violations
+            try:
+                from webnet.chatops.slack_service import notify_compliance_violation
+
+                for violation in violations:
+                    notify_compliance_violation(violation)
+            except Exception as e:
+                logger.warning(f"Failed to send compliance violation notifications: {e}")
+
             # Trigger auto-remediation for each violation
             for violation in violations:
                 trigger_auto_remediation.delay(violation.id)

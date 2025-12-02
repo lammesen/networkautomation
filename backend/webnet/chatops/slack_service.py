@@ -306,3 +306,180 @@ def notify_job_completion(job: Job) -> None:
 
     except Exception as e:
         logger.error(f"Failed to send job completion notification: {e}")
+
+
+def notify_compliance_violation(compliance_result) -> None:
+    """Send compliance violation notification to configured Slack channels."""
+    try:
+        from webnet.compliance.models import ComplianceResult
+
+        if not isinstance(compliance_result, ComplianceResult):
+            return
+
+        # Only notify for failures
+        if compliance_result.status != "fail":
+            return
+
+        channels = SlackChannel.objects.filter(
+            workspace__customer=compliance_result.device.customer,
+            workspace__enabled=True,
+            notify_compliance_violations=True,
+        )
+
+        if not channels.exists():
+            return
+
+        # Format compliance violation message
+        blocks = [
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": ":warning: Compliance Violation Detected",
+                },
+            },
+            {
+                "type": "section",
+                "fields": [
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*Device:*\n{compliance_result.device.hostname}",
+                    },
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*Policy:*\n{compliance_result.policy.name}",
+                    },
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*Status:*\n{compliance_result.status.upper()}",
+                    },
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*Detected:*\n<!date^{int(compliance_result.ts.timestamp())}^{{date_short_pretty}} {{time}}|{compliance_result.ts.isoformat()}>",
+                    },
+                ],
+            },
+        ]
+
+        # Add details if available
+        if compliance_result.details_json:
+            details_text = json.dumps(compliance_result.details_json, indent=2)
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"*Details:*\n```{details_text[:500]}```",
+                    },
+                }
+            )
+
+        message = {
+            "blocks": blocks,
+            "text": f"Compliance violation: {compliance_result.policy.name} on {compliance_result.device.hostname}",
+        }
+
+        for channel in channels:
+            slack_service = SlackService(channel.workspace)
+            slack_service.send_message(
+                channel.channel_id,
+                message["text"],
+                message.get("blocks"),
+            )
+            logger.info(f"Sent compliance violation notification to {channel.channel_name}")
+
+    except Exception as e:
+        logger.error(f"Failed to send compliance violation notification: {e}")
+
+
+def notify_drift_detected(drift) -> None:
+    """Send configuration drift notification to configured Slack channels."""
+    try:
+        from webnet.config_mgmt.models import ConfigDrift
+
+        if not isinstance(drift, ConfigDrift):
+            return
+
+        # Only notify for drifts with changes
+        if not drift.has_changes:
+            return
+
+        channels = SlackChannel.objects.filter(
+            workspace__customer=drift.device.customer,
+            workspace__enabled=True,
+            notify_drift_detected=True,
+        )
+
+        if not channels.exists():
+            return
+
+        # Determine severity emoji
+        magnitude = drift.get_change_magnitude()
+        emoji_map = {
+            "No changes": ":white_check_mark:",
+            "Minor changes": ":information_source:",
+            "Moderate changes": ":warning:",
+            "Major changes": ":rotating_light:",
+        }
+        emoji = emoji_map.get(magnitude, ":grey_question:")
+
+        # Format drift notification message
+        blocks = [
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": f"{emoji} Configuration Drift Detected",
+                },
+            },
+            {
+                "type": "section",
+                "fields": [
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*Device:*\n{drift.device.hostname}",
+                    },
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*Magnitude:*\n{magnitude}",
+                    },
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*Changes:*\n+{drift.additions} / -{drift.deletions}",
+                    },
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*Detected:*\n<!date^{int(drift.detected_at.timestamp())}^{{date_short_pretty}} {{time}}|{drift.detected_at.isoformat()}>",
+                    },
+                ],
+            },
+        ]
+
+        # Add summary if available
+        if drift.diff_summary:
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"*Summary:*\n{drift.diff_summary[:500]}",
+                    },
+                }
+            )
+
+        message = {
+            "blocks": blocks,
+            "text": f"Configuration drift detected on {drift.device.hostname}: {magnitude}",
+        }
+
+        for channel in channels:
+            slack_service = SlackService(channel.workspace)
+            slack_service.send_message(
+                channel.channel_id,
+                message["text"],
+                message.get("blocks"),
+            )
+            logger.info(f"Sent drift notification to {channel.channel_name}")
+
+    except Exception as e:
+        logger.error(f"Failed to send drift notification: {e}")
