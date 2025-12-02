@@ -19,6 +19,8 @@ router.register(r"devices", views.DeviceViewSet, basename="device")
 router.register(r"jobs", views.JobViewSet, basename="job")
 router.register(r"jobs/admin", views.JobAdminViewSet, basename="job-admin")
 router.register(r"schedules", views.ScheduleViewSet, basename="schedule")
+router.register(r"workflows", views.WorkflowViewSet, basename="workflow")
+router.register(r"workflow-runs", views.WorkflowRunViewSet, basename="workflow-run")
 router.register(r"compliance/policies", views.CompliancePolicyViewSet, basename="compliance-policy")
 router.register(r"compliance/results", views.ComplianceResultViewSet, basename="compliance-result")
 router.register(
@@ -118,6 +120,8 @@ urlpatterns = [
     path("jobs/<int:pk>/cancel", views.JobViewSet.as_view({"post": "cancel"})),
     # ChatOps endpoints
     path("chatops/", include("webnet.chatops.urls")),
+    # Workflow run shortcut without trailing slash
+    path("workflows/<int:pk>/run", views.WorkflowViewSet.as_view({"post": "run"})),
     path("", include(router.urls)),
     # Plugin system
     path("", include("webnet.plugins.urls")),

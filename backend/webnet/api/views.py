@@ -42,6 +42,7 @@ from webnet.devices.models import (
     ServiceNowChangeRequest,
 )
 from webnet.jobs.models import Job, JobLog, Schedule
+from webnet.workflows.models import Workflow, WorkflowRun
 from webnet.jobs.services import JobService
 from webnet.config_mgmt.models import ConfigSnapshot, ConfigTemplate, ConfigDrift, DriftAlert
 from webnet.compliance.models import (
@@ -114,6 +115,9 @@ from .serializers import (
     # Multi-region Deployment Support
     RegionSerializer,
     RegionHealthUpdateSerializer,
+    # Workflow Builder
+    WorkflowSerializer,
+    WorkflowRunSerializer,
 )
 from .permissions import (
     RolePermission,
@@ -573,6 +577,55 @@ class ScheduleViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
         schedule.enabled = not schedule.enabled
         schedule.save(update_fields=["enabled"])
         return Response(ScheduleSerializer(schedule).data)
+
+
+class WorkflowViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
+    queryset = Workflow.objects.prefetch_related("nodes", "edges")
+    serializer_class = WorkflowSerializer
+    permission_classes = [IsAuthenticated, RolePermission, ObjectCustomerPermission]
+    customer_field = "customer"
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user, updated_by=self.request.user)
+
+    def perform_update(self, serializer):
+        serializer.save(updated_by=self.request.user)
+
+    @action(detail=True, methods=["post"])
+    def run(self, request, pk=None):
+        workflow = self.get_object()
+        inputs = request.data.get("inputs") or {}
+        async_mode = bool(request.data.get("async", False))
+
+        run = WorkflowRun.objects.create(
+            workflow=workflow,
+            customer=workflow.customer,
+            started_by=request.user,
+            inputs=inputs,
+            version=workflow.version,
+        )
+
+        if async_mode:
+            from webnet.workflows.tasks import execute_workflow_run
+
+            execute_workflow_run.delay(run.id)
+            status_code = status.HTTP_202_ACCEPTED
+        else:
+            from webnet.workflows.executor import WorkflowExecutor
+
+            WorkflowExecutor(run).execute()
+            status_code = status.HTTP_201_CREATED
+
+        return Response(WorkflowRunSerializer(run).data, status=status_code)
+
+
+class WorkflowRunViewSet(CustomerScopedQuerysetMixin, viewsets.ReadOnlyModelViewSet):
+    queryset = WorkflowRun.objects.select_related(
+        "workflow", "customer", "started_by"
+    ).prefetch_related("steps__node", "logs")
+    serializer_class = WorkflowRunSerializer
+    permission_classes = [IsAuthenticated, RolePermission, ObjectCustomerPermission]
+    customer_field = "customer"
 
 
 class JobLogsView(APIView):
