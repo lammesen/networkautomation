@@ -1,0 +1,84 @@
+<!-- Customer Configuration Partial -->
+<div class="space-y-4">
+  {% for config in customer_configs %}
+  <div class="rounded-lg border p-4">
+    <div class="flex items-center justify-between">
+      <div>
+        <h3 class="font-medium">{{ config.customer.name }}</h3>
+        <p class="text-sm text-muted-foreground mt-1">
+          {% if config.enabled %}Enabled{% else %}Disabled{% endif %} · 
+          Last updated: {{ config.updated_at|date:"Y-m-d H:i" }}
+        </p>
+      </div>
+      <div class="flex items-center gap-2">
+        {% if config.enabled %}
+        <button
+          hx-post="/settings/plugins/customer-config/{{ config.id }}/disable/"
+          hx-swap="outerHTML"
+          hx-target="closest .rounded-lg"
+          class="inline-flex items-center gap-2 rounded-md border border-red-500 px-3 py-2 text-sm font-medium text-red-500 hover:bg-red-500 hover:text-white"
+        >
+          Disable
+        </button>
+        {% else %}
+        <button
+          hx-post="/settings/plugins/customer-config/{{ config.id }}/enable/"
+          hx-swap="outerHTML"
+          hx-target="closest .rounded-lg"
+          class="inline-flex items-center gap-2 rounded-md border border-green-500 px-3 py-2 text-sm font-medium text-green-500 hover:bg-green-500 hover:text-white"
+        >
+          Enable
+        </button>
+        {% endif %}
+        <button
+          onclick="toggleSettings('settings-{{ config.id }}')"
+          class="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium hover:bg-accent"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          Settings
+        </button>
+      </div>
+    </div>
+    
+    <!-- Settings Form (collapsed by default) -->
+    <div id="settings-{{ config.id }}" class="mt-4 pt-4 border-t hidden">
+      <form
+        hx-post="/settings/plugins/customer-config/{{ config.id }}/update-settings/"
+        hx-swap="none"
+        class="space-y-4"
+      >
+        {% csrf_token %}
+        <div>
+          <label class="block text-sm font-medium mb-2">Customer Settings (JSON)</label>
+          <textarea
+            name="settings"
+            rows="6"
+            class="w-full rounded-md border bg-background px-3 py-2 text-sm font-mono"
+            placeholder='{"key": "value"}'
+          >{{ config.settings|default:"{}" }}</textarea>
+        </div>
+        <button
+          type="submit"
+          class="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+        >
+          Save Settings
+        </button>
+      </form>
+    </div>
+  </div>
+  {% empty %}
+  <div class="text-center py-8">
+    <p class="text-muted-foreground">No customer-specific configurations yet</p>
+  </div>
+  {% endfor %}
+</div>
+
+<script>
+function toggleSettings(id) {
+  const el = document.getElementById(id);
+  el.classList.toggle('hidden');
+}
+</script>

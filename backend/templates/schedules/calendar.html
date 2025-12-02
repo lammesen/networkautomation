@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Schedule Calendar - webnet{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-bold tracking-tight">Schedule Calendar</h1>
+    <p class="text-muted-foreground">View upcoming scheduled job executions</p>
+  </div>
+  <div class="flex gap-2">
+    <a href="{% url 'schedules-list' %}" class="inline-flex items-center justify-center rounded-md text-sm font-medium h-10 px-4 py-2 border bg-background hover:bg-accent hover:text-accent-foreground">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+      </svg>
+      List View
+    </a>
+    <a href="{% url 'schedule-create' %}" class="inline-flex items-center justify-center rounded-md text-sm font-medium h-10 px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+      </svg>
+      New Schedule
+    </a>
+  </div>
+</div>
+
+<!-- Calendar Navigation -->
+<div class="rounded-lg border bg-card mb-6">
+  <div class="p-4 border-b flex items-center justify-between">
+    <a href="?year={% if month == 1 %}{{ year|add:"-1" }}{% else %}{{ year }}{% endif %}&month={% if month == 1 %}12{% else %}{{ month|add:"-1" }}{% endif %}" 
+       class="inline-flex items-center justify-center rounded-md text-sm font-medium h-9 px-3 border bg-background hover:bg-accent hover:text-accent-foreground">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+      </svg>
+    </a>
+    <h2 class="text-lg font-semibold">{{ month_name }} {{ year }}</h2>
+    <a href="?year={% if month == 12 %}{{ year|add:"1" }}{% else %}{{ year }}{% endif %}&month={% if month == 12 %}1{% else %}{{ month|add:"1" }}{% endif %}" 
+       class="inline-flex items-center justify-center rounded-md text-sm font-medium h-9 px-3 border bg-background hover:bg-accent hover:text-accent-foreground">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+      </svg>
+    </a>
+  </div>
+
+  <!-- Calendar Grid -->
+  <div class="p-6">
+    <div class="grid grid-cols-7 gap-px bg-border rounded-lg overflow-hidden">
+      <!-- Day Headers -->
+      <div class="bg-muted p-3 text-center text-sm font-medium text-muted-foreground">Sun</div>
+      <div class="bg-muted p-3 text-center text-sm font-medium text-muted-foreground">Mon</div>
+      <div class="bg-muted p-3 text-center text-sm font-medium text-muted-foreground">Tue</div>
+      <div class="bg-muted p-3 text-center text-sm font-medium text-muted-foreground">Wed</div>
+      <div class="bg-muted p-3 text-center text-sm font-medium text-muted-foreground">Thu</div>
+      <div class="bg-muted p-3 text-center text-sm font-medium text-muted-foreground">Fri</div>
+      <div class="bg-muted p-3 text-center text-sm font-medium text-muted-foreground">Sat</div>
+
+      <!-- Calendar Days -->
+      {% for week in calendar_weeks %}
+        {% for day in week %}
+          <div class="bg-card p-3 min-h-[100px] {% if day == 0 %}bg-muted/30{% endif %}">
+            {% if day != 0 %}
+              <div class="text-sm font-medium mb-2">{{ day }}</div>
+              <div class="space-y-1">
+                {% for event in events %}
+                  {% if event.day == day %}
+                    <div class="text-xs rounded px-2 py-1 bg-primary/10 text-primary">
+                      <div class="font-medium truncate">{{ event.name }}</div>
+                      <div class="text-muted-foreground">{{ event.time }}</div>
+                    </div>
+                  {% endif %}
+                {% endfor %}
+              </div>
+            {% endif %}
+          </div>
+        {% endfor %}
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- Active Schedules -->
+<div class="rounded-lg border bg-card">
+  <div class="p-6 border-b">
+    <h2 class="text-lg font-semibold">Active Schedules</h2>
+    <p class="text-sm text-muted-foreground">All enabled schedules</p>
+  </div>
+  <div class="p-6">
+    <div class="space-y-3">
+      {% if schedules %}
+        {% for schedule in schedules %}
+          <div class="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-muted/50">
+            <div class="flex-1">
+              <div class="flex items-center gap-2">
+                <a href="{% url 'schedule-detail' schedule.id %}" class="font-medium hover:underline">{{ schedule.name }}</a>
+                <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-secondary text-secondary-foreground">
+                  {{ schedule.get_job_type_display }}
+                </span>
+              </div>
+              <p class="text-sm text-muted-foreground mt-1">{{ schedule.get_interval_type_display }}</p>
+            </div>
+            <div class="text-sm text-muted-foreground">
+              Next: {% if schedule.next_run %}{{ schedule.next_run|date:"m/d H:i" }}{% else %}N/A{% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div class="text-center py-12">
+          <p class="text-muted-foreground">No active schedules</p>
+          <a href="{% url 'schedule-create' %}" class="mt-2 inline-flex items-center text-sm text-primary hover:underline">
+            Create your first schedule
+          </a>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

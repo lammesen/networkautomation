@@ -4,14 +4,21 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
 from . import views
+from webnet.notifications.views import (
+    SMTPConfigViewSet,
+    NotificationPreferenceViewSet,
+    NotificationEventViewSet,
+)
 
 router = DefaultRouter()
 router.register(r"users", views.UserViewSet, basename="user")
 router.register(r"customers", views.CustomerViewSet, basename="customer")
+router.register(r"custom-fields", views.CustomFieldDefinitionViewSet, basename="custom-field")
 router.register(r"credentials", views.CredentialViewSet, basename="credential")
 router.register(r"devices", views.DeviceViewSet, basename="device")
 router.register(r"jobs", views.JobViewSet, basename="job")
 router.register(r"jobs/admin", views.JobAdminViewSet, basename="job-admin")
+router.register(r"schedules", views.ScheduleViewSet, basename="schedule")
 router.register(r"compliance/policies", views.CompliancePolicyViewSet, basename="compliance-policy")
 router.register(r"compliance/results", views.ComplianceResultViewSet, basename="compliance-result")
 router.register(
@@ -40,6 +47,34 @@ router.register(r"config/templates", views.ConfigTemplateViewSet, basename="conf
 router.register(r"config/drift/alerts", views.DriftAlertViewSet, basename="drift-alert")
 # NetBox Integration (Issue #9)
 router.register(r"integrations/netbox", views.NetBoxConfigViewSet, basename="netbox-config")
+# ServiceNow Integration
+router.register(
+    r"integrations/servicenow", views.ServiceNowConfigViewSet, basename="servicenow-config"
+)
+router.register(
+    r"integrations/servicenow-incidents",
+    views.ServiceNowIncidentViewSet,
+    basename="servicenow-incident",
+)
+router.register(
+    r"integrations/servicenow-changes",
+    views.ServiceNowChangeRequestViewSet,
+    basename="servicenow-change",
+)
+# Ansible Integration
+router.register(r"ansible/configs", views.AnsibleConfigViewSet, basename="ansible-config")
+router.register(r"ansible/playbooks", views.PlaybookViewSet, basename="playbook")
+# Webhook Integration
+router.register(r"webhooks", views.WebhookViewSet, basename="webhook")
+router.register(r"webhook-deliveries", views.WebhookDeliveryViewSet, basename="webhook-delivery")
+# Email Notifications
+router.register(r"notifications/smtp", SMTPConfigViewSet, basename="smtp-config")
+router.register(
+    r"notifications/preferences", NotificationPreferenceViewSet, basename="notification-preference"
+)
+router.register(r"notifications/events", NotificationEventViewSet, basename="notification-event")
+# Multi-region Deployment Support
+router.register(r"regions", views.RegionViewSet, basename="region")
 
 urlpatterns = [
     path("auth/login", views.AuthViewSet.as_view({"post": "login"})),
@@ -81,5 +116,9 @@ urlpatterns = [
     path("jobs/<int:pk>/logs", views.JobLogsView.as_view()),
     path("jobs/<int:pk>/retry", views.JobViewSet.as_view({"post": "retry"})),
     path("jobs/<int:pk>/cancel", views.JobViewSet.as_view({"post": "cancel"})),
+    # ChatOps endpoints
+    path("chatops/", include("webnet.chatops.urls")),
     path("", include(router.urls)),
+    # Plugin system
+    path("", include("webnet.plugins.urls")),
 ]

@@ -42,7 +42,7 @@ from webnet.devices.models import (
     NetBoxSyncLog,
     SSHHostKey,
 )
-from webnet.jobs.models import Job, JobLog
+from webnet.jobs.models import Job, JobLog, Schedule
 from webnet.jobs.services import JobService
 
 logger = logging.getLogger(__name__)
@@ -123,6 +123,15 @@ class TenantScopedView(LoginRequiredMixin, View):
         if not user_has_customer_access(self.request.user, customer_id):
             return HttpResponseForbidden("Customer access required")
         return None
+
+
+class AdminRequiredMixin(LoginRequiredMixin):
+    """Restrict access to admin users."""
+
+    def dispatch(self, request, *args, **kwargs):
+        if getattr(request.user, "role", "") != "admin":
+            return HttpResponseForbidden("Admin access required")
+        return super().dispatch(request, *args, **kwargs)
 
 
 class DashboardView(TenantScopedView):
@@ -2500,6 +2509,244 @@ class SSHHostKeyDeleteView(TenantScopedView):
         return HttpResponse(status=204)
 
 
+# Custom Fields Management Views
+
+
+class CustomFieldListView(TenantScopedView):
+    """View for listing and managing custom field definitions."""
+
+    template_name = "custom_fields/list.html"
+
+    def get(self, request):
+        from webnet.core.models import CustomFieldDefinition
+
+        # Get query parameters for filtering
+        model_type = request.GET.get("model_type")
+        field_type = request.GET.get("field_type")
+        is_active = request.GET.get("is_active")
+
+        # Base queryset
+        qs = CustomFieldDefinition.objects.select_related("customer").order_by(
+            "model_type", "weight", "name"
+        )
+
+        # Apply customer filtering
+        customer_ids = self.get_accessible_customer_ids()
+        qs = qs.filter(customer_id__in=customer_ids)
+
+        # Apply filters
+        if model_type:
+            qs = qs.filter(model_type=model_type)
+        if field_type:
+            qs = qs.filter(field_type=field_type)
+        if is_active == "true":
+            qs = qs.filter(is_active=True)
+        elif is_active == "false":
+            qs = qs.filter(is_active=False)
+
+        context = {"custom_fields": qs}
+
+        # Return partial for HTMX table updates
+        if request.headers.get("HX-Request"):
+            return render(request, "custom_fields/_table.html", context)
+
+        return render(request, self.template_name, context)
+
+
+class CustomFieldCreateView(TenantScopedView):
+    """View for creating a new custom field definition."""
+
+    def get(self, request):
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        # Get available customers
+        if self.request.user.role == "admin":
+            customers = Customer.objects.all()
+            show_customer_field = True
+            default_customer_id = None
+        else:
+            customers = self.request.user.customers.all()
+            show_customer_field = len(customers) > 1
+            default_customer_id = customers.first().id if customers.count() == 1 else None
+
+        context = {
+            "field": None,
+            "customers": customers,
+            "show_customer_field": show_customer_field,
+            "default_customer_id": default_customer_id,
+        }
+        return render(request, "custom_fields/_form_modal.html", context)
+
+    def post(self, request):
+        from webnet.core.models import CustomFieldDefinition
+
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        # Parse form data
+        customer_id = request.POST.get("customer")
+        name = request.POST.get("name")
+        label = request.POST.get("label")
+        model_type = request.POST.get("model_type")
+        field_type = request.POST.get("field_type")
+        description = request.POST.get("description", "")
+        required = request.POST.get("required") == "on"
+        default_value = request.POST.get("default_value", "")
+        validation_min = request.POST.get("validation_min", "")
+        validation_max = request.POST.get("validation_max", "")
+        validation_regex = request.POST.get("validation_regex", "")
+        choices_text = request.POST.get("choices", "")
+        weight = int(request.POST.get("weight", 100))
+        is_active = request.POST.get("is_active") == "on"
+
+        # Verify customer access
+        check = self.ensure_customer_access(int(customer_id))
+        if check:
+            return check
+
+        # Parse choices if applicable
+        choices = None
+        if field_type in ("select", "multiselect") and choices_text:
+            choices = [line.strip() for line in choices_text.split("\n") if line.strip()]
+
+        # Create custom field definition
+        CustomFieldDefinition.objects.create(
+            customer_id=customer_id,
+            name=name,
+            label=label,
+            model_type=model_type,
+            field_type=field_type,
+            description=description or None,
+            required=required,
+            default_value=default_value or None,
+            choices=choices,
+            validation_regex=validation_regex or None,
+            validation_min=validation_min or None,
+            validation_max=validation_max or None,
+            weight=weight,
+            is_active=is_active,
+        )
+
+        # Return updated table
+        return self._render_table(request)
+
+    def _render_table(self, request):
+        from webnet.core.models import CustomFieldDefinition
+
+        customer_ids = self.get_accessible_customer_ids()
+        qs = CustomFieldDefinition.objects.filter(customer_id__in=customer_ids).order_by(
+            "model_type", "weight", "name"
+        )
+        context = {"custom_fields": qs}
+        return render(request, "custom_fields/_table.html", context)
+
+
+class CustomFieldEditView(TenantScopedView):
+    """View for editing a custom field definition."""
+
+    def get(self, request, pk):
+        from webnet.core.models import CustomFieldDefinition
+
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        field = get_object_or_404(CustomFieldDefinition, pk=pk)
+        check = self.ensure_customer_access(field.customer_id)
+        if check:
+            return check
+
+        # Get available customers
+        if self.request.user.role == "admin":
+            customers = Customer.objects.all()
+            show_customer_field = True
+        else:
+            customers = self.request.user.customers.all()
+            show_customer_field = len(customers) > 1
+
+        context = {
+            "field": field,
+            "customers": customers,
+            "show_customer_field": show_customer_field,
+        }
+        return render(request, "custom_fields/_form_modal.html", context)
+
+    def put(self, request, pk):
+        from webnet.core.models import CustomFieldDefinition
+
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        field = get_object_or_404(CustomFieldDefinition, pk=pk)
+        check = self.ensure_customer_access(field.customer_id)
+        if check:
+            return check
+
+        # Parse PUT data (Django doesn't parse PUT automatically)
+        from django.http import QueryDict
+
+        put_data = QueryDict(request.body)
+
+        # Update fields (except name and model_type which are immutable)
+        field.label = put_data.get("label", field.label)
+        field.field_type = put_data.get("field_type", field.field_type)
+        field.description = put_data.get("description", "") or None
+        field.required = put_data.get("required") == "on"
+        field.default_value = put_data.get("default_value", "") or None
+        field.validation_min = put_data.get("validation_min", "") or None
+        field.validation_max = put_data.get("validation_max", "") or None
+        field.validation_regex = put_data.get("validation_regex", "") or None
+
+        # Parse choices
+        choices_text = put_data.get("choices", "")
+        if field.field_type in ("select", "multiselect") and choices_text:
+            field.choices = [line.strip() for line in choices_text.split("\n") if line.strip()]
+        else:
+            field.choices = None
+
+        field.weight = int(put_data.get("weight", field.weight))
+        field.is_active = put_data.get("is_active") == "on"
+        field.save()
+
+        # Return updated table
+        customer_ids = self.get_accessible_customer_ids()
+        qs = CustomFieldDefinition.objects.filter(customer_id__in=customer_ids).order_by(
+            "model_type", "weight", "name"
+        )
+        context = {"custom_fields": qs}
+        return render(request, "custom_fields/_table.html", context)
+
+
+class CustomFieldDeleteView(TenantScopedView):
+    """View for deleting a custom field definition."""
+
+    def delete(self, request, pk):
+        from webnet.core.models import CustomFieldDefinition
+
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        field = get_object_or_404(CustomFieldDefinition, pk=pk)
+        check = self.ensure_customer_access(field.customer_id)
+        if check:
+            return check
+
+        field.delete()
+
+        # Return updated table
+        customer_ids = self.get_accessible_customer_ids()
+        qs = CustomFieldDefinition.objects.filter(customer_id__in=customer_ids).order_by(
+            "model_type", "weight", "name"
+        )
+        context = {"custom_fields": qs}
+        return render(request, "custom_fields/_table.html", context)
+
+
 class SSHHostKeyImportView(TenantScopedView):
     """View for importing SSH host keys from known_hosts format."""
 
@@ -2651,4 +2898,478 @@ class RemediationActionListView(TenantScopedView):
 
         if request.headers.get("HX-Request"):
             return render(request, self.partial_name, context)
+        return render(request, self.template_name, context)
+
+
+# Plugin Management Views
+
+
+class PluginListView(AdminRequiredMixin, View):
+    """Plugin list view."""
+
+    template_name = "plugins/list.html"
+
+    def get(self, request):
+        from webnet.plugins.models import PluginConfig
+        from webnet.plugins.registry import plugin_registry
+
+        plugins = PluginConfig.objects.all()
+        # Annotate with loaded status
+        for plugin in plugins:
+            plugin.is_loaded = plugin_registry.is_plugin_loaded(plugin.name)
+
+        context = {"plugins": plugins}
+        return render(request, self.template_name, context)
+
+
+class PluginDetailView(AdminRequiredMixin, View):
+    """Plugin detail/settings view."""
+
+    template_name = "plugins/detail.html"
+
+    def get(self, request, pk):
+        from webnet.plugins.models import PluginConfig
+        from webnet.plugins.registry import plugin_registry
+
+        plugin = get_object_or_404(PluginConfig, pk=pk)
+        plugin.is_loaded = plugin_registry.is_plugin_loaded(plugin.name)
+
+        context = {"plugin": plugin}
+        return render(request, self.template_name, context)
+
+
+class PluginEnableView(AdminRequiredMixin, View):
+    """Enable a plugin (HTMX partial)."""
+
+    def post(self, request, pk):
+        from webnet.plugins.models import PluginConfig
+        from webnet.plugins.manager import PluginManager
+        from webnet.plugins.registry import plugin_registry
+
+        plugin = get_object_or_404(PluginConfig, pk=pk)
+        success, message = PluginManager.enable_plugin(plugin.name, user=request.user)
+
+        if success:
+            plugin.refresh_from_db()
+            plugin.is_loaded = plugin_registry.is_plugin_loaded(plugin.name)
+            return render(request, "plugins/_plugin_card.html", {"plugin": plugin})
+        else:
+            return HttpResponseBadRequest(message)
+
+
+class PluginDisableView(AdminRequiredMixin, View):
+    """Disable a plugin (HTMX partial)."""
+
+    def post(self, request, pk):
+        from webnet.plugins.models import PluginConfig
+        from webnet.plugins.manager import PluginManager
+        from webnet.plugins.registry import plugin_registry
+
+        plugin = get_object_or_404(PluginConfig, pk=pk)
+        success, message = PluginManager.disable_plugin(plugin.name, user=request.user)
+
+        if success:
+            plugin.refresh_from_db()
+            plugin.is_loaded = plugin_registry.is_plugin_loaded(plugin.name)
+            return render(request, "plugins/_plugin_card.html", {"plugin": plugin})
+        else:
+            return HttpResponseBadRequest(message)
+
+
+class PluginHealthView(AdminRequiredMixin, View):
+    """Get plugin health status (HTMX partial)."""
+
+    def get(self, request, pk):
+        from webnet.plugins.models import PluginConfig
+        from webnet.plugins.manager import PluginManager
+
+        plugin = get_object_or_404(PluginConfig, pk=pk)
+        health = PluginManager.get_plugin_health(plugin.name)
+
+        # Format details as JSON string for display
+        if health.get("details"):
+            health["details"] = json.dumps(health["details"], indent=2)
+
+        context = {"health": health}
+        return render(request, "plugins/_health.html", context)
+
+
+class PluginUpdateSettingsView(AdminRequiredMixin, View):
+    """Update plugin settings."""
+
+    def post(self, request, pk):
+        from webnet.plugins.models import PluginConfig
+        from webnet.plugins.manager import PluginManager
+
+        plugin = get_object_or_404(PluginConfig, pk=pk)
+
+        try:
+            settings_str = request.POST.get("settings", "{}")
+            settings = json.loads(settings_str)
+        except json.JSONDecodeError:
+            return HttpResponseBadRequest("Invalid JSON in settings")
+
+        success, message = PluginManager.update_plugin_settings(
+            plugin.name, settings, user=request.user
+        )
+
+        if success:
+            return HttpResponse("Settings updated successfully")
+        else:
+            return HttpResponseBadRequest(message)
+
+
+class PluginCustomersView(AdminRequiredMixin, View):
+    """Get customer configurations for a plugin (HTMX partial)."""
+
+    def get(self, request, pk):
+        from webnet.plugins.models import PluginConfig, CustomerPluginConfig
+
+        plugin = get_object_or_404(PluginConfig, pk=pk)
+        customer_configs = CustomerPluginConfig.objects.filter(plugin=plugin).select_related(
+            "customer"
+        )
+
+        context = {"customer_configs": customer_configs}
+        return render(request, "plugins/_customers.html", context)
+
+
+class PluginAuditLogView(AdminRequiredMixin, View):
+    """Get audit logs for a plugin (HTMX partial)."""
+
+    def get(self, request, pk):
+        from webnet.plugins.models import PluginConfig, PluginAuditLog
+
+        plugin = get_object_or_404(PluginConfig, pk=pk)
+        audit_logs = PluginAuditLog.objects.filter(plugin=plugin).select_related(
+            "customer", "user"
+        )[:50]
+
+        # Format details as JSON string for display
+        for log in audit_logs:
+            if log.details:
+                log.details = json.dumps(log.details, indent=2)
+
+        context = {"audit_logs": audit_logs}
+        return render(request, "plugins/_audit_log.html", context)
+
+
+class CustomerPluginEnableView(AdminRequiredMixin, View):
+    """Enable plugin for a customer (HTMX partial)."""
+
+    def post(self, request, pk):
+        from webnet.plugins.models import CustomerPluginConfig
+        from webnet.plugins.manager import PluginManager
+
+        config = get_object_or_404(CustomerPluginConfig, pk=pk)
+        success, message = PluginManager.enable_plugin(
+            config.plugin.name, customer=config.customer, user=request.user
+        )
+
+        if success:
+            config.refresh_from_db()
+            return render(request, "plugins/_customers.html", {"customer_configs": [config]})
+        else:
+            return HttpResponseBadRequest(message)
+
+
+class CustomerPluginDisableView(AdminRequiredMixin, View):
+    """Disable plugin for a customer (HTMX partial)."""
+
+    def post(self, request, pk):
+        from webnet.plugins.models import CustomerPluginConfig
+        from webnet.plugins.manager import PluginManager
+
+        config = get_object_or_404(CustomerPluginConfig, pk=pk)
+        success, message = PluginManager.disable_plugin(
+            config.plugin.name, customer=config.customer, user=request.user
+        )
+
+        if success:
+            config.refresh_from_db()
+            return render(request, "plugins/_customers.html", {"customer_configs": [config]})
+        else:
+            return HttpResponseBadRequest(message)
+
+
+class CustomerPluginUpdateSettingsView(AdminRequiredMixin, View):
+    """Update customer-specific plugin settings."""
+
+    def post(self, request, pk):
+        from webnet.plugins.models import CustomerPluginConfig
+        from webnet.plugins.manager import PluginManager
+
+        config = get_object_or_404(CustomerPluginConfig, pk=pk)
+
+        try:
+            settings_str = request.POST.get("settings", "{}")
+            settings = json.loads(settings_str)
+        except json.JSONDecodeError:
+            return HttpResponseBadRequest("Invalid JSON in settings")
+
+        success, message = PluginManager.update_plugin_settings(
+            config.plugin.name, settings, customer=config.customer, user=request.user
+        )
+
+        if success:
+            return HttpResponse("Settings updated successfully")
+        else:
+            return HttpResponseBadRequest(message)
+
+
+# Webhook Views
+class WebhookListView(TenantScopedView):
+    """List webhooks."""
+
+    template_name = "settings/webhook_list.html"
+
+    def get(self, request):
+        from webnet.webhooks.models import Webhook
+
+        qs = Webhook.objects.select_related("customer", "created_by").order_by("-created_at")
+        webhooks = self.filter_by_customer(qs)
+
+        context = {
+            "webhooks": webhooks,
+        }
+
+        return render(request, self.template_name, context)
+
+
+class WebhookDeliveryListView(TenantScopedView):
+    """List webhook deliveries."""
+
+    template_name = "settings/webhook_deliveries.html"
+    customer_field = "webhook__customer_id"
+
+    def get(self, request):
+        from webnet.webhooks.models import WebhookDelivery
+
+        qs = WebhookDelivery.objects.select_related("webhook", "webhook__customer").order_by(
+            "-created_at"
+        )[:100]
+        deliveries = self.filter_by_customer(qs)
+
+        context = {
+            "deliveries": deliveries,
+        }
+
+        return render(request, self.template_name, context)
+
+
+class ScheduleListView(TenantScopedView):
+    template_name = "schedules/list.html"
+    partial_name = "schedules/_table.html"
+
+    def get(self, request):
+        qs = Schedule.objects.select_related("customer", "created_by")
+        qs = self.filter_by_customer(qs).order_by("name")
+
+        schedules_payload = [
+            {
+                "id": schedule.id,
+                "name": schedule.name,
+                "job_type": schedule.get_job_type_display(),
+                "interval": schedule.get_interval_type_display(),
+                "enabled": schedule.enabled,
+                "next_run": (
+                    timezone.localtime(schedule.next_run).strftime("%Y-%m-%d %H:%M")
+                    if schedule.next_run
+                    else "N/A"
+                ),
+                "last_run": (
+                    timezone.localtime(schedule.last_run).strftime("%Y-%m-%d %H:%M")
+                    if schedule.last_run
+                    else "Never"
+                ),
+                "detailUrl": reverse("schedule-detail", args=[schedule.id]),
+            }
+            for schedule in qs
+        ]
+
+        context = {
+            "schedules": qs,
+            "schedules_table_props": json.dumps(
+                {
+                    "rows": schedules_payload,
+                    "emptyState": {
+                        "title": "No schedules found",
+                        "description": "Create a schedule to automate recurring tasks.",
+                    },
+                }
+            ),
+        }
+
+        if request.headers.get("HX-Request"):
+            return render(request, self.partial_name, context)
+        return render(request, self.template_name, context)
+
+
+class ScheduleDetailView(TenantScopedView):
+    template_name = "schedules/detail.html"
+
+    def get(self, request, pk: int):
+        schedule = get_object_or_404(
+            Schedule.objects.select_related("customer", "created_by"), pk=pk
+        )
+        forbidden = self.ensure_customer_access(schedule.customer_id)
+        if forbidden:
+            return forbidden
+
+        # Get recent jobs for this schedule
+        recent_jobs = (
+            Job.objects.filter(schedule=schedule)
+            .select_related("user")
+            .order_by("-requested_at")[:10]
+        )
+
+        context = {
+            "schedule": schedule,
+            "recent_jobs": recent_jobs,
+        }
+        return render(request, self.template_name, context)
+
+
+class ScheduleCreateView(TenantScopedView):
+    template_name = "schedules/form.html"
+
+    def get(self, request):
+        customers = self.get_accessible_customers()
+        job_types = Job.TYPE_CHOICES
+        interval_types = Schedule.INTERVAL_CHOICES
+
+        context = {
+            "customers": customers,
+            "job_types": job_types,
+            "interval_types": interval_types,
+            "mode": "create",
+        }
+        return render(request, self.template_name, context)
+
+    def post(self, request):
+        customers = self.get_accessible_customers()
+        customer_id = request.POST.get("customer")
+
+        # Validate customer access
+        if not any(c.id == int(customer_id) for c in customers):
+            return HttpResponseForbidden("Access denied to this customer")
+
+        # Create schedule
+        customer = Customer.objects.get(pk=customer_id)
+        schedule = Schedule(
+            customer=customer,
+            created_by=request.user,
+            name=request.POST.get("name"),
+            description=request.POST.get("description", ""),
+            job_type=request.POST.get("job_type"),
+            interval_type=request.POST.get("interval_type"),
+            cron_expression=request.POST.get("cron_expression", ""),
+            enabled="enabled" in request.POST or request.POST.get("enabled") == "on",
+        )
+        schedule.save()
+
+        return redirect("schedule-detail", pk=schedule.id)
+
+
+class ScheduleEditView(TenantScopedView):
+    template_name = "schedules/form.html"
+
+    def get(self, request, pk: int):
+        schedule = get_object_or_404(
+            Schedule.objects.select_related("customer", "created_by"), pk=pk
+        )
+        forbidden = self.ensure_customer_access(schedule.customer_id)
+        if forbidden:
+            return forbidden
+
+        customers = self.get_accessible_customers()
+        job_types = Job.TYPE_CHOICES
+        interval_types = Schedule.INTERVAL_CHOICES
+
+        context = {
+            "schedule": schedule,
+            "customers": customers,
+            "job_types": job_types,
+            "interval_types": interval_types,
+            "mode": "edit",
+        }
+        return render(request, self.template_name, context)
+
+    def post(self, request, pk: int):
+        schedule = get_object_or_404(
+            Schedule.objects.select_related("customer", "created_by"), pk=pk
+        )
+        forbidden = self.ensure_customer_access(schedule.customer_id)
+        if forbidden:
+            return forbidden
+
+        # Update schedule
+        schedule.name = request.POST.get("name")
+        schedule.description = request.POST.get("description", "")
+        schedule.job_type = request.POST.get("job_type")
+        schedule.interval_type = request.POST.get("interval_type")
+        schedule.cron_expression = request.POST.get("cron_expression", "")
+        schedule.enabled = "enabled" in request.POST or request.POST.get("enabled") == "on"
+        schedule.save()
+
+        return redirect("schedule-detail", pk=schedule.id)
+
+
+class ScheduleDeleteView(TenantScopedView):
+    def post(self, request, pk: int):
+        schedule = get_object_or_404(Schedule, pk=pk)
+        forbidden = self.ensure_customer_access(schedule.customer_id)
+        if forbidden:
+            return forbidden
+
+        schedule.delete()
+        return redirect("schedules-list")
+
+
+class ScheduleCalendarView(TenantScopedView):
+    template_name = "schedules/calendar.html"
+
+    def get(self, request):
+        from calendar import monthcalendar, month_name
+
+        # Get year and month from query params
+        try:
+            year = int(request.GET.get("year", timezone.now().year))
+            month = int(request.GET.get("month", timezone.now().month))
+        except (ValueError, TypeError):
+            year = timezone.now().year
+            month = timezone.now().month
+
+        # Get all enabled schedules for the customer
+        schedules = Schedule.objects.filter(enabled=True)
+        schedules = self.filter_by_customer(schedules).select_related("customer", "created_by")
+
+        # Calculate calendar events
+        calendar_weeks = monthcalendar(year, month)
+        month_name_str = month_name[month]
+
+        # Create events for the calendar
+        events = []
+        for schedule in schedules:
+            if schedule.next_run:
+                next_run = timezone.localtime(schedule.next_run)
+                if next_run.year == year and next_run.month == month:
+                    events.append(
+                        {
+                            "id": schedule.id,
+                            "name": schedule.name,
+                            "day": next_run.day,
+                            "time": next_run.strftime("%H:%M"),
+                            "job_type": schedule.get_job_type_display(),
+                        }
+                    )
+
+        context = {
+            "year": year,
+            "month": month,
+            "month_name": month_name_str,
+            "calendar_weeks": calendar_weeks,
+            "events": events,
+            "schedules": schedules,
+        }
         return render(request, self.template_name, context)

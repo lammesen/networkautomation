@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+
+{% block title %}{{ plugin.verbose_name }} - Plugins - webnet{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+  <!-- Header -->
+  <div class="flex items-center justify-between">
+    <div>
+      <div class="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+        <a href="/settings/plugins/" class="hover:text-foreground">Plugins</a>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+        </svg>
+        <span>{{ plugin.verbose_name }}</span>
+      </div>
+      <h1 class="text-3xl font-bold">{{ plugin.verbose_name }}</h1>
+      <p class="text-muted-foreground mt-1">{{ plugin.description }}</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <span class="inline-flex items-center rounded-full px-3 py-1 text-sm font-medium {% if plugin.enabled %}bg-green-500/10 text-green-500{% else %}bg-gray-500/10 text-gray-500{% endif %}">
+        {% if plugin.enabled %}Enabled{% else %}Disabled{% endif %}
+      </span>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="border-b">
+    <nav class="flex space-x-8" aria-label="Tabs">
+      <button
+        class="border-b-2 border-primary py-4 px-1 text-sm font-medium text-primary"
+        data-tab="settings"
+        onclick="showTab('settings')"
+      >
+        Settings
+      </button>
+      <button
+        class="border-b-2 border-transparent py-4 px-1 text-sm font-medium text-muted-foreground hover:text-foreground hover:border-muted-foreground"
+        data-tab="customers"
+        onclick="showTab('customers')"
+      >
+        Customer Configuration
+      </button>
+      <button
+        class="border-b-2 border-transparent py-4 px-1 text-sm font-medium text-muted-foreground hover:text-foreground hover:border-muted-foreground"
+        data-tab="audit"
+        onclick="showTab('audit')"
+      >
+        Audit Log
+      </button>
+    </nav>
+  </div>
+
+  <!-- Settings Tab -->
+  <div id="tab-settings" class="space-y-6">
+    <div class="rounded-lg border bg-card p-6">
+      <h2 class="text-lg font-semibold mb-4">Plugin Information</h2>
+      <dl class="grid grid-cols-2 gap-4">
+        <div>
+          <dt class="text-sm text-muted-foreground">Name</dt>
+          <dd class="text-sm font-medium mt-1">{{ plugin.name }}</dd>
+        </div>
+        <div>
+          <dt class="text-sm text-muted-foreground">Version</dt>
+          <dd class="text-sm font-medium mt-1">{{ plugin.version }}</dd>
+        </div>
+        <div>
+          <dt class="text-sm text-muted-foreground">Author</dt>
+          <dd class="text-sm font-medium mt-1">{{ plugin.author|default:"Not specified" }}</dd>
+        </div>
+        <div>
+          <dt class="text-sm text-muted-foreground">Installed</dt>
+          <dd class="text-sm font-medium mt-1">{{ plugin.installed_at|date:"Y-m-d H:i" }}</dd>
+        </div>
+        {% if plugin.min_webnet_version %}
+        <div>
+          <dt class="text-sm text-muted-foreground">Min Webnet Version</dt>
+          <dd class="text-sm font-medium mt-1">{{ plugin.min_webnet_version }}</dd>
+        </div>
+        {% endif %}
+        {% if plugin.max_webnet_version %}
+        <div>
+          <dt class="text-sm text-muted-foreground">Max Webnet Version</dt>
+          <dd class="text-sm font-medium mt-1">{{ plugin.max_webnet_version }}</dd>
+        </div>
+        {% endif %}
+      </dl>
+    </div>
+
+    <!-- Global Settings -->
+    <div class="rounded-lg border bg-card p-6">
+      <h2 class="text-lg font-semibold mb-4">Global Settings</h2>
+      <form
+        hx-post="/settings/plugins/{{ plugin.id }}/update-settings/"
+        hx-swap="none"
+        class="space-y-4"
+      >
+        {% csrf_token %}
+        <div>
+          <label for="settings" class="block text-sm font-medium mb-2">Settings (JSON)</label>
+          <textarea
+            id="settings"
+            name="settings"
+            rows="10"
+            class="w-full rounded-md border bg-background px-3 py-2 text-sm font-mono"
+            placeholder='{"key": "value"}'
+          >{{ plugin.settings|default:"{}" }}</textarea>
+          <p class="text-xs text-muted-foreground mt-1">Enter plugin settings as JSON object</p>
+        </div>
+        <button
+          type="submit"
+          class="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+          </svg>
+          Save Settings
+        </button>
+      </form>
+    </div>
+
+    <!-- Health Status -->
+    <div class="rounded-lg border bg-card p-6">
+      <h2 class="text-lg font-semibold mb-4">Health Status</h2>
+      <div
+        hx-get="/settings/plugins/{{ plugin.id }}/health/"
+        hx-trigger="load"
+        hx-swap="innerHTML"
+      >
+        <div class="flex items-center justify-center py-8">
+          <svg class="animate-spin h-8 w-8 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Customer Configuration Tab -->
+  <div id="tab-customers" class="space-y-6 hidden">
+    <div class="rounded-lg border bg-card p-6">
+      <h2 class="text-lg font-semibold mb-4">Customer-Specific Configuration</h2>
+      <div
+        hx-get="/settings/plugins/{{ plugin.id }}/customers/"
+        hx-trigger="load"
+        hx-swap="innerHTML"
+      >
+        <div class="flex items-center justify-center py-8">
+          <svg class="animate-spin h-8 w-8 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Audit Log Tab -->
+  <div id="tab-audit" class="space-y-6 hidden">
+    <div class="rounded-lg border bg-card p-6">
+      <h2 class="text-lg font-semibold mb-4">Audit Log</h2>
+      <div
+        hx-get="/settings/plugins/{{ plugin.id }}/audit-log/"
+        hx-trigger="load"
+        hx-swap="innerHTML"
+      >
+        <div class="flex items-center justify-center py-8">
+          <svg class="animate-spin h-8 w-8 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function showTab(tabName) {
+  // Hide all tabs
+  document.querySelectorAll('[id^="tab-"]').forEach(tab => {
+    tab.classList.add('hidden');
+  });
+  
+  // Show selected tab
+  document.getElementById('tab-' + tabName).classList.remove('hidden');
+  
+  // Update tab button styles
+  document.querySelectorAll('[data-tab]').forEach(btn => {
+    if (btn.dataset.tab === tabName) {
+      btn.classList.remove('border-transparent', 'text-muted-foreground');
+      btn.classList.add('border-primary', 'text-primary');
+    } else {
+      btn.classList.remove('border-primary', 'text-primary');
+      btn.classList.add('border-transparent', 'text-muted-foreground');
+    }
+  });
+}
+</script>
+{% endblock %}

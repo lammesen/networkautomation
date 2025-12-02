@@ -13,6 +13,7 @@ Welcome to the documentation for the Network Automation platform. This index is 
 - Device Tags and Groups: [Organize and target automation](./features/device-groups-tags.md)
 - NetBox Integration: [Sync inventory from NetBox](./integrations/netbox.md)
 - Configuration Templates: [Jinja2 templates with variables](./config-templates.md)
+- Multi-Region Deployment: [Distributed workers for global networks](./multi-region-deployment.md)
 
 ## Developers
 - Start here: [Developer Guide](./developer-guide.md)

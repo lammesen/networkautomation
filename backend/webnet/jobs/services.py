@@ -74,7 +74,51 @@ class JobService:
         )
         # Broadcast job status change
         broadcast_job_update(job, action="updated")
+
+        # Create ServiceNow incident if job failed
+        if status == "failed":
+            from webnet.jobs.tasks import create_servicenow_incident
+
+            create_servicenow_incident.delay(job.id)
+
+        # Send email notifications for completed jobs
+        if status in {"success", "partial", "failed"}:
+            self._send_job_notification(job, status)
+
+        # Send ChatOps notifications if job is completed
+        if status in {"success", "partial", "failed"}:
+            try:
+                from webnet.chatops.slack_service import notify_job_completion
+                from webnet.chatops.teams_service import notify_job_completion_teams
+
+                notify_job_completion(job)
+                notify_job_completion_teams(job)
+            except Exception as e:
+                logger.warning(f"Failed to send ChatOps notification: {e}")
+
         return job
+
+    def _send_job_notification(self, job: Job, status: str) -> None:
+        """Send email notification for job completion.
+
+        Args:
+            job: Completed job
+            status: Job status (success, partial, failed)
+        """
+        try:
+            from webnet.notifications.services import notify_job_event
+
+            # Map job status to notification event type
+            event_type_map = {
+                "success": "job_success",
+                "partial": "job_partial",
+                "failed": "job_failed",
+            }
+            event_type = event_type_map.get(status)
+            if event_type:
+                notify_job_event(job, event_type)
+        except Exception as e:
+            logger.error(f"Failed to send job notification for job {job.id}: {e}")
 
     @transaction.atomic
     def append_log(
@@ -107,6 +151,80 @@ class JobService:
         if customer_ids:
             qs = qs.filter(customer_id__in=customer_ids)
         return qs
+
+    def _determine_region(self, job: Job) -> Optional["Region"]:  # type: ignore[name-defined]  # noqa: F821
+        """Determine the target region for a job based on devices.
+
+        Returns the region to route to, or None for default queue.
+        Implements priority-based selection and health checking.
+        """
+        from webnet.core.models import Region
+        from webnet.devices.models import Device
+
+        # Get target devices from job's target_summary
+        # Support both nested {"filters": {...}} and flat {...} formats
+        target_filters = (job.target_summary_json or {}).get("filters", {})
+        if not target_filters and job.target_summary_json:
+            # Fallback: treat top-level keys as filters for backward compatibility
+            # This handles compliance jobs which use policy.scope_json directly
+            target_filters = job.target_summary_json
+
+        if not target_filters:
+            # No specific targets, use default queue
+            return None
+
+        # Query devices matching the filters
+        devices_qs = Device.objects.filter(customer=job.customer, enabled=True)
+
+        # Apply filters to find target devices
+        if target_filters.get("site"):
+            devices_qs = devices_qs.filter(site__iexact=target_filters["site"])
+        if target_filters.get("role"):
+            devices_qs = devices_qs.filter(role__iexact=target_filters["role"])
+        if target_filters.get("vendor"):
+            devices_qs = devices_qs.filter(vendor__iexact=target_filters["vendor"])
+        if target_filters.get("hostname"):
+            devices_qs = devices_qs.filter(hostname__iexact=target_filters["hostname"])
+        if target_filters.get("device_ids"):
+            devices_qs = devices_qs.filter(id__in=target_filters["device_ids"])
+
+        # Get regions from target devices
+        device_regions = (
+            devices_qs.exclude(region__isnull=True).values_list("region", flat=True).distinct()
+        )
+
+        if not device_regions:
+            # No devices have regions assigned, use default queue
+            return None
+
+        # If multiple regions, select the highest priority available one
+        regions = (
+            Region.objects.filter(
+                id__in=device_regions,
+                customer=job.customer,
+                enabled=True,
+            )
+            .exclude(health_status=Region.STATUS_OFFLINE)
+            .order_by("-priority", "name")
+        )
+
+        if regions.exists():
+            selected_region = regions.first()
+            logger.info(
+                "Routing job %s to region %s (priority=%s, status=%s)",
+                job.id,
+                selected_region.identifier,
+                selected_region.priority,
+                selected_region.health_status,
+            )
+            return selected_region
+
+        # All regions offline or unavailable, log warning and use default queue
+        logger.warning(
+            "All regions for job %s are offline or unavailable, using default queue",
+            job.id,
+        )
+        return None
 
     def _enqueue(self, job: Job) -> None:
         task_map = {
@@ -187,13 +305,41 @@ class JobService:
                     (j.payload_json or {}).get("credential_ids", []),
                 ),
             ),
+            "ansible_playbook": (
+                "ansible_playbook_job",
+                lambda j: (
+                    j.id,
+                    (j.payload_json or {}).get("playbook_id"),
+                    (j.target_summary_json or {}).get("filters", {}),
+                    (j.payload_json or {}).get("extra_vars", {}),
+                    (j.payload_json or {}).get("limit"),
+                    (j.payload_json or {}).get("tags", []),
+                ),
+            ),
         }
         entry = task_map.get(job.type)
         if not entry:
             return
         task_name, args_fn = entry
+
+        # Determine target region for job routing
+        region = self._determine_region(job)
+        queue_name = None
+
+        if region:
+            # Update job with assigned region
+            job.region = region
+            job.save(update_fields=["region"])
+            queue_name = region.queue_name
+            logger.info(
+                "Job %s assigned to region %s (queue=%s)", job.id, region.identifier, queue_name
+            )
+
         try:
-            self.dispatcher(task_name, args=args_fn(job))
+            # Send task to appropriate queue
+            self.dispatcher(task_name, args=args_fn(job), queue=queue_name)
         except Exception as e:
-            logger.error("Failed to enqueue job %s (type=%s): %s", job.id, job.type, e)
+            logger.error(
+                "Failed to enqueue job %s (type=%s, queue=%s): %s", job.id, job.type, queue_name, e
+            )
             # leave job queued; caller may retry

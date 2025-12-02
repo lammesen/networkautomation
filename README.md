@@ -12,6 +12,7 @@ A production-grade web application for network automation using NAPALM, Netmiko,
 - **Job Tracking**: Real-time job monitoring with live log streaming
 - **Role-Based Access Control**: Viewer, Operator, and Admin roles
 - **LDAP/Active Directory Authentication**: Enterprise authentication with automatic role mapping
+- **Multi-Region Deployment**: Distributed workers for global networks with automatic job routing
 
 ## Technology Stack (Django/HTMX/DRF)
 
@@ -315,13 +316,14 @@ For issues and questions:
 
 ## Roadmap
 
-- [ ] NetBox integration for inventory
+- [x] NetBox integration for inventory
+- [x] Multi-region deployment support
 - [ ] Scheduled backup jobs
 - [ ] Configuration templates library
 - [ ] Advanced compliance reports
-- [ ] Multi-tenancy support
+- [x] Multi-tenancy support
 - [ ] Audit logging
-- [ ] LDAP/AD authentication
+- [x] LDAP/AD authentication
 - [ ] REST API webhooks
-- [ ] Device discovery
+- [x] Device discovery
 - [ ] Topology visualization

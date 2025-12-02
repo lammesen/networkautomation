@@ -60,6 +60,8 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     "channels",
     "django_filters",
+    "django_otp",
+    "django_otp.plugins.otp_totp",
     "webnet.core",
     "webnet.users",
     "webnet.customers",
@@ -68,8 +70,14 @@ INSTALLED_APPS = [
     "webnet.config_mgmt",
     "webnet.compliance",
     "webnet.networkops",
+    "webnet.plugins",
+    "webnet.ansible_mgmt",
+    "webnet.webhooks",
+    "webnet.notifications",
+    "webnet.chatops",
     "webnet.api",
     "webnet.ui",
+    "webnet.graphql_api",
 ]
 
 MIDDLEWARE = [
@@ -80,6 +88,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django_otp.middleware.OTPMiddleware",
     "webnet.core.middleware.RequireLoginMiddleware",
     "webnet.core.metrics.MetricsMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
@@ -199,6 +208,8 @@ LOGOUT_REDIRECT_URL = "/login/"
 LOGIN_EXEMPT_PREFIXES = (
     "/login",
     "/logout",
+    "/2fa/",
+    "/webauthn/",
     "/api/",
     "/ws/",  # WebSocket paths - auth handled by Channels AuthMiddlewareStack
     "/static/",
@@ -209,6 +220,11 @@ LOGIN_EXEMPT_PREFIXES = (
 )
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# WebAuthn settings
+WEBAUTHN_RP_ID = env("WEBAUTHN_RP_ID", "localhost")
+WEBAUTHN_RP_NAME = env("WEBAUTHN_RP_NAME", "webnet Network Automation")
+WEBAUTHN_ORIGIN = env("WEBAUTHN_ORIGIN", "http://localhost:8000")
 
 
 # REST framework
@@ -255,7 +271,25 @@ CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", "redis://localhost:6379/1")
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_ACKS_LATE = True
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
-CELERY_BEAT_SCHEDULE = {}
+CELERY_BEAT_SCHEDULE = {
+    "process-due-schedules": {
+        "task": "process_due_schedules",
+        "schedule": 60.0,  # Run every 60 seconds
+    },
+}
+
+# Multi-region deployment: Define task routes for regional queues
+# Workers can be started with specific queues using:
+# celery -A webnet.core.celery:celery_app worker -Q region_us-east-1,celery -l info
+# Default worker listens to 'celery' queue for jobs without region assignment
+CELERY_TASK_DEFAULT_QUEUE = "celery"
+CELERY_TASK_DEFAULT_EXCHANGE = "celery"
+CELERY_TASK_DEFAULT_ROUTING_KEY = "celery"
+
+# Workers should be configured per region, e.g.:
+# Region US-East worker: celery worker -Q region_us-east-1,celery
+# Region US-West worker: celery worker -Q region_us-west-1,celery
+# Central fallback worker: celery worker -Q celery (handles unrouted and fallback jobs)
 
 # Logging (minimal; extend later)
 LOGGING = {
@@ -271,3 +305,17 @@ LOGGING = {
         "level": "INFO",
     },
 }
+
+# Plugin system configuration
+WEBNET_PLUGINS = env("WEBNET_PLUGINS", "").split(",") if env("WEBNET_PLUGINS") else []
+
+# Email settings
+EMAIL_BACKEND = env("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
+EMAIL_HOST = env("EMAIL_HOST", "")
+EMAIL_PORT = int(env("EMAIL_PORT", "587"))
+EMAIL_USE_TLS = env("EMAIL_USE_TLS", "true").lower() == "true"
+EMAIL_USE_SSL = env("EMAIL_USE_SSL", "false").lower() == "true"
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", "")
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "webnet@example.com")
+WEBNET_BASE_URL = env("WEBNET_BASE_URL", "http://localhost:8000")

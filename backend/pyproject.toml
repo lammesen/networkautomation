@@ -29,6 +29,13 @@ dependencies = [
     "nornir-netmiko>=1.0.0",
     "asyncssh>=2.14.2",
     "django-auth-ldap>=5.0.0",
+    "strawberry-graphql-django>=0.49.4",
+    "ansible>=2.16.0",
+    "requests>=2.32.0",
+    "django-otp>=1.5.0",
+    "qrcode>=7.4.2",
+    "webauthn>=2.1.0",
+    "croniter>=2.0.0",
 ]
 
 [project.optional-dependencies]
@@ -62,8 +69,11 @@ packages = [
     "webnet.config_mgmt",
     "webnet.compliance",
     "webnet.networkops",
+    "webnet.ansible_mgmt",
+    "webnet.chatops",
     "webnet.api",
     "webnet.ui",
+    "webnet.graphql_api",
 ]
 
 [tool.black]
@@ -79,5 +89,18 @@ python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
-exclude = "migrations"
+exclude = ["migrations", "tests"]
+
+[[tool.mypy.overrides]]
+module = [
+    "webnet.tests.*",
+    "webnet.graphql_api.*",
+    "webnet.plugins.*",
+    "webnet.chatops.*",
+    "webnet.notifications.*",
+    "webnet.webhooks.*",
+    "webnet.ansible_mgmt.*",
+]
+disallow_untyped_defs = false
+warn_return_any = false
 

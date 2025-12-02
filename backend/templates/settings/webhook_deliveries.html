@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}Webhook Deliveries{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-base-content">Webhook Deliveries</h1>
+            <p class="text-sm text-base-content/60 mt-1">
+                View webhook delivery history and status
+            </p>
+        </div>
+        <a href="{% url 'webhooks-list' %}" class="btn btn-ghost btn-sm">
+            ← Back to Webhooks
+        </a>
+    </div>
+
+    <div class="overflow-x-auto">
+        <table class="table table-zebra w-full">
+            <thead>
+                <tr>
+                    <th>Webhook</th>
+                    <th>Event</th>
+                    <th>Status</th>
+                    <th>Attempts</th>
+                    <th>HTTP Status</th>
+                    <th>Duration</th>
+                    <th>Created</th>
+                    <th>Error</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for delivery in deliveries %}
+                <tr>
+                    <td class="font-medium">{{ delivery.webhook.name }}</td>
+                    <td>
+                        <span class="badge badge-sm badge-outline">{{ delivery.event_type }}</span>
+                    </td>
+                    <td>
+                        {% if delivery.status == 'success' %}
+                        <span class="badge badge-success badge-sm">Success</span>
+                        {% elif delivery.status == 'failed' %}
+                        <span class="badge badge-error badge-sm">Failed</span>
+                        {% elif delivery.status == 'retrying' %}
+                        <span class="badge badge-warning badge-sm">Retrying</span>
+                        {% else %}
+                        <span class="badge badge-ghost badge-sm">{{ delivery.status|title }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm text-center">{{ delivery.attempts }}</td>
+                    <td class="text-sm text-center">
+                        {% if delivery.http_status %}
+                        {{ delivery.http_status }}
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td class="text-sm text-center">
+                        {% if delivery.duration_ms %}
+                        {{ delivery.duration_ms }}ms
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td class="text-sm text-base-content/60">
+                        {{ delivery.created_at|date:"Y-m-d H:i:s" }}
+                    </td>
+                    <td class="text-sm text-error truncate max-w-xs">
+                        {% if delivery.error_message %}
+                        {{ delivery.error_message|truncatewords:10 }}
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center py-12 text-base-content/60">
+                        <svg class="w-12 h-12 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                        </svg>
+                        <p class="text-lg font-medium">No webhook deliveries</p>
+                        <p class="mt-1">Webhook deliveries will appear here when events are triggered.</p>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="mt-6 p-4 bg-info/10 rounded-lg">
+        <h3 class="text-sm font-semibold mb-2">Delivery Status</h3>
+        <ul class="text-sm text-base-content/70 space-y-1">
+            <li><strong>Success:</strong> Webhook was delivered successfully (HTTP 2xx)</li>
+            <li><strong>Failed:</strong> Webhook delivery failed after max retries</li>
+            <li><strong>Retrying:</strong> Webhook delivery is being retried with exponential backoff</li>
+            <li><strong>Pending:</strong> Webhook delivery is queued for processing</li>
+        </ul>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Backup Codes - webnet{% endblock %}
+{% block content %}
+<div class="container mx-auto px-4 py-8 max-w-2xl">
+  <div class="mb-8">
+    <h1 class="text-3xl font-bold tracking-tight">Backup Codes</h1>
+    <p class="text-muted-foreground mt-2">
+      {% if regenerated %}
+      Your new backup codes have been generated
+      {% else %}
+      Save these backup codes in a secure location
+      {% endif %}
+    </p>
+  </div>
+
+  <div class="rounded-lg border bg-card text-card-foreground shadow-sm">
+    <div class="p-6">
+      <div class="mb-4 flex items-center gap-3 rounded-lg border border-yellow-500/50 bg-yellow-500/10 p-4 text-sm">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+        <div>
+          <p class="font-semibold">Important: Save these codes now</p>
+          <p class="text-sm">Each code can only be used once. Store them securely.</p>
+        </div>
+      </div>
+
+      <div class="space-y-4">
+        <div class="bg-muted p-4 rounded-lg">
+          <div class="grid grid-cols-2 gap-3">
+            {% for code in backup_codes %}
+            <div class="font-mono text-sm p-2 bg-background rounded border text-center">
+              {{ code }}
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="flex gap-3">
+          <button 
+            type="button"
+            onclick="printCodes()"
+            class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+            </svg>
+            Print Codes
+          </button>
+          <button 
+            type="button"
+            onclick="downloadCodes()"
+            class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Download
+          </button>
+        </div>
+
+        <div class="pt-4 border-t">
+          <a href="{% url 'dashboard' %}" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2">
+            Continue to Dashboard
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mt-6 p-4 bg-muted rounded-lg">
+    <h3 class="font-semibold text-sm mb-2">Using Backup Codes</h3>
+    <ul class="text-sm text-muted-foreground space-y-1">
+      <li>• Each code can only be used once</li>
+      <li>• Use a backup code if you lose access to your authenticator app</li>
+      <li>• You can regenerate new codes from your 2FA settings</li>
+      <li>• Store these codes securely (password manager, safe place)</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+const codes = {{ backup_codes|escapejs }};
+
+function printCodes() {
+  const printWindow = window.open('', '', 'width=600,height=400');
+  printWindow.document.write('<html><head><title>Backup Codes</title>');
+  printWindow.document.write('<style>body { font-family: monospace; padding: 20px; } .code { padding: 10px; margin: 5px 0; border: 1px solid #ccc; }</style>');
+  printWindow.document.write('</head><body>');
+  printWindow.document.write('<h1>Two-Factor Authentication Backup Codes</h1>');
+  printWindow.document.write('<p>Save these codes in a secure location. Each code can only be used once.</p>');
+  codes.forEach(code => {
+    const div = printWindow.document.createElement('div');
+    div.className = 'code';
+    div.textContent = code;
+    printWindow.document.body.appendChild(div);
+  });
+  printWindow.document.write('</body></html>');
+  printWindow.document.close();
+  printWindow.print();
+}
+
+function downloadCodes() {
+  const text = 'Two-Factor Authentication Backup Codes\n\n' + 
+               'Save these codes in a secure location. Each code can only be used once.\n\n' +
+               codes.join('\n');
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'backup-codes.txt';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(url);
+}
+</script>
+{% endblock content %}

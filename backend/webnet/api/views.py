@@ -25,6 +25,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 
 from webnet.users.models import User, APIKey
 from webnet.customers.models import Customer, CustomerIPRange
+from webnet.core.models import CustomFieldDefinition, Region
 from webnet.devices.models import (
     Device,
     Credential,
@@ -35,8 +36,12 @@ from webnet.devices.models import (
     NetBoxConfig,
     NetBoxSyncLog,
     SSHHostKey,
+    ServiceNowConfig,
+    ServiceNowSyncLog,
+    ServiceNowIncident,
+    ServiceNowChangeRequest,
 )
-from webnet.jobs.models import Job, JobLog
+from webnet.jobs.models import Job, JobLog, Schedule
 from webnet.jobs.services import JobService
 from webnet.config_mgmt.models import ConfigSnapshot, ConfigTemplate, ConfigDrift, DriftAlert
 from webnet.compliance.models import (
@@ -45,6 +50,8 @@ from webnet.compliance.models import (
     RemediationRule,
     RemediationAction,
 )
+from webnet.ansible_mgmt.models import Playbook, AnsibleConfig
+from webnet.webhooks.models import Webhook, WebhookDelivery
 
 from .serializers import (
     UserSerializer,
@@ -52,10 +59,12 @@ from .serializers import (
     APIKeySerializer,
     CustomerSerializer,
     CustomerIPRangeSerializer,
+    CustomFieldDefinitionSerializer,
     CredentialSerializer,
     DeviceSerializer,
     JobSerializer,
     JobLogSerializer,
+    ScheduleSerializer,
     ConfigSnapshotSerializer,
     ConfigDriftSerializer,
     DriftAlertSerializer,
@@ -86,6 +95,25 @@ from .serializers import (
     NetBoxConfigSerializer,
     NetBoxSyncLogSerializer,
     NetBoxSyncRequestSerializer,
+    # Ansible Integration
+    AnsibleConfigSerializer,
+    PlaybookSerializer,
+    PlaybookExecuteSerializer,
+    # ServiceNow Integration
+    ServiceNowConfigSerializer,
+    ServiceNowSyncLogSerializer,
+    ServiceNowSyncRequestSerializer,
+    ServiceNowIncidentSerializer,
+    ServiceNowIncidentUpdateSerializer,
+    ServiceNowChangeRequestSerializer,
+    ServiceNowChangeRequestCreateSerializer,
+    ServiceNowChangeRequestUpdateSerializer,
+    # Webhook Integration
+    WebhookSerializer,
+    WebhookDeliverySerializer,
+    # Multi-region Deployment Support
+    RegionSerializer,
+    RegionHealthUpdateSerializer,
 )
 from .permissions import (
     RolePermission,
@@ -257,6 +285,16 @@ class CustomerViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
             return Response(status=status.HTTP_404_NOT_FOUND)
         customer.users.remove(user)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class CustomFieldDefinitionViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
+    """API viewset for managing custom field definitions."""
+
+    queryset = CustomFieldDefinition.objects.all()
+    serializer_class = CustomFieldDefinitionSerializer
+    permission_classes = [IsAuthenticated, RolePermission]
+    customer_field = "customer_id"
+    filterset_fields = ["model_type", "field_type", "is_active"]
 
 
 class CredentialViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
@@ -516,6 +554,25 @@ class JobAdminViewSet(CustomerScopedQuerysetMixin, viewsets.ReadOnlyModelViewSet
     serializer_class = JobSerializer
     permission_classes = [IsAuthenticated, RolePermission]
     customer_field = "customer_id"
+
+
+class ScheduleViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
+    queryset = Schedule.objects.select_related("customer", "created_by")
+    serializer_class = ScheduleSerializer
+    permission_classes = [IsAuthenticated, RolePermission, ObjectCustomerPermission]
+    customer_field = "customer"
+
+    def perform_create(self, serializer):
+        """Set created_by to current user."""
+        serializer.save(created_by=self.request.user)
+
+    @action(detail=True, methods=["post"])
+    def toggle(self, request, pk=None):
+        """Toggle schedule enabled/disabled."""
+        schedule = self.get_object()
+        schedule.enabled = not schedule.enabled
+        schedule.save(update_fields=["enabled"])
+        return Response(ScheduleSerializer(schedule).data)
 
 
 class JobLogsView(APIView):
@@ -2069,3 +2126,608 @@ class NetBoxConfigViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
                 {"detail": "Preview failed due to an internal error."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+
+class AnsibleConfigViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
+    """ViewSet for Ansible configuration management."""
+
+    queryset = AnsibleConfig.objects.all()
+    serializer_class = AnsibleConfigSerializer
+    permission_classes = [IsAuthenticated, RolePermission, ObjectCustomerPermission]
+    customer_field = "customer_id"
+
+
+class PlaybookViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
+    """ViewSet for Ansible playbook management."""
+
+    queryset = Playbook.objects.all()
+    serializer_class = PlaybookSerializer
+    permission_classes = [IsAuthenticated, RolePermission, ObjectCustomerPermission]
+    customer_field = "customer_id"
+
+    def get_queryset(self):
+        """Filter playbooks by customer."""
+        qs = super().get_queryset()
+        # Optionally filter by tags
+        tags = self.request.query_params.get("tags")
+        if tags:
+            tag_list = [t.strip() for t in tags.split(",")]
+            for tag in tag_list:
+                qs = qs.filter(tags__contains=[tag])
+        return qs
+
+    @action(detail=True, methods=["post"])
+    def execute(self, request, pk=None) -> Response:
+        """Execute a playbook against managed devices.
+
+        Request body:
+        - targets: Device filter targets (site, role, vendor, device_ids)
+        - extra_vars: Extra variables to pass to playbook
+        - limit: Limit execution to specific hosts
+        - tags: Ansible tags to run
+        """
+        playbook = self.get_object()
+        serializer = PlaybookExecuteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        targets = serializer.validated_data.get("targets", {})
+        extra_vars = serializer.validated_data.get("extra_vars", {})
+        limit = serializer.validated_data.get("limit")
+        tags = serializer.validated_data.get("tags")
+
+        # Use playbook's customer
+        customer = playbook.customer
+
+        # Create job
+        js = JobService()
+        job = js.create_job(
+            job_type="ansible_playbook",
+            user=request.user,
+            customer=customer,
+            target_summary={"filters": targets},
+            payload={
+                "playbook_id": playbook.id,
+                "extra_vars": extra_vars,
+                "limit": limit,
+                "tags": tags or [],
+            },
+        )
+
+        return Response(
+            {
+                "job_id": job.id,
+                "status": job.status,
+                "message": f"Playbook '{playbook.name}' execution started",
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=["get"])
+    def validate(self, request, pk=None) -> Response:
+        """Validate playbook YAML syntax.
+
+        Returns validation result with any syntax errors.
+        """
+        playbook = self.get_object()
+
+        if playbook.source_type != "inline":
+            return Response(
+                {"detail": "Validation only supported for inline playbooks"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            import yaml
+
+            yaml.safe_load(playbook.content)
+            return Response(
+                {
+                    "valid": True,
+                    "message": "Playbook syntax is valid",
+                }
+            )
+        except yaml.YAMLError as e:
+            return Response(
+                {
+                    "valid": False,
+                    "message": "Playbook syntax error",
+                    "error": str(e),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except Exception:
+            logger.exception("Error validating playbook %s", playbook.id)
+            return Response(
+                {
+                    "valid": False,
+                    "message": "Validation failed due to an internal error",
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+# ==============================================================================
+# ServiceNow Integration ViewSets
+# ==============================================================================
+
+
+class ServiceNowConfigViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
+    """ViewSet for managing ServiceNow configurations.
+
+    Each customer can have one ServiceNow configuration for CMDB sync,
+    incident management, and change requests.
+    """
+
+    queryset = ServiceNowConfig.objects.select_related("customer", "default_credential")
+    serializer_class = ServiceNowConfigSerializer
+    permission_classes = [IsAuthenticated, RolePermission, ObjectCustomerPermission]
+    customer_field = "customer_id"
+
+    @action(detail=True, methods=["post"])
+    def sync(self, request, pk=None) -> Response:
+        """Trigger a manual sync with ServiceNow CMDB.
+
+        Request body:
+        - direction: "import" (from ServiceNow), "export" (to ServiceNow), or "both"
+        - device_ids: Optional list of device IDs to sync (only for export)
+
+        Returns:
+        - detail: Status message
+        - config_id: ID of the ServiceNow configuration
+        """
+        config = self.get_object()
+
+        if not config.has_password():
+            return Response(
+                {"detail": "ServiceNow password is not configured"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = ServiceNowSyncRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        direction = serializer.validated_data.get("direction", "both")
+        device_ids = serializer.validated_data.get("device_ids")
+
+        # Queue the sync task
+        from webnet.jobs.tasks import servicenow_sync_job
+
+        servicenow_sync_job.delay(config.id, direction=direction, device_ids=device_ids)
+
+        return Response(
+            {
+                "detail": "ServiceNow sync queued",
+                "config_id": config.id,
+                "direction": direction,
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+    @action(detail=True, methods=["post"], url_path="test-connection")
+    def test_connection(self, request, pk=None) -> Response:
+        """Test the ServiceNow API connection.
+
+        Returns:
+        - success: Whether the connection was successful
+        - message: Success or error message
+        - servicenow_version: ServiceNow version if available
+        """
+        config = self.get_object()
+
+        if not config.has_password():
+            return Response(
+                {
+                    "success": False,
+                    "message": "Password is not configured",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from webnet.devices.servicenow_service import ServiceNowService
+
+        service = ServiceNowService(config)
+        result = service.test_connection()
+
+        return Response(
+            {
+                "success": result.success,
+                "message": result.message,
+                "servicenow_version": getattr(result, "servicenow_version", None),
+            },
+            status=status.HTTP_200_OK if result.success else status.HTTP_400_BAD_REQUEST,
+        )
+
+    @action(detail=True, methods=["get"])
+    def logs(self, request, pk=None) -> Response:
+        """Get sync logs for this configuration."""
+        config = self.get_object()
+        logs = ServiceNowSyncLog.objects.filter(config=config).order_by("-started_at")[:50]
+        return Response(ServiceNowSyncLogSerializer(logs, many=True).data)
+
+
+class ServiceNowIncidentViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
+    """ViewSet for managing ServiceNow incidents."""
+
+    queryset = ServiceNowIncident.objects.select_related("config", "job")
+    serializer_class = ServiceNowIncidentSerializer
+    permission_classes = [IsAuthenticated, RolePermission, ObjectCustomerPermission]
+    customer_field = "config__customer_id"
+
+    @action(detail=True, methods=["patch"])
+    def update_state(self, request, pk=None) -> Response:
+        """Update an incident's state in ServiceNow.
+
+        Request body:
+        - state: New state (1=New, 2=In Progress, 3=On Hold, 6=Resolved, 7=Closed)
+        - work_notes: Optional work notes
+        - resolution_notes: Optional resolution notes
+        """
+        incident = self.get_object()
+        serializer = ServiceNowIncidentUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        from webnet.devices.servicenow_service import ServiceNowService
+
+        service = ServiceNowService(incident.config)
+        result = service.update_incident(
+            incident.incident_sys_id,
+            state=serializer.validated_data.get("state"),
+            work_notes=serializer.validated_data.get("work_notes"),
+            resolution_notes=serializer.validated_data.get("resolution_notes"),
+        )
+
+        if result.success:
+            # Update local record
+            if serializer.validated_data.get("state"):
+                incident.state = serializer.validated_data["state"]
+            if incident.state in [6, 7] and not incident.resolved_at:
+                incident.resolved_at = timezone.now()
+            incident.save()
+
+            return Response(
+                {
+                    "success": True,
+                    "message": result.message,
+                    "incident_number": result.incident_number,
+                },
+                status=status.HTTP_200_OK,
+            )
+        else:
+            return Response(
+                {
+                    "success": False,
+                    "message": result.message or "Failed to update incident",
+                    "error": result.error,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+
+class ServiceNowChangeRequestViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
+    """ViewSet for managing ServiceNow change requests."""
+
+    queryset = ServiceNowChangeRequest.objects.select_related("config", "job")
+    serializer_class = ServiceNowChangeRequestSerializer
+    permission_classes = [IsAuthenticated, RolePermission, ObjectCustomerPermission]
+    customer_field = "config__customer_id"
+
+    def create(self, request, *args, **kwargs) -> Response:
+        """Create a new change request in ServiceNow.
+
+        Request body must include:
+        - config_id: ServiceNow configuration ID
+        - job_id: Job ID to link to the change
+        - short_description: Brief summary
+        - description: Detailed description
+        - justification: Business justification
+        - risk: Risk level (1-3)
+        - impact: Impact level (1-3)
+        - device_ids: Optional list of device IDs affected
+        """
+        serializer = ServiceNowChangeRequestCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        # Get config and validate access
+        config_id = request.data.get("config_id")
+        job_id = request.data.get("job_id")
+
+        if not config_id:
+            return Response(
+                {"detail": "config_id is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not job_id:
+            return Response(
+                {"detail": "job_id is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            config = ServiceNowConfig.objects.get(id=config_id)
+            if not user_has_customer_access(request.user, config.customer_id):
+                return Response(
+                    {"detail": "You do not have access to this configuration"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+        except ServiceNowConfig.DoesNotExist:
+            return Response(
+                {"detail": "ServiceNow configuration not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            job = Job.objects.get(id=job_id, customer_id=config.customer_id)
+        except Job.DoesNotExist:
+            return Response(
+                {"detail": "Job not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Get device sys_ids if device_ids provided
+        ci_sys_ids = []
+        device_ids = serializer.validated_data.get("device_ids")
+        if device_ids:
+            devices = Device.objects.filter(id__in=device_ids, customer_id=config.customer_id)
+            for device in devices:
+                tags = device.tags or {}
+                if sys_id := tags.get("servicenow_sys_id"):
+                    ci_sys_ids.append(sys_id)
+
+        # Create change request in ServiceNow
+        from webnet.devices.servicenow_service import ServiceNowService
+
+        service = ServiceNowService(config)
+        result = service.create_change_request(
+            short_description=serializer.validated_data["short_description"],
+            description=serializer.validated_data["description"],
+            justification=serializer.validated_data["justification"],
+            risk=serializer.validated_data.get("risk", 3),
+            impact=serializer.validated_data.get("impact", 3),
+            assignment_group=config.change_assignment_group,
+            configuration_items=ci_sys_ids if ci_sys_ids else None,
+        )
+
+        if result.success:
+            # Create local record
+            change = ServiceNowChangeRequest.objects.create(
+                config=config,
+                job=job,
+                change_number=result.change_number,
+                change_sys_id=result.change_sys_id,
+                short_description=serializer.validated_data["short_description"],
+                description=serializer.validated_data["description"],
+                justification=serializer.validated_data["justification"],
+            )
+
+            return Response(
+                ServiceNowChangeRequestSerializer(change).data,
+                status=status.HTTP_201_CREATED,
+            )
+        else:
+            return Response(
+                {
+                    "success": False,
+                    "message": result.message or "Failed to create change request",
+                    "error": result.error,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    @action(detail=True, methods=["patch"])
+    def update_state(self, request, pk=None) -> Response:
+        """Update a change request's state in ServiceNow.
+
+        Request body:
+        - state: New state (-5=New, 0=Assess, 1=Authorize, 2=Scheduled, 3=Implement, 4=Review, 6=Closed)
+        - work_notes: Optional work notes
+        - close_notes: Optional closing notes
+        """
+        change = self.get_object()
+        serializer = ServiceNowChangeRequestUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        from webnet.devices.servicenow_service import ServiceNowService
+
+        service = ServiceNowService(change.config)
+        result = service.update_change_request(
+            change.change_sys_id,
+            state=serializer.validated_data.get("state"),
+            work_notes=serializer.validated_data.get("work_notes"),
+            close_notes=serializer.validated_data.get("close_notes"),
+        )
+
+        if result.success:
+            # Update local record
+            if serializer.validated_data.get("state"):
+                change.state = serializer.validated_data["state"]
+            if change.state == 6 and not change.closed_at:
+                change.closed_at = timezone.now()
+            change.save()
+
+            return Response(
+                {
+                    "success": True,
+                    "message": result.message,
+                    "change_number": result.change_number,
+                },
+                status=status.HTTP_200_OK,
+            )
+        else:
+            return Response(
+                {
+                    "success": False,
+                    "message": result.message or "Failed to update change request",
+                    "error": result.error,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+
+# ==============================================================================
+# Webhook ViewSets
+# ==============================================================================
+
+
+class WebhookViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
+    """ViewSet for managing webhooks."""
+
+    queryset = Webhook.objects.all()
+    serializer_class = WebhookSerializer
+    permission_classes = [IsAuthenticated, RolePermission]
+    customer_field = "customer_id"
+    filterset_fields = ["enabled", "customer"]
+    search_fields = ["name", "url"]
+    ordering_fields = ["name", "created_at"]
+
+    def perform_create(self, serializer):
+        """Set created_by when creating webhook."""
+        serializer.save(created_by=self.request.user)
+
+    @action(detail=True, methods=["post"])
+    def test(self, request, pk=None):
+        """Test webhook delivery with a sample payload."""
+        webhook = self.get_object()
+
+        # Create a test delivery
+        test_payload = {
+            "event_timestamp": timezone.now().isoformat(),
+            "event_type": "webhook.test",
+            "message": "This is a test webhook delivery",
+            "webhook": {
+                "id": webhook.id,
+                "name": webhook.name,
+            },
+        }
+
+        delivery = WebhookDelivery.objects.create(
+            webhook=webhook,
+            event_type="webhook.test",
+            event_id=webhook.id,
+            payload=test_payload,
+            status=WebhookDelivery.STATUS_PENDING,
+        )
+
+        # Trigger delivery asynchronously
+        from webnet.webhooks.tasks import deliver_webhook
+
+        deliver_webhook.delay(delivery.id)
+
+        return Response(
+            {
+                "message": "Test webhook delivery initiated",
+                "delivery_id": delivery.id,
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+
+class WebhookDeliveryViewSet(CustomerScopedQuerysetMixin, viewsets.ReadOnlyModelViewSet):
+    """ViewSet for viewing webhook delivery history."""
+
+    queryset = WebhookDelivery.objects.select_related("webhook").all()
+    serializer_class = WebhookDeliverySerializer
+    permission_classes = [IsAuthenticated, RolePermission]
+    customer_field = "webhook__customer_id"
+    filterset_fields = ["webhook", "status", "event_type"]
+    search_fields = ["event_type", "error_message"]
+    ordering_fields = ["created_at", "status"]
+    ordering = ["-created_at"]
+
+    @action(detail=True, methods=["post"])
+    def retry(self, request, pk=None):
+        """Manually retry a failed webhook delivery."""
+        delivery = self.get_object()
+
+        if delivery.status not in [WebhookDelivery.STATUS_FAILED, WebhookDelivery.STATUS_RETRYING]:
+            return Response(
+                {"detail": "Only failed or retrying deliveries can be manually retried"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Reset delivery state for retry
+        delivery.status = WebhookDelivery.STATUS_PENDING
+        delivery.next_retry_at = None
+        delivery.save()
+
+        # Trigger delivery
+        from webnet.webhooks.tasks import deliver_webhook
+
+        deliver_webhook.delay(delivery.id)
+
+        return Response(
+            {"message": "Webhook delivery retry initiated"},
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+
+# ==============================================================================
+# Multi-region Deployment ViewSets
+# ==============================================================================
+
+
+class RegionViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing regions in multi-region deployment."""
+
+    serializer_class = RegionSerializer
+    permission_classes = [IsAuthenticated, RolePermission, ObjectCustomerPermission]
+    customer_field = "customer_id"
+
+    def get_serializer_class(self):
+        if self.action == "update_health":
+            return RegionHealthUpdateSerializer
+        return RegionSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        if not user.is_authenticated:
+            return Region.objects.none()
+
+        customer_ids = user.customers.values_list("id", flat=True)
+        return Region.objects.filter(customer_id__in=customer_ids).order_by("-priority", "name")
+
+    def perform_create(self, serializer):
+        # Ensure customer is one of user's customers
+        customer_id = serializer.validated_data.get("customer")
+        if customer_id and customer_id.id not in self.request.user.customers.values_list(
+            "id", flat=True
+        ):
+            from rest_framework.exceptions import ValidationError
+
+            raise ValidationError({"customer": "Invalid customer"})
+        serializer.save()
+
+    @action(detail=True, methods=["post"])
+    def update_health(self, request, pk=None):
+        """Update health status of a region."""
+        region = self.get_object()
+        serializer = RegionHealthUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        health_status = serializer.validated_data["health_status"]
+        message = serializer.validated_data.get("message")
+
+        region.update_health_status(health_status, message)
+
+        return Response(RegionSerializer(region).data)
+
+    @action(detail=True, methods=["get"])
+    def jobs(self, request, pk=None):
+        """Get jobs associated with this region."""
+        region = self.get_object()
+        jobs = Job.objects.filter(region=region, customer=region.customer).order_by(
+            "-requested_at"
+        )[:100]
+
+        serializer = JobSerializer(jobs, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["get"])
+    def devices(self, request, pk=None):
+        """Get devices assigned to this region."""
+        region = self.get_object()
+        devices = Device.objects.filter(region=region, customer=region.customer).order_by(
+            "hostname"
+        )[:100]
+
+        serializer = DeviceSerializer(devices, many=True)
+        return Response(serializer.data)

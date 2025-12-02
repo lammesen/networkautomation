@@ -49,6 +49,11 @@ from webnet.jobs.services import JobService
 from webnet.automation import build_inventory
 from webnet.devices.models import Device, TopologyLink
 from webnet.config_mgmt.models import ConfigSnapshot
+from webnet.ansible_mgmt.ansible_service import (
+    generate_ansible_inventory,
+    execute_ansible_playbook,
+    fetch_playbook_from_git,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -287,6 +292,7 @@ def compliance_check_job(job_id: int, policy_id: int) -> None:
     # After compliance check completes and results are populated, trigger auto-remediation
     try:
         from webnet.compliance.models import ComplianceResult
+        from webnet.notifications.services import notify_compliance_violation
 
         # Get violations for this policy that were created by this job
         # This ensures we only remediate violations from the current compliance check
@@ -300,9 +306,27 @@ def compliance_check_job(job_id: int, policy_id: int) -> None:
                 level="INFO",
                 message=f"Found {violations.count()} violations, checking for auto-remediation rules",
             )
-            # Trigger auto-remediation for each violation
+            # Send ChatOps notifications for violations
+            try:
+                from webnet.chatops.slack_service import (
+                    notify_compliance_violation as chatops_notify_violation,
+                )
+                from webnet.chatops.teams_service import notify_compliance_violation_teams
+
+                for violation in violations:
+                    chatops_notify_violation(violation)
+                    notify_compliance_violation_teams(violation)
+            except Exception as e:
+                logger.warning(f"Failed to send compliance violation notifications: {e}")
+
+            # Trigger auto-remediation and send email notifications for each violation
             for violation in violations:
                 trigger_auto_remediation.delay(violation.id)
+                # Send email notification for compliance violation
+                try:
+                    notify_compliance_violation(violation)
+                except Exception as e:
+                    logger.error(f"Failed to send compliance violation notification: {e}")
     except Exception as e:
         logger.error(f"Error triggering auto-remediation: {e}")
 
@@ -1476,3 +1500,406 @@ def auto_remediation_job(rule_id: int, compliance_result_id: int) -> None:
         action.finished_at = timezone.now()
         action.save(update_fields=["status", "error_message", "finished_at"])
         js.set_status(job, "failed", result_summary={"error": str(e)})
+
+
+@shared_task(name="ansible_playbook_job")
+def ansible_playbook_job(
+    job_id: int,
+    playbook_id: int,
+    targets: dict | None = None,
+    extra_vars: dict | None = None,
+    limit: str | None = None,
+    tags: list[str] | None = None,
+) -> None:
+    """Execute Ansible playbook against managed devices.
+
+    Args:
+        job_id: Job ID to track progress
+        playbook_id: Playbook ID to execute
+        targets: Device filter targets (optional, defaults to all devices)
+        extra_vars: Extra variables to pass to playbook
+        limit: Limit execution to specific hosts
+        tags: Ansible tags to run
+    """
+    from webnet.ansible_mgmt.models import Playbook, AnsibleConfig
+
+    js = JobService()
+    try:
+        job = Job.objects.get(pk=job_id)
+    except Job.DoesNotExist:
+        return
+
+    js.set_status(job, "running")
+
+    try:
+        # Get playbook
+        playbook = Playbook.objects.select_related("customer").get(
+            pk=playbook_id, customer_id=job.customer_id
+        )
+    except Playbook.DoesNotExist:
+        js.append_log(job, level="ERROR", message=f"Playbook {playbook_id} not found")
+        js.set_status(job, "failed", result_summary={"error": "playbook not found"})
+        return
+
+    if not playbook.enabled:
+        js.append_log(job, level="ERROR", message=f"Playbook '{playbook.name}' is disabled")
+        js.set_status(job, "failed", result_summary={"error": "playbook disabled"})
+        return
+
+    js.append_log(job, level="INFO", message=f"Executing playbook: {playbook.name}")
+
+    # Generate Ansible inventory from webnet devices
+    inventory = generate_ansible_inventory(filters=targets, customer_id=job.customer_id)
+
+    # Check if any hosts matched
+    if not inventory["_meta"]["hostvars"]:
+        js.append_log(job, level="ERROR", message="No devices matched targets")
+        js.set_status(job, "failed", result_summary={"error": "no devices"})
+        return
+
+    js.append_log(
+        job,
+        level="INFO",
+        message=f"Generated inventory with {len(inventory['_meta']['hostvars'])} hosts",
+    )
+
+    # Get Ansible configuration
+    ansible_config = None
+    try:
+        ansible_config = AnsibleConfig.objects.get(customer_id=job.customer_id)
+    except AnsibleConfig.DoesNotExist:
+        # No AnsibleConfig for this customer; proceed with defaults
+        pass
+
+    # Merge extra_vars with playbook defaults
+    merged_vars = (playbook.variables or {}).copy()
+    merged_vars.update(extra_vars or {})
+
+    # Get playbook content based on source type
+    playbook_content = ""
+    if playbook.source_type == "inline":
+        playbook_content = playbook.content
+    elif playbook.source_type == "git":
+        js.append_log(job, level="INFO", message="Fetching playbook from Git repository")
+        success, content, error = fetch_playbook_from_git(
+            git_repo_url=playbook.git_repo_url,
+            git_branch=playbook.git_branch or "main",
+            git_path=playbook.git_path,
+        )
+        if not success:
+            js.append_log(job, level="ERROR", message=f"Failed to fetch from Git: {error}")
+            js.set_status(job, "failed", result_summary={"error": f"git fetch failed: {error}"})
+            return
+        playbook_content = content
+        js.append_log(
+            job, level="INFO", message=f"Successfully fetched playbook ({len(content)} bytes)"
+        )
+    elif playbook.source_type == "upload":
+        if not playbook.uploaded_file:
+            js.append_log(job, level="ERROR", message="No file uploaded for playbook")
+            js.set_status(job, "failed", result_summary={"error": "no uploaded file"})
+            return
+        try:
+            with playbook.uploaded_file.open("rb") as f:
+                playbook_content = f.read().decode("utf-8")
+            js.append_log(
+                job,
+                level="INFO",
+                message=f"Successfully loaded uploaded playbook ({len(playbook_content)} bytes)",
+            )
+        except Exception as e:
+            js.append_log(job, level="ERROR", message=f"Failed to read uploaded file: {str(e)}")
+            js.set_status(job, "failed", result_summary={"error": f"file read failed: {str(e)}"})
+            return
+
+    if not playbook_content:
+        js.append_log(job, level="ERROR", message="Playbook content is empty")
+        js.set_status(job, "failed", result_summary={"error": "empty playbook"})
+        return
+
+    # Execute playbook
+    js.append_log(job, level="INFO", message="Starting Ansible playbook execution")
+
+    try:
+        return_code, stdout, stderr = execute_ansible_playbook(
+            playbook_content=playbook_content,
+            inventory=inventory,
+            extra_vars=merged_vars,
+            limit=limit,
+            tags=tags,
+            ansible_cfg_content=ansible_config.ansible_cfg_content if ansible_config else None,
+            vault_password=ansible_config.vault_password if ansible_config else None,
+            environment_vars=ansible_config.environment_vars if ansible_config else None,
+        )
+
+        # Log stdout
+        if stdout:
+            for line in stdout.split("\n"):
+                if line.strip():
+                    js.append_log(job, level="INFO", message=line)
+
+        # Log stderr
+        if stderr:
+            for line in stderr.split("\n"):
+                if line.strip():
+                    js.append_log(job, level="WARN", message=line)
+
+        # Parse results and set job status
+        if return_code == 0:
+            js.append_log(job, level="INFO", message="Playbook execution completed successfully")
+            # Try to extract task results from output
+            result_summary = {
+                "playbook_id": playbook_id,
+                "playbook_name": playbook.name,
+                "hosts_count": len(inventory["_meta"]["hostvars"]),
+                "return_code": return_code,
+            }
+            # Parse recap if available
+            if "PLAY RECAP" in stdout:
+                recap_start = stdout.index("PLAY RECAP")
+                recap_lines = stdout[recap_start:].split("\n")[1:]
+                result_summary["recap"] = [line for line in recap_lines if line.strip()]
+
+            js.set_status(job, "success", result_summary=result_summary)
+        else:
+            js.append_log(
+                job,
+                level="ERROR",
+                message=f"Playbook execution failed with return code {return_code}",
+            )
+            js.set_status(
+                job,
+                "failed",
+                result_summary={
+                    "error": f"return code {return_code}",
+                    "playbook_id": playbook_id,
+                    "playbook_name": playbook.name,
+                },
+            )
+    except Exception as e:
+        logger.exception(f"Unexpected error in ansible_playbook_job: {e}")
+        try:
+            js.append_log(
+                job, level="ERROR", message=f"Task failed with unexpected error: {str(e)}"
+            )
+            js.set_status(job, "failed", result_summary={"error": f"unexpected error: {str(e)}"})
+        except Exception:
+            # If we can't even log, just log to system logger
+            logger.error(f"Failed to update job {job_id} after unexpected error")
+
+
+# ==============================================================================
+# ServiceNow Integration Tasks
+# ==============================================================================
+
+
+@shared_task(name="servicenow_sync_job")
+def servicenow_sync_job(
+    config_id: int, direction: str = "both", device_ids: list[int] | None = None
+) -> dict:
+    """Sync devices with ServiceNow CMDB.
+
+    Args:
+        config_id: ServiceNowConfig ID
+        direction: Sync direction - "import", "export", or "both"
+        device_ids: Optional list of device IDs to export (only used for export)
+
+    Returns:
+        Dict with sync result details
+    """
+    from webnet.servicenow.models import ServiceNowConfig
+    from webnet.devices.models import Device
+    from webnet.devices.servicenow_service import ServiceNowService
+
+    try:
+        config = ServiceNowConfig.objects.get(pk=config_id)
+    except ServiceNowConfig.DoesNotExist:
+        logger.warning("ServiceNowConfig %s not found", config_id)
+        return {"success": False, "error": "Config not found"}
+
+    service = ServiceNowService(config)
+    results = []
+
+    # Export to ServiceNow
+    if direction in ["export", "both"]:
+        devices = None
+        if device_ids:
+            devices = list(Device.objects.filter(id__in=device_ids, customer_id=config.customer_id))
+
+        result = service.sync_to_cmdb(devices=devices)
+        results.append(
+            {
+                "direction": "export",
+                "success": result.success,
+                "message": result.message,
+                "created": result.created,
+                "updated": result.updated,
+                "skipped": result.skipped,
+                "failed": result.failed,
+                "errors": result.errors,
+            }
+        )
+
+    # Import from ServiceNow
+    if direction in ["import", "both"]:
+        result = service.sync_from_cmdb()
+        results.append(
+            {
+                "direction": "import",
+                "success": result.success,
+                "message": result.message,
+                "created": result.created,
+                "updated": result.updated,
+                "skipped": result.skipped,
+                "failed": result.failed,
+                "errors": result.errors,
+            }
+        )
+
+    return {"success": True, "results": results}
+
+
+@shared_task(name="scheduled_servicenow_sync")
+def scheduled_servicenow_sync() -> None:
+    """Scheduled task to sync with ServiceNow for all enabled configurations.
+
+    This task runs periodically and triggers syncs based on each config's
+    sync_frequency setting.
+    """
+    from webnet.servicenow.models import ServiceNowConfig
+    from django.utils import timezone
+    from datetime import timedelta
+
+    now = timezone.now()
+
+    for config in ServiceNowConfig.objects.filter(auto_sync_enabled=True).exclude(
+        sync_frequency="manual"
+    ):
+        # Determine if sync is due based on frequency
+        last_sync = config.last_sync_at
+        should_sync = False
+
+        if not last_sync:
+            should_sync = True
+        elif config.sync_frequency == "hourly":
+            should_sync = now - last_sync >= timedelta(hours=1)
+        elif config.sync_frequency == "daily":
+            should_sync = now - last_sync >= timedelta(days=1)
+        elif config.sync_frequency == "weekly":
+            should_sync = now - last_sync >= timedelta(weeks=1)
+
+        if should_sync:
+            # Sync based on configuration
+            direction = "both" if config.bidirectional_sync else "export"
+            servicenow_sync_job.delay(config.id, direction=direction)
+
+
+@shared_task(name="create_servicenow_incident")
+def create_servicenow_incident(job_id: int) -> dict:
+    """Create a ServiceNow incident for a failed job.
+
+    Args:
+        job_id: Job ID that failed
+
+    Returns:
+        Dict with incident creation result
+    """
+    from webnet.jobs.models import Job
+    from webnet.servicenow.models import ServiceNowConfig, ServiceNowIncident
+    from webnet.devices.servicenow_service import ServiceNowService
+
+    try:
+        job = Job.objects.select_related("customer", "user").get(pk=job_id)
+    except Job.DoesNotExist:
+        logger.warning("Job %s not found", job_id)
+        return {"success": False, "error": "Job not found"}
+
+    # Check if there's an active ServiceNow config with incident creation enabled
+    try:
+        config = ServiceNowConfig.objects.get(
+            customer=job.customer, create_incidents_on_failure=True
+        )
+    except ServiceNowConfig.DoesNotExist:
+        logger.debug("No ServiceNow config with incident creation for customer %s", job.customer_id)
+        return {"success": False, "error": "No incident creation config"}
+
+    # Check if incident already exists for this job
+    if ServiceNowIncident.objects.filter(job=job).exists():
+        logger.debug("Incident already exists for job %s", job_id)
+        return {"success": False, "error": "Incident already exists"}
+
+    # Create incident
+    service = ServiceNowService(config)
+
+    short_description = f"Network Automation Job Failed: {job.type} (Job #{job.id})"
+
+    # Sanitize result_summary_json to prevent sensitive information disclosure
+    result_summary = job.result_summary_json or {}
+    # Remove potentially sensitive keys
+    sanitized_summary = {
+        k: v
+        for k, v in result_summary.items()
+        if k not in ["password", "token", "credential", "secret", "key"]
+    }
+
+    description = f"""
+Job Type: {job.type}
+Job ID: {job.id}
+Customer: {job.customer.name}
+User: {job.user.username if job.user else 'System'}
+Status: {job.status}
+Started: {job.started_at}
+Finished: {job.finished_at}
+
+Result Summary:
+{sanitized_summary}
+
+Please review the job logs for more details.
+"""
+
+    result = service.create_incident(
+        short_description=short_description,
+        description=description,
+        impact=2,  # Medium impact
+        urgency=2,  # Medium urgency
+        assignment_group=config.incident_assignment_group,
+    )
+
+    if result.success:
+        # Create local incident record
+        ServiceNowIncident.objects.create(
+            config=config,
+            job=job,
+            incident_number=result.incident_number,
+            incident_sys_id=result.incident_sys_id,
+            short_description=short_description,
+            description=description,
+        )
+
+        logger.info("Created ServiceNow incident %s for job %s", result.incident_number, job_id)
+        return {
+            "success": True,
+            "incident_number": result.incident_number,
+            "incident_sys_id": result.incident_sys_id,
+        }
+    else:
+        logger.error("Failed to create ServiceNow incident for job %s: %s", job_id, result.error)
+        return {"success": False, "error": result.error}
+
+
+@shared_task(name="process_due_schedules")
+def process_due_schedules() -> dict:
+    """
+    Process all schedules that are due to run.
+    This task should be run periodically (e.g., every minute) via Celery Beat.
+    """
+    from webnet.jobs.schedule_service import ScheduleService
+
+    ss = ScheduleService()
+    try:
+        count = ss.process_due_schedules()
+        logger.info(f"Processed {count} due schedules")
+        return {"processed": count, "status": "success"}
+    except Exception as e:
+        logger.error(f"Failed to process due schedules: {e}", exc_info=True)
+        return {"processed": 0, "status": "failed", "error": str(e)}

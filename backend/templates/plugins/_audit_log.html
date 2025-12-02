@@ -1,0 +1,50 @@
+<!-- Audit Log Partial -->
+<div class="space-y-2">
+  {% for log in audit_logs %}
+  <div class="rounded-lg border p-4">
+    <div class="flex items-start justify-between">
+      <div class="flex-1">
+        <div class="flex items-center gap-3">
+          <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium
+            {% if log.action == 'enable' %}bg-green-500/10 text-green-500
+            {% elif log.action == 'disable' %}bg-gray-500/10 text-gray-500
+            {% elif log.action == 'configure' %}bg-blue-500/10 text-blue-500
+            {% elif log.action == 'error' %}bg-red-500/10 text-red-500
+            {% else %}bg-gray-500/10 text-gray-500{% endif %}">
+            {{ log.action|title }}
+          </span>
+          {% if log.success %}
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          {% else %}
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          {% endif %}
+        </div>
+        <div class="mt-2 text-sm">
+          <p class="text-muted-foreground">
+            {% if log.user %}By {{ log.user.username }}{% else %}System{% endif %}
+            {% if log.customer %} for {{ log.customer.name }}{% endif %}
+            · {{ log.timestamp|date:"Y-m-d H:i:s" }}
+          </p>
+          {% if log.error_message %}
+          <p class="text-red-500 mt-1">{{ log.error_message }}</p>
+          {% endif %}
+        </div>
+        {% if log.details %}
+        <details class="mt-2">
+          <summary class="cursor-pointer text-sm text-primary hover:underline">Show details</summary>
+          <pre class="mt-2 text-xs font-mono bg-muted p-2 rounded overflow-x-auto">{{ log.details|safe }}</pre>
+        </details>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% empty %}
+  <div class="text-center py-8">
+    <p class="text-muted-foreground">No audit log entries yet</p>
+  </div>
+  {% endfor %}
+</div>

@@ -3,6 +3,7 @@
 from rest_framework import serializers
 from webnet.users.models import User, APIKey
 from webnet.customers.models import Customer, CustomerIPRange
+from webnet.core.models import Region
 from webnet.devices.models import (
     Device,
     Credential,
@@ -10,8 +11,15 @@ from webnet.devices.models import (
     DiscoveredDevice,
     SSHHostKey,
 )
-from webnet.devices.models import NetBoxConfig, NetBoxSyncLog
-from webnet.jobs.models import Job, JobLog
+from webnet.devices.models import (
+    NetBoxConfig,
+    NetBoxSyncLog,
+    ServiceNowConfig,
+    ServiceNowSyncLog,
+    ServiceNowIncident,
+    ServiceNowChangeRequest,
+)
+from webnet.jobs.models import Job, JobLog, Schedule
 from webnet.config_mgmt.models import ConfigSnapshot, ConfigTemplate, ConfigDrift, DriftAlert
 from webnet.compliance.models import (
     CompliancePolicy,
@@ -19,6 +27,9 @@ from webnet.compliance.models import (
     RemediationRule,
     RemediationAction,
 )
+from webnet.ansible_mgmt.models import Playbook, AnsibleConfig
+from webnet.webhooks.models import Webhook, WebhookDelivery
+from webnet.core.models import CustomFieldDefinition
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -63,6 +74,31 @@ class CustomerIPRangeSerializer(serializers.ModelSerializer):
         fields = ["id", "customer", "cidr", "description", "created_at"]
 
 
+class CustomFieldDefinitionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomFieldDefinition
+        fields = [
+            "id",
+            "customer",
+            "name",
+            "label",
+            "model_type",
+            "field_type",
+            "description",
+            "required",
+            "default_value",
+            "choices",
+            "validation_regex",
+            "validation_min",
+            "validation_max",
+            "weight",
+            "is_active",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["created_at", "updated_at"]
+
+
 class CredentialSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
     enable_password = serializers.CharField(write_only=True, allow_null=True, required=False)
@@ -77,6 +113,7 @@ class CredentialSerializer(serializers.ModelSerializer):
             "password",
             "enable_password",
             "created_at",
+            "custom_fields",
         ]
 
     def create(self, validated_data):  # pragma: no cover - simple setter
@@ -120,9 +157,45 @@ class DeviceSerializer(serializers.ModelSerializer):
             "reachability_status",
             "last_reachability_check",
             "discovery_protocol",
+            "region",
             "created_at",
             "updated_at",
+            "custom_fields",
         ]
+
+    def validate_custom_fields(self, value):
+        """Validate custom field values against their definitions."""
+        from webnet.core.models import CustomFieldDefinition
+
+        if not value:
+            return value
+
+        # Get customer from initial data or instance
+        customer_id = None
+        if self.instance:
+            customer_id = self.instance.customer_id
+        elif "customer" in self.initial_data:
+            customer_id = self.initial_data["customer"]
+
+        if not customer_id:
+            return value
+
+        # Get active field definitions for Device model
+        field_defs = CustomFieldDefinition.objects.filter(
+            customer_id=customer_id, model_type="device", is_active=True
+        )
+
+        errors = []
+        for field_def in field_defs:
+            field_value = value.get(field_def.name)
+            is_valid, error = field_def.validate_value(field_value)
+            if not is_valid:
+                errors.append(error)
+
+        if errors:
+            raise serializers.ValidationError(errors)
+
+        return value
 
 
 class DeviceImportSummarySerializer(serializers.Serializer):
@@ -141,6 +214,7 @@ class JobSerializer(serializers.ModelSerializer):
             "type",
             "status",
             "user",
+            "region",
             "requested_at",
             "scheduled_for",
             "started_at",
@@ -148,6 +222,7 @@ class JobSerializer(serializers.ModelSerializer):
             "target_summary_json",
             "result_summary_json",
             "payload_json",
+            "custom_fields",
         ]
 
 
@@ -157,10 +232,47 @@ class JobLogSerializer(serializers.ModelSerializer):
         fields = ["id", "job", "ts", "level", "host", "message", "extra_json"]
 
 
+class ScheduleSerializer(serializers.ModelSerializer):
+    created_by_username = serializers.CharField(source="created_by.username", read_only=True)
+    job_type_display = serializers.CharField(source="get_job_type_display", read_only=True)
+
+    class Meta:
+        model = Schedule
+        fields = [
+            "id",
+            "customer",
+            "name",
+            "description",
+            "job_type",
+            "job_type_display",
+            "enabled",
+            "interval_type",
+            "cron_expression",
+            "target_summary_json",
+            "payload_json",
+            "next_run",
+            "last_run",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "created_by_username",
+        ]
+        read_only_fields = ["next_run", "last_run", "created_at", "updated_at"]
+
+
 class ConfigSnapshotSerializer(serializers.ModelSerializer):
     class Meta:
         model = ConfigSnapshot
-        fields = ["id", "device", "job", "created_at", "source", "hash", "config_text"]
+        fields = [
+            "id",
+            "device",
+            "job",
+            "created_at",
+            "source",
+            "hash",
+            "config_text",
+            "custom_fields",
+        ]
         read_only_fields = ["hash", "created_at"]
 
 
@@ -236,6 +348,7 @@ class CompliancePolicySerializer(serializers.ModelSerializer):
             "created_by",
             "created_at",
             "updated_at",
+            "custom_fields",
         ]
 
 
@@ -676,6 +789,7 @@ class ConfigTemplateSerializer(serializers.ModelSerializer):
             "created_by_username",
             "created_at",
             "updated_at",
+            "custom_fields",
         ]
         read_only_fields = ["created_at", "updated_at", "created_by"]
 
@@ -865,4 +979,541 @@ class NetBoxSyncRequestSerializer(serializers.Serializer):
 
     full_sync = serializers.BooleanField(
         default=False, help_text="If true, sync all devices (not just delta)"
+    )
+
+
+class AnsibleConfigSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AnsibleConfig
+        fields = [
+            "id",
+            "customer",
+            "ansible_cfg_content",
+            "collections",
+            "environment_vars",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["created_at", "updated_at"]
+
+
+class PlaybookSerializer(serializers.ModelSerializer):
+    uploaded_file = serializers.FileField(required=False, allow_null=True)
+
+    class Meta:
+        model = Playbook
+        fields = [
+            "id",
+            "customer",
+            "name",
+            "description",
+            "source_type",
+            "content",
+            "git_repo_url",
+            "git_branch",
+            "git_path",
+            "uploaded_file",
+            "variables",
+            "tags",
+            "enabled",
+            "created_by",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["created_by", "created_at", "updated_at"]
+
+    def validate(self, attrs):
+        """Validate that required fields are provided based on source_type."""
+        source_type = attrs.get("source_type", "inline")
+
+        if source_type == "inline" and not attrs.get("content"):
+            raise serializers.ValidationError(
+                {"content": "Content is required for inline playbooks"}
+            )
+        elif source_type == "git":
+            if not attrs.get("git_repo_url"):
+                raise serializers.ValidationError(
+                    {"git_repo_url": "Git repository URL is required for git source"}
+                )
+            if not attrs.get("git_path"):
+                raise serializers.ValidationError(
+                    {"git_path": "Git path is required for git source"}
+                )
+        elif source_type == "upload" and not attrs.get("uploaded_file"):
+            # Only validate on create, not update
+            if not self.instance:
+                raise serializers.ValidationError(
+                    {"uploaded_file": "File upload is required for upload source"}
+                )
+
+        return attrs
+
+    def create(self, validated_data):
+        # Set created_by to the current user
+        request = self.context.get("request")
+        if request and hasattr(request, "user"):
+            validated_data["created_by"] = request.user
+        return super().create(validated_data)
+
+
+class PlaybookExecuteSerializer(serializers.Serializer):
+    """Serializer for executing a playbook."""
+
+    targets = serializers.DictField(
+        required=False,
+        help_text="Device filter targets (site, role, vendor, device_ids)",
+    )
+    extra_vars = serializers.DictField(
+        required=False,
+        help_text="Extra variables to pass to the playbook",
+    )
+    limit = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="Limit execution to specific hosts (Ansible limit pattern)",
+    )
+    tags = serializers.ListField(
+        child=serializers.CharField(),
+        required=False,
+        help_text="Ansible tags to run",
+    )
+
+
+# ==============================================================================
+# ServiceNow Integration Serializers
+# ==============================================================================
+
+
+class ServiceNowConfigSerializer(serializers.ModelSerializer):
+    """Serializer for ServiceNow configuration."""
+
+    password = serializers.CharField(
+        write_only=True, required=False, allow_blank=True, help_text="ServiceNow password"
+    )
+    has_password = serializers.SerializerMethodField()
+    default_credential_name = serializers.CharField(
+        source="default_credential.name", read_only=True, allow_null=True
+    )
+
+    class Meta:
+        model = ServiceNowConfig
+        fields = [
+            "id",
+            "customer",
+            "name",
+            "instance_url",
+            "username",
+            "password",
+            "has_password",
+            "cmdb_table",
+            "ci_class",
+            "ci_query_filter",
+            "company_sys_id",
+            "device_to_cmdb_mappings",
+            "cmdb_to_device_mappings",
+            "sync_frequency",
+            "bidirectional_sync",
+            "auto_sync_enabled",
+            "default_credential",
+            "default_credential_name",
+            "create_incidents_on_failure",
+            "incident_category",
+            "incident_assignment_group",
+            "create_changes_on_deploy",
+            "change_category",
+            "change_assignment_group",
+            "last_sync_at",
+            "last_sync_status",
+            "last_sync_message",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "last_sync_at",
+            "last_sync_status",
+            "last_sync_message",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_has_password(self, obj) -> bool:
+        return obj.has_password()
+
+    def validate_customer(self, value: Customer) -> Customer:
+        """Validate that the user has access to the specified customer."""
+        from webnet.api.permissions import user_has_customer_access
+
+        request = self.context.get("request")
+        if request and not user_has_customer_access(request.user, value.id):
+            raise serializers.ValidationError("You do not have access to this customer.")
+        return value
+
+    def validate(self, attrs):
+        """Validate the serializer data."""
+        # Require password on creation
+        if self.instance is None:  # Create operation
+            password = attrs.get("password")
+            if not password:
+                raise serializers.ValidationError(
+                    {"password": "Password is required when creating a ServiceNow configuration."}
+                )
+
+        # Validate default_credential belongs to the same customer
+        default_credential = attrs.get("default_credential")
+        customer = attrs.get("customer") or (self.instance.customer if self.instance else None)
+
+        if default_credential and customer:
+            if default_credential.customer != customer:
+                raise serializers.ValidationError(
+                    {"default_credential": "Credential must belong to the same customer."}
+                )
+
+        return attrs
+
+    def create(self, validated_data):
+        password = validated_data.pop("password", None)
+        instance = ServiceNowConfig(**validated_data)
+        if password:
+            instance.password = password
+        instance.save()
+        return instance
+
+    def update(self, instance, validated_data):
+        password = validated_data.pop("password", None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        if password:
+            instance.password = password
+        instance.save()
+        return instance
+
+
+class ServiceNowSyncLogSerializer(serializers.ModelSerializer):
+    """Serializer for ServiceNow sync logs."""
+
+    class Meta:
+        model = ServiceNowSyncLog
+        fields = [
+            "id",
+            "config",
+            "direction",
+            "status",
+            "devices_created",
+            "devices_updated",
+            "devices_skipped",
+            "devices_failed",
+            "message",
+            "details",
+            "started_at",
+            "finished_at",
+        ]
+        read_only_fields = [
+            "status",
+            "devices_created",
+            "devices_updated",
+            "devices_skipped",
+            "devices_failed",
+            "message",
+            "details",
+            "started_at",
+            "finished_at",
+        ]
+
+
+class ServiceNowSyncRequestSerializer(serializers.Serializer):
+    """Serializer for triggering a ServiceNow sync."""
+
+    direction = serializers.ChoiceField(
+        choices=["import", "export", "both"],
+        default="both",
+        help_text="Sync direction: import (from ServiceNow), export (to ServiceNow), or both",
+    )
+    device_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        allow_null=True,
+        help_text="Optional list of device IDs to sync (only for export)",
+    )
+
+
+class ServiceNowIncidentSerializer(serializers.ModelSerializer):
+    """Serializer for ServiceNow incidents."""
+
+    job_type = serializers.CharField(source="job.type", read_only=True)
+
+    class Meta:
+        model = ServiceNowIncident
+        fields = [
+            "id",
+            "config",
+            "job",
+            "job_type",
+            "incident_number",
+            "incident_sys_id",
+            "state",
+            "short_description",
+            "description",
+            "created_at",
+            "updated_at",
+            "resolved_at",
+        ]
+        read_only_fields = [
+            "incident_number",
+            "incident_sys_id",
+            "created_at",
+            "updated_at",
+            "resolved_at",
+        ]
+
+
+class ServiceNowIncidentUpdateSerializer(serializers.Serializer):
+    """Serializer for updating ServiceNow incidents."""
+
+    state = serializers.ChoiceField(
+        choices=[1, 2, 3, 6, 7],
+        required=False,
+        help_text="New incident state: 1=New, 2=In Progress, 3=On Hold, 6=Resolved, 7=Closed",
+    )
+    work_notes = serializers.CharField(
+        required=False, allow_blank=True, help_text="Work notes to add to the incident"
+    )
+    resolution_notes = serializers.CharField(
+        required=False, allow_blank=True, help_text="Resolution notes (when resolving)"
+    )
+
+
+class ServiceNowChangeRequestSerializer(serializers.ModelSerializer):
+    """Serializer for ServiceNow change requests."""
+
+    job_type = serializers.CharField(source="job.type", read_only=True)
+
+    class Meta:
+        model = ServiceNowChangeRequest
+        fields = [
+            "id",
+            "config",
+            "job",
+            "job_type",
+            "change_number",
+            "change_sys_id",
+            "state",
+            "short_description",
+            "description",
+            "justification",
+            "created_at",
+            "updated_at",
+            "closed_at",
+        ]
+        read_only_fields = [
+            "change_number",
+            "change_sys_id",
+            "created_at",
+            "updated_at",
+            "closed_at",
+        ]
+
+
+class ServiceNowChangeRequestCreateSerializer(serializers.Serializer):
+    """Serializer for creating ServiceNow change requests."""
+
+    short_description = serializers.CharField(
+        max_length=255, help_text="Brief summary of the change"
+    )
+    description = serializers.CharField(help_text="Detailed description of the change")
+    justification = serializers.CharField(help_text="Business justification for the change")
+    risk = serializers.IntegerField(
+        default=3, min_value=1, max_value=3, help_text="Risk level: 1=High, 2=Medium, 3=Low"
+    )
+    impact = serializers.IntegerField(
+        default=3, min_value=1, max_value=3, help_text="Impact level: 1=High, 2=Medium, 3=Low"
+    )
+    device_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        allow_null=True,
+        help_text="Optional list of device IDs affected by the change",
+    )
+
+
+class ServiceNowChangeRequestUpdateSerializer(serializers.Serializer):
+    """Serializer for updating ServiceNow change requests."""
+
+    state = serializers.ChoiceField(
+        choices=[-5, 0, 1, 2, 3, 4, 6],
+        required=False,
+        help_text="New state: -5=New, 0=Assess, 1=Authorize, 2=Scheduled, 3=Implement, 4=Review, 6=Closed",
+    )
+    work_notes = serializers.CharField(
+        required=False, allow_blank=True, help_text="Work notes to add to the change"
+    )
+    close_notes = serializers.CharField(
+        required=False, allow_blank=True, help_text="Closing notes (when closing)"
+    )
+
+
+# ==============================================================================
+# Webhook Serializers
+# ==============================================================================
+
+
+class WebhookSerializer(serializers.ModelSerializer):
+    """Serializer for Webhook model."""
+
+    secret = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_null=True,
+        help_text="Secret token for HMAC signature verification",
+    )
+    has_secret = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Webhook
+        fields = [
+            "id",
+            "customer",
+            "name",
+            "url",
+            "event_types",
+            "secret",
+            "has_secret",
+            "enabled",
+            "verify_ssl",
+            "timeout_seconds",
+            "max_retries",
+            "retry_backoff",
+            "headers",
+            "created_at",
+            "updated_at",
+            "created_by",
+        ]
+        read_only_fields = ["created_at", "updated_at", "created_by", "has_secret"]
+
+    def get_has_secret(self, obj):
+        """Return whether webhook has a secret configured."""
+        return obj.has_secret()
+
+    def create(self, validated_data):
+        """Create webhook with encrypted secret."""
+        secret = validated_data.pop("secret", None)
+        webhook = Webhook(**validated_data)
+        if secret:
+            webhook.secret = secret
+        webhook.save()
+        return webhook
+
+    def update(self, instance, validated_data):
+        """Update webhook and handle secret encryption."""
+        secret = validated_data.pop("secret", None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        if secret:
+            instance.secret = secret
+        instance.save()
+        return instance
+
+
+class WebhookDeliverySerializer(serializers.ModelSerializer):
+    """Serializer for WebhookDelivery model."""
+
+    webhook_name = serializers.CharField(source="webhook.name", read_only=True)
+
+    class Meta:
+        model = WebhookDelivery
+        fields = [
+            "id",
+            "webhook",
+            "webhook_name",
+            "event_type",
+            "event_id",
+            "payload",
+            "status",
+            "attempts",
+            "http_status",
+            "response_body",
+            "error_message",
+            "duration_ms",
+            "next_retry_at",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "status",
+            "attempts",
+            "http_status",
+            "response_body",
+            "error_message",
+            "duration_ms",
+            "next_retry_at",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "status",
+            "attempts",
+            "http_status",
+            "response_body",
+            "error_message",
+            "duration_ms",
+            "next_retry_at",
+            "created_at",
+            "updated_at",
+        ]
+
+
+# ==============================================================================
+# Multi-region Deployment Serializers
+# ==============================================================================
+
+
+class RegionSerializer(serializers.ModelSerializer):
+    """Serializer for Region model."""
+
+    queue_name = serializers.CharField(read_only=True)
+    is_available = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Region
+        fields = [
+            "id",
+            "customer",
+            "name",
+            "identifier",
+            "api_endpoint",
+            "worker_pool_config",
+            "health_status",
+            "last_health_check",
+            "health_check_interval_seconds",
+            "priority",
+            "enabled",
+            "description",
+            "queue_name",
+            "is_available",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "queue_name",
+            "is_available",
+            "created_at",
+            "updated_at",
+            "last_health_check",
+        ]
+
+    def get_is_available(self, obj):
+        return obj.is_available()
+
+
+class RegionHealthUpdateSerializer(serializers.Serializer):
+    """Serializer for updating region health status."""
+
+    health_status = serializers.ChoiceField(
+        choices=["healthy", "degraded", "offline"],
+        help_text="New health status for the region",
+    )
+    message = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="Optional message describing the health status",
     )

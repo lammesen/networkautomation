@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            background: #dc2626;
+            color: white;
+            padding: 20px;
+            border-radius: 8px 8px 0 0;
+        }
+        .content {
+            background: #f9fafb;
+            padding: 30px;
+            border: 1px solid #e5e7eb;
+            border-top: none;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 600;
+            margin: 8px 0;
+        }
+        .status-failed {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        .details {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border: 1px solid #e5e7eb;
+        }
+        .detail-row {
+            margin: 12px 0;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .detail-row:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+        .label {
+            font-weight: 600;
+            color: #6b7280;
+            font-size: 14px;
+        }
+        .value {
+            color: #111827;
+            margin-top: 4px;
+        }
+        .error-box {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            padding: 16px;
+            border-radius: 6px;
+            margin: 16px 0;
+        }
+        .button {
+            display: inline-block;
+            background: #dc2626;
+            color: white;
+            padding: 12px 24px;
+            text-decoration: none;
+            border-radius: 6px;
+            margin: 20px 0;
+        }
+        .footer {
+            text-align: center;
+            color: #6b7280;
+            font-size: 12px;
+            padding: 20px;
+            border-top: 1px solid #e5e7eb;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1 style="margin: 0;">⚠️ Job Failed</h1>
+    </div>
+    <div class="content">
+        <p>Hello,</p>
+        <p><strong>A job has failed in {{ ctx.customer_name }} and requires attention.</strong></p>
+
+        <span class="status-badge status-failed">✗ Failed</span>
+
+        <div class="details">
+            <div class="detail-row">
+                <div class="label">Job Type</div>
+                <div class="value">{{ ctx.job.get_type_display }}</div>
+            </div>
+            <div class="detail-row">
+                <div class="label">Job ID</div>
+                <div class="value">#{{ ctx.job.id }}</div>
+            </div>
+            <div class="detail-row">
+                <div class="label">Started</div>
+                <div class="value">{{ ctx.job.started_at|date:"Y-m-d H:i:s T" }}</div>
+            </div>
+            <div class="detail-row">
+                <div class="label">Failed</div>
+                <div class="value">{{ ctx.job.finished_at|date:"Y-m-d H:i:s T" }}</div>
+            </div>
+        </div>
+
+        {% if ctx.job.result_summary_json and ctx.job.result_summary_json.error %}
+        <div class="error-box">
+            <strong>Error:</strong><br>
+            {{ ctx.job.result_summary_json.error }}
+        </div>
+        {% endif %}
+
+        <a href="{{ ctx.webnet_url }}/jobs/{{ ctx.job.id }}" class="button">View Job Details & Logs</a>
+
+        <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
+            This is an automated notification from Webnet Network Automation.
+        </p>
+    </div>
+    <div class="footer">
+        <p>© Webnet Network Automation | {{ ctx.customer_name }}</p>
+    </div>
+</body>
+</html>
