@@ -58,7 +58,7 @@ class WebAuthnService:
             user_display_name=user.get_full_name() or user.username,
             exclude_credentials=existing_credentials,
             authenticator_selection=AuthenticatorSelectionCriteria(
-                authenticator_attachment=AuthenticatorAttachment.CROSS_PLATFORM,
+                authenticator_attachment=None,  # Support both platform and cross-platform
                 resident_key=ResidentKeyRequirement.DISCOURAGED,
                 user_verification=UserVerificationRequirement.PREFERRED,
             ),

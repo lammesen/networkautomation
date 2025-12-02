@@ -446,8 +446,12 @@ class WebAuthnAuthCompleteView(View):
                 if "2fa_backend" in request.session:
                     del request.session["2fa_backend"]
 
-                # Log user in
-                user.backend = backend
+                # Log user in with validated backend
+                # Use default backend for security
+                from django.contrib.auth import get_backends
+                backends = get_backends()
+                if backends:
+                    user.backend = f"{backends[0].__module__}.{backends[0].__class__.__name__}"
                 login(request, user)
 
                 return HttpResponse(
