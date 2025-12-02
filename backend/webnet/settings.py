@@ -68,6 +68,7 @@ INSTALLED_APPS = [
     "webnet.config_mgmt",
     "webnet.compliance",
     "webnet.networkops",
+    "webnet.plugins",
     "webnet.api",
     "webnet.ui",
 ]
@@ -271,3 +272,6 @@ LOGGING = {
         "level": "INFO",
     },
 }
+
+# Plugin system configuration
+WEBNET_PLUGINS = env("WEBNET_PLUGINS", "").split(",") if env("WEBNET_PLUGINS") else []
