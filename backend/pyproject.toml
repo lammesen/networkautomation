@@ -29,6 +29,7 @@ dependencies = [
     "nornir-netmiko>=1.0.0",
     "asyncssh>=2.14.2",
     "django-auth-ldap>=5.0.0",
+    "requests>=2.32.0",
 ]
 
 [project.optional-dependencies]
@@ -62,6 +63,7 @@ packages = [
     "webnet.config_mgmt",
     "webnet.compliance",
     "webnet.networkops",
+    "webnet.chatops",
     "webnet.api",
     "webnet.ui",
 ]

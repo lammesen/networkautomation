@@ -74,6 +74,16 @@ class JobService:
         )
         # Broadcast job status change
         broadcast_job_update(job, action="updated")
+
+        # Send ChatOps notifications if job is completed
+        if status in {"success", "partial", "failed"}:
+            try:
+                from webnet.chatops.slack_service import notify_job_completion
+
+                notify_job_completion(job)
+            except Exception as e:
+                logger.warning(f"Failed to send ChatOps notification: {e}")
+
         return job
 
     @transaction.atomic

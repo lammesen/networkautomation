@@ -68,6 +68,7 @@ INSTALLED_APPS = [
     "webnet.config_mgmt",
     "webnet.compliance",
     "webnet.networkops",
+    "webnet.chatops",
     "webnet.api",
     "webnet.ui",
 ]

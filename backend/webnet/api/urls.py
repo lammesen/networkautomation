@@ -81,5 +81,7 @@ urlpatterns = [
     path("jobs/<int:pk>/logs", views.JobLogsView.as_view()),
     path("jobs/<int:pk>/retry", views.JobViewSet.as_view({"post": "retry"})),
     path("jobs/<int:pk>/cancel", views.JobViewSet.as_view({"post": "cancel"})),
+    # ChatOps endpoints
+    path("chatops/", include("webnet.chatops.urls")),
     path("", include(router.urls)),
 ]
