@@ -21,6 +21,7 @@ import {
   PanelLeftClose,
   PanelLeft,
   Globe2,
+  GitBranch,
 } from "lucide-react";
 
 import {
@@ -81,6 +82,7 @@ const navigation = {
   tools: [
     { title: "Run Commands", icon: Terminal, href: "/commands/", isActive: (path: string) => path.startsWith("/commands") },
     { title: "Reachability", icon: Wifi, href: "/reachability/", isActive: (path: string) => path.startsWith("/reachability") },
+    { title: "Workflows", icon: GitBranch, href: "/workflows/builder/", isActive: (path: string) => path.startsWith("/workflows") },
   ],
   scheduling: [
     { title: "Schedules", icon: Calendar, href: "#", disabled: true, comingSoon: true },

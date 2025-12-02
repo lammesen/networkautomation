@@ -27,6 +27,7 @@ from .views import (
     RemediationActionListView,
     CommandsView,
     ReachabilityView,
+    WorkflowBuilderView,
     TopologyListView,
     GeoMapView,
     WizardStep1View,
@@ -143,6 +144,7 @@ urlpatterns = [
     path("commands/wizard/step3", WizardStep3View.as_view(), name="wizard-step3"),
     path("commands/wizard/step4", WizardStep4View.as_view(), name="wizard-step4"),
     path("reachability/", ReachabilityView.as_view(), name="reachability-run"),
+    path("workflows/builder/", WorkflowBuilderView.as_view(), name="workflows-builder"),
     # Git integration settings
     path("settings/git/", GitSettingsListView.as_view(), name="git-settings"),
     path("settings/git/new", GitSettingsCreateView.as_view(), name="git-settings-create"),

@@ -13,9 +13,11 @@ from django.views import View
 
 from django import forms
 from django.contrib.auth import logout
+from django.middleware.csrf import get_token
 from django.urls import reverse
 
 from webnet.api.permissions import user_has_customer_access
+from webnet.api.serializers import WorkflowSerializer
 from webnet.compliance.models import (
     CompliancePolicy,
     ComplianceResult,
@@ -44,6 +46,7 @@ from webnet.devices.models import (
 )
 from webnet.jobs.models import Job, JobLog, Schedule
 from webnet.jobs.services import JobService
+from webnet.workflows.models import Workflow
 
 logger = logging.getLogger(__name__)
 
@@ -1199,6 +1202,102 @@ class ReachabilityView(TenantScopedView):
 
     def get(self, request):
         return render(request, self.template_name)
+
+
+class WorkflowBuilderView(TenantScopedView):
+    template_name = "workflows/builder.html"
+    allowed_write_roles = {"operator", "admin"}
+
+    def get(self, request):
+        if getattr(request.user, "role", "viewer") not in self.allowed_write_roles:
+            return HttpResponseForbidden("Operator or admin role required")
+
+        workflows = self.filter_by_customer(
+            Workflow.objects.prefetch_related("nodes", "edges").order_by("-updated_at")
+        )
+        workflow_id = request.GET.get("workflow_id") or request.GET.get("id")
+        selected = None
+        if workflow_id:
+            try:
+                selected = workflows.get(pk=int(workflow_id))
+            except (ValueError, Workflow.DoesNotExist):
+                selected = None
+        if not selected:
+            selected = workflows.first()
+
+        palette = [
+            {
+                "category": "service",
+                "type": "run_commands",
+                "label": "Run Commands",
+                "description": "Execute show/diagnostic commands on filtered devices",
+                "config": {"job_type": "run_commands", "simulate": True},
+            },
+            {
+                "category": "service",
+                "type": "config_backup",
+                "label": "Backup Configs",
+                "description": "Capture current running configuration",
+                "config": {"job_type": "config_backup", "simulate": True},
+            },
+            {
+                "category": "service",
+                "type": "compliance_check",
+                "label": "Compliance Check",
+                "description": "Run policies against device set",
+                "config": {"job_type": "compliance_check", "simulate": True},
+            },
+            {
+                "category": "logic",
+                "type": "condition",
+                "label": "If/Else",
+                "description": "Route based on expression using context/outputs",
+                "config": {"condition": "True"},
+            },
+            {
+                "category": "logic",
+                "type": "switch",
+                "label": "Switch",
+                "description": "Branch on a computed value",
+                "config": {"expression": "context.get('mode')"},
+            },
+            {
+                "category": "data",
+                "type": "set_variable",
+                "label": "Set Variable",
+                "description": "Store data in workflow context",
+                "config": {"key": "name", "value": "demo"},
+            },
+            {
+                "category": "notification",
+                "type": "notify",
+                "label": "Notify",
+                "description": "Send a log notification",
+                "config": {"message": "Notify ops", "channel": "log"},
+            },
+        ]
+
+        payload = {
+            "apiBase": "/api/v1/workflows/",
+            "runEndpoint": "/api/v1/workflows/{id}/run/",
+            "availableWorkflows": [
+                {
+                    "id": wf.id,
+                    "name": wf.name,
+                    "version": wf.version,
+                    "customer_id": wf.customer_id,
+                }
+                for wf in workflows
+            ],
+            "csrfToken": get_token(request),
+            "nodePalette": palette,
+        }
+
+        if selected:
+            payload["workflow"] = WorkflowSerializer(selected).data
+
+        context = {"workflow_props": json.dumps(payload)}
+        return render(request, self.template_name, context)
 
 
 class ComplianceRunView(TenantScopedView):

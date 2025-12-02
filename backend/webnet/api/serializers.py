@@ -29,6 +29,14 @@ from webnet.compliance.models import (
 )
 from webnet.ansible_mgmt.models import Playbook, AnsibleConfig
 from webnet.webhooks.models import Webhook, WebhookDelivery
+from webnet.workflows.models import (
+    Workflow,
+    WorkflowEdge,
+    WorkflowNode,
+    WorkflowRun,
+    WorkflowRunLog,
+    WorkflowRunStep,
+)
 from webnet.core.models import CustomFieldDefinition
 
 
@@ -1534,3 +1542,234 @@ class RegionHealthUpdateSerializer(serializers.Serializer):
         allow_blank=True,
         help_text="Optional message describing the health status",
     )
+
+
+class WorkflowNodeSerializer(serializers.ModelSerializer):
+    ref = serializers.UUIDField(required=False)
+
+    class Meta:
+        model = WorkflowNode
+        fields = [
+            "id",
+            "ref",
+            "name",
+            "category",
+            "type",
+            "position_x",
+            "position_y",
+            "order_index",
+            "config",
+            "ui_state",
+        ]
+        read_only_fields = ["id"]
+
+
+class WorkflowEdgeSerializer(serializers.Serializer):
+    source_ref = serializers.UUIDField()
+    target_ref = serializers.UUIDField()
+    condition = serializers.CharField(required=False, allow_blank=True, default="")
+    label = serializers.CharField(required=False, allow_blank=True, default="")
+    is_default = serializers.BooleanField(required=False, default=False)
+
+    def to_representation(self, instance):
+        if isinstance(instance, dict):
+            return {
+                "source_ref": str(instance.get("source_ref", "")),
+                "target_ref": str(instance.get("target_ref", "")),
+                "condition": instance.get("condition") or "",
+                "label": instance.get("label") or "",
+                "is_default": bool(instance.get("is_default", False)),
+            }
+        return {
+            "source_ref": str(getattr(getattr(instance, "source", None), "ref", "")),
+            "target_ref": str(getattr(getattr(instance, "target", None), "ref", "")),
+            "condition": getattr(instance, "condition", "") or "",
+            "label": getattr(instance, "label", "") or "",
+            "is_default": bool(getattr(instance, "is_default", False)),
+        }
+
+
+class WorkflowSerializer(serializers.ModelSerializer):
+    nodes = WorkflowNodeSerializer(many=True)
+    edges = WorkflowEdgeSerializer(many=True)
+    created_by_username = serializers.CharField(source="created_by.username", read_only=True)
+    updated_by_username = serializers.CharField(source="updated_by.username", read_only=True)
+
+    class Meta:
+        model = Workflow
+        fields = [
+            "id",
+            "customer",
+            "name",
+            "description",
+            "version",
+            "is_active",
+            "metadata",
+            "created_by",
+            "created_by_username",
+            "updated_by",
+            "updated_by_username",
+            "created_at",
+            "updated_at",
+            "nodes",
+            "edges",
+        ]
+        read_only_fields = [
+            "id",
+            "version",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "updated_by",
+            "created_by_username",
+            "updated_by_username",
+        ]
+
+    def _sync_nodes(self, workflow: Workflow, nodes_data: list[dict]) -> None:
+        existing = {str(node.ref): node for node in workflow.nodes.all()}
+        seen_refs: set[str] = set()
+        for node_data in nodes_data:
+            ref = str(node_data.get("ref") or "")
+            if ref and ref in existing:
+                node = existing[ref]
+                for field in [
+                    "name",
+                    "category",
+                    "type",
+                    "position_x",
+                    "position_y",
+                    "order_index",
+                    "config",
+                    "ui_state",
+                ]:
+                    if field in node_data:
+                        setattr(node, field, node_data[field])
+                node.save()
+            else:
+                node = WorkflowNode.objects.create(workflow=workflow, **node_data)
+                ref = str(node.ref)
+            seen_refs.add(ref)
+        WorkflowNode.objects.filter(workflow=workflow).exclude(ref__in=seen_refs).delete()
+
+    def _sync_edges(self, workflow: Workflow, edges_data: list[dict]) -> None:
+        nodes_by_ref = {str(node.ref): node for node in workflow.nodes.all()}
+        WorkflowEdge.objects.filter(workflow=workflow).delete()
+        for edge_data in edges_data:
+            source_ref = str(edge_data.get("source_ref"))
+            target_ref = str(edge_data.get("target_ref"))
+            source = nodes_by_ref.get(source_ref)
+            target = nodes_by_ref.get(target_ref)
+            if not source or not target:
+                raise serializers.ValidationError("Edges must reference valid node refs")
+            WorkflowEdge.objects.create(
+                workflow=workflow,
+                source=source,
+                target=target,
+                condition=edge_data.get("condition") or "",
+                label=edge_data.get("label") or "",
+                is_default=bool(edge_data.get("is_default", False)),
+            )
+
+    def create(self, validated_data):
+        nodes_data = validated_data.pop("nodes", [])
+        edges_data = validated_data.pop("edges", [])
+        workflow = Workflow.objects.create(**validated_data)
+        self._sync_nodes(workflow, nodes_data)
+        self._sync_edges(workflow, edges_data)
+        return workflow
+
+    def update(self, instance, validated_data):
+        nodes_data = validated_data.pop("nodes", None)
+        edges_data = validated_data.pop("edges", None)
+        for field in ["name", "description", "is_active", "metadata", "customer"]:
+            if field in validated_data:
+                setattr(instance, field, validated_data[field])
+        if nodes_data is not None:
+            self._sync_nodes(instance, nodes_data)
+        if edges_data is not None:
+            self._sync_edges(instance, edges_data)
+        if nodes_data is not None or edges_data is not None:
+            instance.version += 1
+        instance.save()
+        return instance
+
+
+class WorkflowRunStepSerializer(serializers.ModelSerializer):
+    node_ref = serializers.UUIDField(source="node.ref", read_only=True)
+    node_name = serializers.CharField(source="node.name", read_only=True)
+
+    class Meta:
+        model = WorkflowRunStep
+        fields = [
+            "id",
+            "node",
+            "node_ref",
+            "node_name",
+            "status",
+            "started_at",
+            "finished_at",
+            "output",
+            "error",
+            "transition",
+        ]
+        read_only_fields = [
+            "id",
+            "node",
+            "node_ref",
+            "node_name",
+            "started_at",
+            "finished_at",
+            "output",
+            "error",
+            "transition",
+        ]
+
+
+class WorkflowRunLogSerializer(serializers.ModelSerializer):
+    node_ref = serializers.UUIDField(source="node.ref", read_only=True)
+
+    class Meta:
+        model = WorkflowRunLog
+        fields = ["id", "ts", "level", "message", "context", "node_ref"]
+        read_only_fields = ["id", "ts", "level", "message", "context", "node_ref"]
+
+
+class WorkflowRunSerializer(serializers.ModelSerializer):
+    steps = WorkflowRunStepSerializer(many=True, read_only=True)
+    logs = WorkflowRunLogSerializer(many=True, read_only=True)
+    workflow_name = serializers.CharField(source="workflow.name", read_only=True)
+
+    class Meta:
+        model = WorkflowRun
+        fields = [
+            "id",
+            "workflow",
+            "workflow_name",
+            "customer",
+            "started_by",
+            "status",
+            "inputs",
+            "outputs",
+            "summary",
+            "version",
+            "created_at",
+            "started_at",
+            "finished_at",
+            "steps",
+            "logs",
+        ]
+        read_only_fields = [
+            "id",
+            "workflow",
+            "workflow_name",
+            "customer",
+            "status",
+            "version",
+            "created_at",
+            "started_at",
+            "finished_at",
+            "outputs",
+            "summary",
+            "steps",
+            "logs",
+        ]

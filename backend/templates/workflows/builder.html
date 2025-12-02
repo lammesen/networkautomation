@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Workflow Builder - webnet{% endblock %}
+
+{% block content %}
+<div class="flex flex-col gap-6">
+  <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+    <div>
+      <p class="text-xs uppercase tracking-wide text-primary/80 font-semibold">Automation</p>
+      <h1 class="text-3xl font-bold tracking-tight">Visual Workflow Builder</h1>
+      <p class="text-muted-foreground">
+        Chain service, logic, and notification nodes to design complex automation paths with full execution visibility.
+      </p>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      <a href="/jobs/" class="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-muted">
+        View Jobs
+      </a>
+      <a href="/api/v1/workflows/" class="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90">
+        API Reference
+      </a>
+    </div>
+  </div>
+
+  <div
+    data-island="WorkflowBuilder"
+    data-props='{{ workflow_props|safe }}'
+    class="min-h-[720px] rounded-xl border bg-card"
+  >
+    <div class="flex h-full items-center justify-center text-muted-foreground p-10">
+      <div class="text-center space-y-2">
+        <div class="mx-auto h-10 w-10 rounded-full border border-dashed border-muted-foreground/40 animate-pulse"></div>
+        <p class="text-sm">Loading workflow canvas...</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
