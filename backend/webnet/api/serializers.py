@@ -28,6 +28,7 @@ from webnet.compliance.models import (
 )
 from webnet.ansible_mgmt.models import Playbook, AnsibleConfig
 from webnet.webhooks.models import Webhook, WebhookDelivery
+from webnet.core.models import CustomFieldDefinition
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -72,6 +73,31 @@ class CustomerIPRangeSerializer(serializers.ModelSerializer):
         fields = ["id", "customer", "cidr", "description", "created_at"]
 
 
+class CustomFieldDefinitionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomFieldDefinition
+        fields = [
+            "id",
+            "customer",
+            "name",
+            "label",
+            "model_type",
+            "field_type",
+            "description",
+            "required",
+            "default_value",
+            "choices",
+            "validation_regex",
+            "validation_min",
+            "validation_max",
+            "weight",
+            "is_active",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["created_at", "updated_at"]
+
+
 class CredentialSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
     enable_password = serializers.CharField(write_only=True, allow_null=True, required=False)
@@ -86,6 +112,7 @@ class CredentialSerializer(serializers.ModelSerializer):
             "password",
             "enable_password",
             "created_at",
+            "custom_fields",
         ]
 
     def create(self, validated_data):  # pragma: no cover - simple setter
@@ -131,7 +158,42 @@ class DeviceSerializer(serializers.ModelSerializer):
             "discovery_protocol",
             "created_at",
             "updated_at",
+            "custom_fields",
         ]
+
+    def validate_custom_fields(self, value):
+        """Validate custom field values against their definitions."""
+        from webnet.core.models import CustomFieldDefinition
+
+        if not value:
+            return value
+
+        # Get customer from initial data or instance
+        customer_id = None
+        if self.instance:
+            customer_id = self.instance.customer_id
+        elif "customer" in self.initial_data:
+            customer_id = self.initial_data["customer"]
+
+        if not customer_id:
+            return value
+
+        # Get active field definitions for Device model
+        field_defs = CustomFieldDefinition.objects.filter(
+            customer_id=customer_id, model_type="device", is_active=True
+        )
+
+        errors = []
+        for field_def in field_defs:
+            field_value = value.get(field_def.name)
+            is_valid, error = field_def.validate_value(field_value)
+            if not is_valid:
+                errors.append(error)
+
+        if errors:
+            raise serializers.ValidationError(errors)
+
+        return value
 
 
 class DeviceImportSummarySerializer(serializers.Serializer):
@@ -157,6 +219,7 @@ class JobSerializer(serializers.ModelSerializer):
             "target_summary_json",
             "result_summary_json",
             "payload_json",
+            "custom_fields",
         ]
 
 
@@ -197,7 +260,16 @@ class ScheduleSerializer(serializers.ModelSerializer):
 class ConfigSnapshotSerializer(serializers.ModelSerializer):
     class Meta:
         model = ConfigSnapshot
-        fields = ["id", "device", "job", "created_at", "source", "hash", "config_text"]
+        fields = [
+            "id",
+            "device",
+            "job",
+            "created_at",
+            "source",
+            "hash",
+            "config_text",
+            "custom_fields",
+        ]
         read_only_fields = ["hash", "created_at"]
 
 
@@ -273,6 +345,7 @@ class CompliancePolicySerializer(serializers.ModelSerializer):
             "created_by",
             "created_at",
             "updated_at",
+            "custom_fields",
         ]
 
 
@@ -713,6 +786,7 @@ class ConfigTemplateSerializer(serializers.ModelSerializer):
             "created_by_username",
             "created_at",
             "updated_at",
+            "custom_fields",
         ]
         read_only_fields = ["created_at", "updated_at", "created_by"]
 

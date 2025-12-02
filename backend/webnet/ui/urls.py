@@ -93,6 +93,11 @@ from .views import (
     ScheduleEditView,
     ScheduleDeleteView,
     ScheduleCalendarView,
+    # Custom Fields Management
+    CustomFieldListView,
+    CustomFieldCreateView,
+    CustomFieldEditView,
+    CustomFieldDeleteView,
 )
 
 urlpatterns = [
@@ -246,4 +251,14 @@ urlpatterns = [
     path("schedules/<int:pk>/", ScheduleDetailView.as_view(), name="schedule-detail"),
     path("schedules/<int:pk>/edit", ScheduleEditView.as_view(), name="schedule-edit"),
     path("schedules/<int:pk>/delete", ScheduleDeleteView.as_view(), name="schedule-delete"),
+    # Custom Fields Management
+    path("custom-fields/", CustomFieldListView.as_view(), name="custom-fields-list"),
+    path("custom-fields/table", CustomFieldListView.as_view(), name="custom-fields-table"),
+    path("custom-fields/create", CustomFieldCreateView.as_view(), name="custom-fields-create"),
+    path("custom-fields/<int:pk>/edit", CustomFieldEditView.as_view(), name="custom-fields-edit"),
+    path(
+        "custom-fields/<int:pk>/delete",
+        CustomFieldDeleteView.as_view(),
+        name="custom-fields-delete",
+    ),
 ]

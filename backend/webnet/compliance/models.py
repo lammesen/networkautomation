@@ -1,8 +1,9 @@
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
+from webnet.core.custom_fields import CustomFieldMixin
 
 
-class CompliancePolicy(models.Model):
+class CompliancePolicy(CustomFieldMixin, models.Model):
     customer = models.ForeignKey(
         "customers.Customer", on_delete=models.CASCADE, related_name="compliance_policies"
     )

@@ -1,0 +1,86 @@
+{% load custom_fields_tags %}
+{% if custom_field_definitions or object.custom_fields %}
+<!-- Custom Fields Card -->
+<div class="rounded-lg border bg-card p-6">
+  <div class="flex items-center gap-2 mb-4">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+    </svg>
+    <h2 class="font-semibold">Custom Fields</h2>
+  </div>
+
+  {% if custom_field_definitions %}
+  <dl class="grid gap-4">
+    {% for field_def in custom_field_definitions %}
+    <div class="flex flex-col gap-1">
+      <dt class="text-sm font-medium text-muted-foreground flex items-center gap-2">
+        {{ field_def.label }}
+        {% if field_def.required %}
+        <span class="text-xs text-amber-600 dark:text-amber-400">*</span>
+        {% endif %}
+        {% if field_def.description %}
+        <span class="text-xs text-muted-foreground/60" title="{{ field_def.description }}">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </span>
+        {% endif %}
+      </dt>
+      <dd class="text-sm">
+        {% with value=object.custom_fields|default:dict %}
+          {% with field_value=value|get_item:field_def.name %}
+            {% if field_value %}
+              {% if field_def.field_type == 'boolean' %}
+                {% if field_value %}
+                  <span class="inline-flex items-center gap-1 text-green-600 dark:text-green-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                    True
+                  </span>
+                {% else %}
+                  <span class="inline-flex items-center gap-1 text-muted-foreground">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    False
+                  </span>
+                {% endif %}
+              {% elif field_def.field_type == 'url' %}
+                {% if field_value|is_safe_url %}
+                  <a href="{{ field_value }}" target="_blank" rel="noopener noreferrer" class="text-primary hover:underline">
+                    {{ field_value }}
+                  </a>
+                {% else %}
+                  <span class="text-muted-foreground">{{ field_value }}</span>
+                {% endif %}
+              {% elif field_def.field_type == 'json' %}
+                <pre class="bg-muted p-2 rounded text-xs font-mono overflow-x-auto">{{ field_value|json_pretty }}</pre>
+              {% elif field_def.field_type == 'multiselect' %}
+                <div class="flex flex-wrap gap-1">
+                  {% for item in field_value %}
+                  <span class="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs">
+                    {{ item }}
+                  </span>
+                  {% endfor %}
+                </div>
+              {% else %}
+                {{ field_value }}
+              {% endif %}
+            {% else %}
+              <span class="text-muted-foreground/60 italic">Not set</span>
+            {% endif %}
+          {% endwith %}
+        {% endwith %}
+      </dd>
+    </div>
+    {% endfor %}
+  </dl>
+  {% else %}
+  <p class="text-sm text-muted-foreground">No custom fields defined for this model type.</p>
+  <a href="/custom-fields/" class="text-sm text-primary hover:underline mt-2 inline-block">
+    Manage custom fields →
+  </a>
+  {% endif %}
+</div>
+{% endif %}

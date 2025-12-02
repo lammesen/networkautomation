@@ -1,4 +1,5 @@
 from django.db import models
+from webnet.core.custom_fields import CustomFieldMixin
 
 
 class Schedule(models.Model):
@@ -54,7 +55,7 @@ class Schedule(models.Model):
         return self.job_type
 
 
-class Job(models.Model):
+class Job(CustomFieldMixin, models.Model):
     TYPE_CHOICES = (
         ("run_commands", "Run commands"),
         ("config_backup", "Config backup"),
