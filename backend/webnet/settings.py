@@ -144,6 +144,21 @@ DATABASES = {
 
 AUTH_USER_MODEL = "users.User"
 
+# Authentication backends - LDAP with local fallback
+AUTHENTICATION_BACKENDS = [
+    "django.contrib.auth.backends.ModelBackend",  # Local authentication (fallback)
+]
+
+# Load LDAP configuration if enabled
+# Import after BASE_DIR and env() are defined (E402 is expected here)
+from webnet.ldap_config import LDAP_ENABLED, LDAP_CONFIG  # noqa: E402
+
+if LDAP_ENABLED:
+    # Add LDAP backend before local backend for priority
+    AUTHENTICATION_BACKENDS.insert(0, "webnet.core.ldap_backend.WebnetLDAPBackend")
+    # Apply LDAP configuration to settings
+    globals().update(LDAP_CONFIG)
+
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},

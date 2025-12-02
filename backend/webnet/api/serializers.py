@@ -12,8 +12,13 @@ from webnet.devices.models import (
 )
 from webnet.devices.models import NetBoxConfig, NetBoxSyncLog
 from webnet.jobs.models import Job, JobLog
-from webnet.config_mgmt.models import ConfigSnapshot, ConfigTemplate
-from webnet.compliance.models import CompliancePolicy, ComplianceResult
+from webnet.config_mgmt.models import ConfigSnapshot, ConfigTemplate, ConfigDrift, DriftAlert
+from webnet.compliance.models import (
+    CompliancePolicy,
+    ComplianceResult,
+    RemediationRule,
+    RemediationAction,
+)
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -159,6 +164,65 @@ class ConfigSnapshotSerializer(serializers.ModelSerializer):
         read_only_fields = ["hash", "created_at"]
 
 
+class ConfigDriftSerializer(serializers.ModelSerializer):
+    device_hostname = serializers.CharField(source="device.hostname", read_only=True)
+    change_magnitude = serializers.CharField(source="get_change_magnitude", read_only=True)
+    snapshot_from_created = serializers.DateTimeField(
+        source="snapshot_from.created_at", read_only=True
+    )
+    snapshot_to_created = serializers.DateTimeField(source="snapshot_to.created_at", read_only=True)
+    triggered_by_username = serializers.CharField(
+        source="triggered_by.username", read_only=True, allow_null=True
+    )
+
+    class Meta:
+        model = ConfigDrift
+        fields = [
+            "id",
+            "device",
+            "device_hostname",
+            "snapshot_from",
+            "snapshot_to",
+            "snapshot_from_created",
+            "snapshot_to_created",
+            "detected_at",
+            "additions",
+            "deletions",
+            "changes",
+            "total_lines",
+            "has_changes",
+            "change_magnitude",
+            "diff_summary",
+            "triggered_by",
+            "triggered_by_username",
+        ]
+        read_only_fields = ["detected_at", "change_magnitude"]
+
+
+class DriftAlertSerializer(serializers.ModelSerializer):
+    drift_device_hostname = serializers.CharField(source="drift.device.hostname", read_only=True)
+    acknowledged_by_username = serializers.CharField(
+        source="acknowledged_by.username", read_only=True, allow_null=True
+    )
+
+    class Meta:
+        model = DriftAlert
+        fields = [
+            "id",
+            "drift",
+            "drift_device_hostname",
+            "severity",
+            "status",
+            "message",
+            "detected_at",
+            "acknowledged_by",
+            "acknowledged_by_username",
+            "acknowledged_at",
+            "resolution_notes",
+        ]
+        read_only_fields = ["detected_at"]
+
+
 class CompliancePolicySerializer(serializers.ModelSerializer):
     class Meta:
         model = CompliancePolicy
@@ -180,6 +244,59 @@ class ComplianceResultSerializer(serializers.ModelSerializer):
         model = ComplianceResult
         fields = ["id", "policy", "device", "job", "ts", "status", "details_json"]
         read_only_fields = ["ts"]
+
+
+class RemediationRuleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RemediationRule
+        fields = [
+            "id",
+            "policy",
+            "name",
+            "description",
+            "enabled",
+            "config_snippet",
+            "approval_required",
+            "max_daily_executions",
+            "apply_mode",
+            "verify_after",
+            "rollback_on_failure",
+            "created_by",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["created_at", "updated_at"]
+
+
+class RemediationActionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RemediationAction
+        fields = [
+            "id",
+            "rule",
+            "compliance_result",
+            "device",
+            "job",
+            "status",
+            "before_snapshot",
+            "after_snapshot",
+            "verification_passed",
+            "error_message",
+            "started_at",
+            "finished_at",
+        ]
+        # Note: read_only_fields specification is technically redundant since
+        # RemediationActionViewSet is ReadOnlyModelViewSet, but kept for documentation
+        # to clearly indicate which fields are system-managed
+        read_only_fields = [
+            "status",
+            "before_snapshot",
+            "after_snapshot",
+            "verification_passed",
+            "error_message",
+            "started_at",
+            "finished_at",
+        ]
 
 
 class TopologyLinkSerializer(serializers.ModelSerializer):

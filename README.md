@@ -11,6 +11,7 @@ A production-grade web application for network automation using NAPALM, Netmiko,
 - **Compliance Checking**: YAML-based compliance policies using NAPALM validation
 - **Job Tracking**: Real-time job monitoring with live log streaming
 - **Role-Based Access Control**: Viewer, Operator, and Admin roles
+- **LDAP/Active Directory Authentication**: Enterprise authentication with automatic role mapping
 
 ## Technology Stack (Django/HTMX/DRF)
 

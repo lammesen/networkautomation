@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Drift Alerts - webnet{% endblock %}
+
+{% block content %}
+<!-- Breadcrumb -->
+<nav class="flex mb-4" aria-label="Breadcrumb">
+  <ol class="inline-flex items-center space-x-1 md:space-x-2 text-sm">
+    <li class="inline-flex items-center">
+      <a href="/config/" class="text-muted-foreground hover:text-foreground">Config Snapshots</a>
+    </li>
+    <li class="flex items-center">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mx-1 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+      </svg>
+      <span class="font-medium">Drift Alerts</span>
+    </li>
+  </ol>
+</nav>
+
+<!-- Page Header -->
+<div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-bold tracking-tight">Configuration Drift Alerts</h1>
+    <p class="text-muted-foreground">Monitor and manage unexpected configuration changes</p>
+  </div>
+  <div class="flex items-center gap-2">
+    <a href="/config/drift/timeline" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 px-4 py-2 border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      View Timeline
+    </a>
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="rounded-lg border bg-card p-6 mb-6">
+  <form hx-get="/config/drift/alerts" hx-target="#alerts-table" hx-push-url="true" class="flex flex-wrap items-end gap-4">
+    <div class="space-y-2 min-w-[150px]">
+      <label for="status" class="text-sm font-medium leading-none">Status</label>
+      <select name="status" id="status" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+        <option value="open" {% if status_filter == 'open' %}selected{% endif %}>Open</option>
+        <option value="acknowledged" {% if status_filter == 'acknowledged' %}selected{% endif %}>Acknowledged</option>
+        <option value="resolved" {% if status_filter == 'resolved' %}selected{% endif %}>Resolved</option>
+        <option value="ignored" {% if status_filter == 'ignored' %}selected{% endif %}>Ignored</option>
+        <option value="">All</option>
+      </select>
+    </div>
+    <div class="space-y-2 min-w-[150px]">
+      <label for="severity" class="text-sm font-medium leading-none">Severity</label>
+      <select name="severity" id="severity" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+        <option value="">All</option>
+        <option value="critical" {% if severity_filter == 'critical' %}selected{% endif %}>Critical</option>
+        <option value="warning" {% if severity_filter == 'warning' %}selected{% endif %}>Warning</option>
+        <option value="info" {% if severity_filter == 'info' %}selected{% endif %}>Info</option>
+      </select>
+    </div>
+    <button type="submit" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 px-4 py-2 bg-primary text-primary-foreground shadow hover:bg-primary/90">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+      </svg>
+      Filter
+    </button>
+  </form>
+</div>
+
+<!-- Alerts Table -->
+<div class="rounded-lg border bg-card">
+  <div id="alerts-table">
+    {% include "config/_alerts_table.html" %}
+  </div>
+</div>
+{% endblock %}

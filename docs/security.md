@@ -15,17 +15,31 @@ Security guidelines and best practices for the webnet application.
 
 ## Authentication
 
-### JWT Tokens
+### Local Authentication
+
+#### JWT Tokens
 - Access tokens: 30-minute expiration
 - Refresh tokens: 7-day expiration
 - Tokens stored client-side (localStorage)
 - Stateless authentication (no server-side session)
 
-### Password Security
+#### Password Security
 ```python
 # Passwords hashed with Django's PBKDF2
 # Minimum password requirements enforced by Django
 ```
+
+### LDAP/Active Directory Authentication
+
+webnet supports enterprise authentication via LDAP and Active Directory:
+
+- Authenticate users against centralized directory services
+- Automatic role mapping based on LDAP groups
+- User attribute syncing (first name, last name, email)
+- Customer/tenant assignment via LDAP attributes
+- Local authentication fallback when LDAP is unavailable
+
+See [LDAP Authentication Documentation](integrations/ldap-authentication.md) for configuration details.
 
 ### API Keys
 - API keys hashed with SHA256
