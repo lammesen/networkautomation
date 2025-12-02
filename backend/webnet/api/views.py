@@ -2069,3 +2069,76 @@ class NetBoxConfigViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
                 {"detail": "Preview failed due to an internal error."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+
+class RegionViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing regions in multi-region deployment."""
+
+    from webnet.core.models import Region
+    from .serializers import RegionSerializer, RegionHealthUpdateSerializer
+
+    serializer_class = None  # Will be set in get_serializer_class
+    permission_classes = [IsAuthenticated, RolePermission, ObjectCustomerPermission]
+    customer_field = "customer_id"
+
+    def get_serializer_class(self):
+        if self.action == "update_health":
+            return self.RegionHealthUpdateSerializer
+        return self.RegionSerializer
+
+    def get_queryset(self):
+        from webnet.core.models import Region
+
+        user = self.request.user
+        if not user.is_authenticated:
+            return Region.objects.none()
+
+        customer_ids = user.customers.values_list("id", flat=True)
+        return Region.objects.filter(customer_id__in=customer_ids).order_by("-priority", "name")
+
+    def perform_create(self, serializer):
+        # Ensure customer is one of user's customers
+        customer_id = serializer.validated_data.get("customer")
+        if customer_id and customer_id.id not in self.request.user.customers.values_list(
+            "id", flat=True
+        ):
+            from rest_framework.exceptions import ValidationError
+
+            raise ValidationError({"customer": "Invalid customer"})
+        serializer.save()
+
+    @action(detail=True, methods=["post"])
+    def update_health(self, request, pk=None):
+        """Update health status of a region."""
+        region = self.get_object()
+        serializer = self.RegionHealthUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        health_status = serializer.validated_data["health_status"]
+        message = serializer.validated_data.get("message")
+
+        region.update_health_status(health_status, message)
+
+        return Response(self.RegionSerializer(region).data)
+
+    @action(detail=True, methods=["get"])
+    def jobs(self, request, pk=None):
+        """Get jobs associated with this region."""
+        from .serializers import JobSerializer
+
+        region = self.get_object()
+        jobs = Job.objects.filter(region=region).order_by("-requested_at")[:100]
+
+        serializer = JobSerializer(jobs, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["get"])
+    def devices(self, request, pk=None):
+        """Get devices assigned to this region."""
+        from .serializers import DeviceSerializer
+
+        region = self.get_object()
+        devices = Device.objects.filter(region=region).order_by("hostname")
+
+        serializer = DeviceSerializer(devices, many=True)
+        return Response(serializer.data)

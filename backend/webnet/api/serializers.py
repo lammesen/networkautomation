@@ -120,6 +120,7 @@ class DeviceSerializer(serializers.ModelSerializer):
             "reachability_status",
             "last_reachability_check",
             "discovery_protocol",
+            "region",
             "created_at",
             "updated_at",
         ]
@@ -141,6 +142,7 @@ class JobSerializer(serializers.ModelSerializer):
             "type",
             "status",
             "user",
+            "region",
             "requested_at",
             "scheduled_for",
             "started_at",
@@ -865,4 +867,49 @@ class NetBoxSyncRequestSerializer(serializers.Serializer):
 
     full_sync = serializers.BooleanField(
         default=False, help_text="If true, sync all devices (not just delta)"
+    )
+
+
+class RegionSerializer(serializers.ModelSerializer):
+    """Serializer for Region model."""
+
+    queue_name = serializers.ReadOnlyField()
+    is_available = serializers.ReadOnlyField()
+
+    class Meta:
+        from webnet.core.models import Region
+
+        model = Region
+        fields = [
+            "id",
+            "customer",
+            "name",
+            "identifier",
+            "api_endpoint",
+            "worker_pool_config",
+            "health_status",
+            "last_health_check",
+            "health_check_interval_seconds",
+            "priority",
+            "enabled",
+            "description",
+            "queue_name",
+            "is_available",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at", "queue_name", "is_available"]
+
+
+class RegionHealthUpdateSerializer(serializers.Serializer):
+    """Serializer for updating region health status."""
+
+    health_status = serializers.ChoiceField(
+        choices=["healthy", "degraded", "offline"],
+        help_text="New health status for the region",
+    )
+    message = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="Optional message describing the health status",
     )

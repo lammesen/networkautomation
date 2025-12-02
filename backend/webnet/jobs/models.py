@@ -26,6 +26,14 @@ class Job(models.Model):
     type = models.CharField(max_length=50, choices=TYPE_CHOICES)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="queued")
     user = models.ForeignKey("users.User", on_delete=models.CASCADE, related_name="jobs")
+    region = models.ForeignKey(
+        "core.Region",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="jobs",
+        help_text="Region where this job is/was executed",
+    )
     requested_at = models.DateTimeField(auto_now_add=True)
     scheduled_for = models.DateTimeField(blank=True, null=True)
     started_at = models.DateTimeField(blank=True, null=True)
@@ -40,6 +48,7 @@ class Job(models.Model):
             models.Index(fields=["type"]),
             models.Index(fields=["user"]),
             models.Index(fields=["customer"]),
+            models.Index(fields=["region"]),
         ]
 
     def __str__(self) -> str:  # pragma: no cover

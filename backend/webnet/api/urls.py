@@ -40,6 +40,8 @@ router.register(r"config/templates", views.ConfigTemplateViewSet, basename="conf
 router.register(r"config/drift/alerts", views.DriftAlertViewSet, basename="drift-alert")
 # NetBox Integration (Issue #9)
 router.register(r"integrations/netbox", views.NetBoxConfigViewSet, basename="netbox-config")
+# Multi-region Deployment Support
+router.register(r"regions", views.RegionViewSet, basename="region")
 
 urlpatterns = [
     path("auth/login", views.AuthViewSet.as_view({"post": "login"})),
