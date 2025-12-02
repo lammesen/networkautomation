@@ -82,6 +82,7 @@ class SSHConsumer(AsyncJsonWebsocketConsumer):
                     port=22,
                     username=cred.username,
                     password=cred.password or "",
+                    device=self.device,
                 )
             result = await self.session.run_command(cmd)
             await self.send_json(

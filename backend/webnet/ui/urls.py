@@ -170,10 +170,10 @@ urlpatterns = [
     # SSH Host Key Management
     path("ssh/host-keys/", SSHHostKeyListView.as_view(), name="ssh-host-keys"),
     path(
-        "ssh/host-keys/<int:pk>/verify", SSHHostKeyVerifyView.as_view(), name="ssh-host-key-verify"
+        "ssh/host-keys/<int:pk>/verify/", SSHHostKeyVerifyView.as_view(), name="ssh-host-key-verify"
     ),
     path(
-        "ssh/host-keys/<int:pk>/delete", SSHHostKeyDeleteView.as_view(), name="ssh-host-key-delete"
+        "ssh/host-keys/<int:pk>/delete/", SSHHostKeyDeleteView.as_view(), name="ssh-host-key-delete"
     ),
-    path("ssh/host-keys/import", SSHHostKeyImportView.as_view(), name="ssh-host-key-import"),
+    path("ssh/host-keys/import/", SSHHostKeyImportView.as_view(), name="ssh-host-key-import"),
 ]
