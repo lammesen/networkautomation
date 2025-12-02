@@ -159,6 +159,9 @@ class DeviceSerializer(serializers.ModelSerializer):
             "platform",
             "role",
             "site",
+            "site_latitude",
+            "site_longitude",
+            "site_address",
             "tags",
             "credential",
             "enabled",
@@ -170,6 +173,20 @@ class DeviceSerializer(serializers.ModelSerializer):
             "updated_at",
             "custom_fields",
         ]
+
+    def validate(self, attrs):
+        """Ensure latitude/longitude are provided together when set."""
+        attrs = super().validate(attrs)
+        latitude = attrs.get("site_latitude")
+        longitude = attrs.get("site_longitude")
+        if self.instance:
+            latitude = attrs.get("site_latitude", self.instance.site_latitude)
+            longitude = attrs.get("site_longitude", self.instance.site_longitude)
+        if (latitude is None) ^ (longitude is None):
+            raise serializers.ValidationError(
+                "Both site_latitude and site_longitude must be provided together."
+            )
+        return attrs
 
     def validate_custom_fields(self, value):
         """Validate custom field values against their definitions."""

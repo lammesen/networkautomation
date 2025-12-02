@@ -20,6 +20,7 @@ import {
   ChevronRight,
   PanelLeftClose,
   PanelLeft,
+  Globe2,
   GitBranch,
 } from "lucide-react";
 
@@ -63,6 +64,7 @@ const navigation = {
   inventory: [
     { title: "Devices", icon: Server, href: "/devices/", isActive: (path: string) => path.startsWith("/devices") },
     { title: "Topology", icon: Network, href: "/topology/", isActive: (path: string) => path.startsWith("/topology") },
+    { title: "Geo Map", icon: Globe2, href: "/maps/geo/", isActive: (path: string) => path.startsWith("/maps/geo") },
   ],
   jobs: [
     { title: "Jobs", icon: RefreshCw, href: "/jobs/", isActive: (path: string) => path.startsWith("/jobs") },

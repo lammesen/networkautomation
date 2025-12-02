@@ -49,6 +49,7 @@ import CompliancePoliciesTable from "./components/islands/CompliancePoliciesTabl
 import ComplianceResultsTable from "./components/islands/ComplianceResultsTable";
 import TopologyTable from "./components/islands/TopologyTable";
 import TopologyMap from "./components/islands/TopologyMap";
+import GeoNetworkMap from "./components/islands/GeoNetworkMap";
 import JobLogs from "./components/islands/JobLogs";
 import FormSelect from "./components/islands/FormSelect";
 import { AppSidebar } from "./components/islands/AppSidebar";
@@ -74,6 +75,7 @@ const islandComponents: Record<string, React.ComponentType<any>> = {
   ComplianceResultsTable,
   TopologyTable,
   TopologyMap,
+  GeoNetworkMap,
   JobLogs,
   FormSelect,
   AppSidebar,
