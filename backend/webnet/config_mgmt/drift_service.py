@@ -78,8 +78,10 @@ class DriftService:
         if has_changes:
             try:
                 from webnet.chatops.slack_service import notify_drift_detected
+                from webnet.chatops.teams_service import notify_drift_detected_teams
 
                 notify_drift_detected(drift)
+                notify_drift_detected_teams(drift)
             except Exception as e:
                 logger.warning(f"Failed to send drift notification: {e}")
 

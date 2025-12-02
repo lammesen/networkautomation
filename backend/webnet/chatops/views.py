@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 
+from django.db import models
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -17,6 +18,9 @@ from webnet.chatops.models import (
     SlackChannel,
     SlackUserMapping,
     ChatOpsCommand,
+    TeamsWorkspace,
+    TeamsChannel,
+    TeamsUserMapping,
 )
 from webnet.chatops.serializers import (
     SlackWorkspaceSerializer,
@@ -24,6 +28,10 @@ from webnet.chatops.serializers import (
     SlackChannelSerializer,
     SlackUserMappingSerializer,
     ChatOpsCommandSerializer,
+    TeamsWorkspaceSerializer,
+    TeamsWorkspaceCreateSerializer,
+    TeamsChannelSerializer,
+    TeamsUserMappingSerializer,
 )
 from webnet.chatops.slack_service import SlackService
 from webnet.chatops.commands import dispatch_command
@@ -68,6 +76,56 @@ class ChatOpsCommandViewSet(CustomerScopedQuerysetMixin, viewsets.ReadOnlyModelV
 
     queryset = ChatOpsCommand.objects.all()
     serializer_class = ChatOpsCommandSerializer
+    permission_classes = [IsAuthenticated, RolePermission]
+
+    def get_customer_field(self):
+        """Dynamic customer field based on platform."""
+        # Filter by both Slack and Teams workspaces
+        return None  # Override get_queryset instead
+
+    def get_queryset(self):
+        """Get queryset filtered by customer through either Slack or Teams workspace."""
+        qs = super().get_queryset()
+        if self.request.user.customers.exists():
+            customer_ids = self.request.user.customers.values_list("id", flat=True)
+            return qs.filter(
+                models.Q(workspace__customer_id__in=customer_ids)
+                | models.Q(teams_workspace__customer_id__in=customer_ids)
+            )
+        return qs.none()
+
+
+# Teams ViewSets
+
+
+class TeamsWorkspaceViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
+    """ViewSet for TeamsWorkspace."""
+
+    queryset = TeamsWorkspace.objects.all()
+    serializer_class = TeamsWorkspaceSerializer
+    permission_classes = [IsAuthenticated, RolePermission]
+    customer_field = "customer_id"
+
+    def get_serializer_class(self):
+        if self.action == "create":
+            return TeamsWorkspaceCreateSerializer
+        return TeamsWorkspaceSerializer
+
+
+class TeamsChannelViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
+    """ViewSet for TeamsChannel."""
+
+    queryset = TeamsChannel.objects.all()
+    serializer_class = TeamsChannelSerializer
+    permission_classes = [IsAuthenticated, RolePermission]
+    customer_field = "workspace__customer_id"
+
+
+class TeamsUserMappingViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
+    """ViewSet for TeamsUserMapping."""
+
+    queryset = TeamsUserMapping.objects.all()
+    serializer_class = TeamsUserMappingSerializer
     permission_classes = [IsAuthenticated, RolePermission]
     customer_field = "workspace__customer_id"
 

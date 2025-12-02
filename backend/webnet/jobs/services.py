@@ -79,8 +79,10 @@ class JobService:
         if status in {"success", "partial", "failed"}:
             try:
                 from webnet.chatops.slack_service import notify_job_completion
+                from webnet.chatops.teams_service import notify_job_completion_teams
 
                 notify_job_completion(job)
+                notify_job_completion_teams(job)
             except Exception as e:
                 logger.warning(f"Failed to send ChatOps notification: {e}")
 
