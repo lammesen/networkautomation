@@ -1,0 +1,20 @@
+Compliance Violation Detected - Webnet
+
+Hello,
+
+A compliance violation has been detected in {{ ctx.customer_name }}.
+
+Status: VIOLATION
+
+Details:
+- Policy: {{ ctx.compliance_result.policy.name }}
+- Device: {{ ctx.compliance_result.device.hostname }}
+- Status: {{ ctx.compliance_result.status|upper }}
+- Detected: {{ ctx.compliance_result.ts|date:"Y-m-d H:i:s T" }}
+{% if ctx.compliance_result.details_json %}- Details: {{ ctx.compliance_result.details_json }}{% endif %}
+
+View compliance results: {{ ctx.webnet_url }}/compliance/results?device={{ ctx.compliance_result.device.id }}
+
+---
+This is an automated notification from Webnet Network Automation.
+© Webnet Network Automation | {{ ctx.customer_name }}

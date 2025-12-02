@@ -68,6 +68,7 @@ INSTALLED_APPS = [
     "webnet.config_mgmt",
     "webnet.compliance",
     "webnet.networkops",
+    "webnet.notifications",
     "webnet.api",
     "webnet.ui",
 ]
@@ -271,3 +272,14 @@ LOGGING = {
         "level": "INFO",
     },
 }
+
+# Email settings
+EMAIL_BACKEND = env("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
+EMAIL_HOST = env("EMAIL_HOST", "")
+EMAIL_PORT = int(env("EMAIL_PORT", "587"))
+EMAIL_USE_TLS = env("EMAIL_USE_TLS", "true").lower() == "true"
+EMAIL_USE_SSL = env("EMAIL_USE_SSL", "false").lower() == "true"
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", "")
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "webnet@example.com")
+WEBNET_BASE_URL = env("WEBNET_BASE_URL", "http://localhost:8000")

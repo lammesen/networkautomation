@@ -45,6 +45,7 @@ from webnet.compliance.models import (
     RemediationRule,
     RemediationAction,
 )
+from webnet.notifications.models import SMTPConfig, NotificationPreference, NotificationEvent
 
 from .serializers import (
     UserSerializer,
@@ -93,6 +94,12 @@ from .permissions import (
     ObjectCustomerPermission,
     user_has_customer_access,
     resolve_customer_for_request,
+)
+# Import notification views from the notifications app
+from webnet.notifications.views import (
+    SMTPConfigViewSet,
+    NotificationPreferenceViewSet,
+    NotificationEventViewSet,
 )
 
 logger = logging.getLogger(__name__)
