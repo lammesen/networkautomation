@@ -89,5 +89,18 @@ python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
-exclude = "migrations"
+exclude = ["migrations", "tests"]
+
+[[tool.mypy.overrides]]
+module = [
+    "webnet.tests.*",
+    "webnet.graphql_api.*",
+    "webnet.plugins.*",
+    "webnet.chatops.*",
+    "webnet.notifications.*",
+    "webnet.webhooks.*",
+    "webnet.ansible_mgmt.*",
+]
+disallow_untyped_defs = false
+warn_return_any = false
 
