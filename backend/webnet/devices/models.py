@@ -741,3 +741,382 @@ class DiscoveredDevice(models.Model):
             return True
 
         return False
+
+
+class ServiceNowConfig(models.Model):
+    """ServiceNow CMDB configuration for bi-directional device sync.
+
+    Enables syncing devices to/from ServiceNow CMDB, incident creation on job failures,
+    and change request management for configuration deployments.
+    """
+
+    SYNC_FREQUENCY_CHOICES = [
+        ("manual", "Manual Only"),
+        ("hourly", "Hourly"),
+        ("daily", "Daily"),
+        ("weekly", "Weekly"),
+    ]
+
+    customer = models.OneToOneField(
+        "customers.Customer",
+        on_delete=models.CASCADE,
+        related_name="servicenow_config",
+        help_text="Customer this ServiceNow configuration belongs to",
+    )
+    name = models.CharField(
+        max_length=100,
+        default="ServiceNow",
+        help_text="Friendly name for this ServiceNow instance",
+    )
+    instance_url = models.URLField(
+        max_length=500,
+        help_text="ServiceNow instance URL (e.g., https://yourinstance.service-now.com)",
+    )
+    username = models.CharField(
+        max_length=100,
+        help_text="ServiceNow username for API access",
+    )
+    _password = models.TextField(
+        db_column="password",
+        blank=False,
+        null=False,
+        help_text="Encrypted ServiceNow password (required)",
+    )
+    
+    # CMDB Configuration
+    cmdb_table = models.CharField(
+        max_length=100,
+        default="cmdb_ci_netgear",
+        help_text="ServiceNow CMDB table name (e.g., cmdb_ci_netgear, cmdb_ci_network_equipment)",
+    )
+    ci_class = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="CI class filter (e.g., cmdb_ci_netgear)",
+    )
+    ci_query_filter = models.CharField(
+        max_length=500,
+        blank=True,
+        null=True,
+        help_text="Additional ServiceNow query filter (e.g., operational_status=1)",
+    )
+    company_sys_id = models.CharField(
+        max_length=32,
+        blank=True,
+        null=True,
+        help_text="Company sys_id to associate with CIs",
+    )
+    
+    # Field Mappings
+    device_to_cmdb_mappings = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Custom field mappings from webnet Device to ServiceNow CI (JSON)",
+    )
+    cmdb_to_device_mappings = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Custom field mappings from ServiceNow CI to webnet Device (JSON)",
+    )
+    
+    # Sync Configuration
+    sync_frequency = models.CharField(
+        max_length=20,
+        choices=SYNC_FREQUENCY_CHOICES,
+        default="manual",
+        help_text="How often to sync with ServiceNow",
+    )
+    bidirectional_sync = models.BooleanField(
+        default=True,
+        help_text="Enable bi-directional sync (both import and export)",
+    )
+    auto_sync_enabled = models.BooleanField(
+        default=False,
+        help_text="Whether automatic sync is enabled",
+    )
+    
+    # Default credential for imported devices
+    default_credential = models.ForeignKey(
+        "Credential",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="servicenow_configs",
+        help_text="Default credential to assign to imported devices",
+    )
+    
+    # Incident Configuration
+    create_incidents_on_failure = models.BooleanField(
+        default=False,
+        help_text="Automatically create incidents when jobs fail",
+    )
+    incident_category = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="Default incident category",
+    )
+    incident_assignment_group = models.CharField(
+        max_length=32,
+        blank=True,
+        null=True,
+        help_text="Default incident assignment group sys_id",
+    )
+    
+    # Change Management Configuration
+    create_changes_on_deploy = models.BooleanField(
+        default=False,
+        help_text="Automatically create change requests for config deployments",
+    )
+    change_category = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="Default change request category",
+    )
+    change_assignment_group = models.CharField(
+        max_length=32,
+        blank=True,
+        null=True,
+        help_text="Default change assignment group sys_id",
+    )
+    
+    # Sync Status
+    last_sync_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text="Last successful sync timestamp",
+    )
+    last_sync_status = models.CharField(
+        max_length=20,
+        blank=True,
+        null=True,
+        help_text="Status of last sync attempt (success, failed, partial)",
+    )
+    last_sync_message = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Message or error from last sync attempt",
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "ServiceNow Configuration"
+        verbose_name_plural = "ServiceNow Configurations"
+
+    def __str__(self) -> str:  # pragma: no cover
+        return f"{self.customer.name} - {self.name}"
+
+    @property
+    def password(self) -> str:
+        """Decrypt and return the password."""
+        decrypted = decrypt_text(self._password)
+        if decrypted is None:
+            raise ValueError("Failed to decrypt password")
+        return decrypted
+
+    @password.setter
+    def password(self, value: str | None) -> None:
+        """Encrypt and store the password."""
+        if value is None:
+            raise ValueError("Password cannot be None")
+        self._password = encrypt_text(value)
+
+    def has_password(self) -> bool:
+        """Check if a password is configured."""
+        return bool(self._password)
+
+
+class ServiceNowSyncLog(models.Model):
+    """Log of ServiceNow sync operations for audit trail."""
+
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("running", "Running"),
+        ("success", "Success"),
+        ("partial", "Partial Success"),
+        ("failed", "Failed"),
+    ]
+    
+    DIRECTION_CHOICES = [
+        ("import", "Import from ServiceNow"),
+        ("export", "Export to ServiceNow"),
+    ]
+
+    config = models.ForeignKey(
+        ServiceNowConfig,
+        on_delete=models.CASCADE,
+        related_name="sync_logs",
+    )
+    direction = models.CharField(
+        max_length=10,
+        choices=DIRECTION_CHOICES,
+        default="export",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default="pending",
+    )
+    devices_created = models.IntegerField(default=0)
+    devices_updated = models.IntegerField(default=0)
+    devices_skipped = models.IntegerField(default=0)
+    devices_failed = models.IntegerField(default=0)
+    message = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Summary message or error details",
+    )
+    details = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Detailed sync results per device",
+    )
+    started_at = models.DateTimeField(auto_now_add=True)
+    finished_at = models.DateTimeField(
+        blank=True,
+        null=True,
+    )
+
+    class Meta:
+        ordering = ["-started_at"]
+        indexes = [
+            models.Index(fields=["config"]),
+            models.Index(fields=["status"]),
+            models.Index(fields=["started_at"]),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover
+        return f"Sync {self.id} ({self.direction}) - {self.status}"
+
+
+class ServiceNowIncident(models.Model):
+    """ServiceNow incident linked to a webnet job."""
+
+    STATE_NEW = 1
+    STATE_IN_PROGRESS = 2
+    STATE_ON_HOLD = 3
+    STATE_RESOLVED = 6
+    STATE_CLOSED = 7
+    
+    STATE_CHOICES = [
+        (STATE_NEW, "New"),
+        (STATE_IN_PROGRESS, "In Progress"),
+        (STATE_ON_HOLD, "On Hold"),
+        (STATE_RESOLVED, "Resolved"),
+        (STATE_CLOSED, "Closed"),
+    ]
+
+    config = models.ForeignKey(
+        ServiceNowConfig,
+        on_delete=models.CASCADE,
+        related_name="incidents",
+    )
+    job = models.ForeignKey(
+        "jobs.Job",
+        on_delete=models.CASCADE,
+        related_name="servicenow_incidents",
+        help_text="Job that triggered this incident",
+    )
+    incident_number = models.CharField(
+        max_length=50,
+        help_text="ServiceNow incident number (e.g., INC0012345)",
+    )
+    incident_sys_id = models.CharField(
+        max_length=32,
+        help_text="ServiceNow incident sys_id",
+    )
+    state = models.IntegerField(
+        choices=STATE_CHOICES,
+        default=STATE_NEW,
+    )
+    short_description = models.CharField(max_length=255)
+    description = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    resolved_at = models.DateTimeField(
+        blank=True,
+        null=True,
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["config"]),
+            models.Index(fields=["job"]),
+            models.Index(fields=["incident_number"]),
+            models.Index(fields=["state"]),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover
+        return f"{self.incident_number} - Job {self.job_id}"
+
+
+class ServiceNowChangeRequest(models.Model):
+    """ServiceNow change request linked to a webnet job."""
+
+    STATE_NEW = -5
+    STATE_ASSESS = 0
+    STATE_AUTHORIZE = 1
+    STATE_SCHEDULED = 2
+    STATE_IMPLEMENT = 3
+    STATE_REVIEW = 4
+    STATE_CLOSED = 6
+    
+    STATE_CHOICES = [
+        (STATE_NEW, "New"),
+        (STATE_ASSESS, "Assess"),
+        (STATE_AUTHORIZE, "Authorize"),
+        (STATE_SCHEDULED, "Scheduled"),
+        (STATE_IMPLEMENT, "Implement"),
+        (STATE_REVIEW, "Review"),
+        (STATE_CLOSED, "Closed"),
+    ]
+
+    config = models.ForeignKey(
+        ServiceNowConfig,
+        on_delete=models.CASCADE,
+        related_name="change_requests",
+    )
+    job = models.ForeignKey(
+        "jobs.Job",
+        on_delete=models.CASCADE,
+        related_name="servicenow_change_requests",
+        help_text="Job associated with this change request",
+    )
+    change_number = models.CharField(
+        max_length=50,
+        help_text="ServiceNow change request number (e.g., CHG0012345)",
+    )
+    change_sys_id = models.CharField(
+        max_length=32,
+        help_text="ServiceNow change request sys_id",
+    )
+    state = models.IntegerField(
+        choices=STATE_CHOICES,
+        default=STATE_NEW,
+    )
+    short_description = models.CharField(max_length=255)
+    description = models.TextField()
+    justification = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    closed_at = models.DateTimeField(
+        blank=True,
+        null=True,
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["config"]),
+            models.Index(fields=["job"]),
+            models.Index(fields=["change_number"]),
+            models.Index(fields=["state"]),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover
+        return f"{self.change_number} - Job {self.job_id}"

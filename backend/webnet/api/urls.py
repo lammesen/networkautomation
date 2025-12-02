@@ -40,6 +40,20 @@ router.register(r"config/templates", views.ConfigTemplateViewSet, basename="conf
 router.register(r"config/drift/alerts", views.DriftAlertViewSet, basename="drift-alert")
 # NetBox Integration (Issue #9)
 router.register(r"integrations/netbox", views.NetBoxConfigViewSet, basename="netbox-config")
+# ServiceNow Integration
+router.register(
+    r"integrations/servicenow", views.ServiceNowConfigViewSet, basename="servicenow-config"
+)
+router.register(
+    r"integrations/servicenow-incidents",
+    views.ServiceNowIncidentViewSet,
+    basename="servicenow-incident",
+)
+router.register(
+    r"integrations/servicenow-changes",
+    views.ServiceNowChangeRequestViewSet,
+    basename="servicenow-change",
+)
 # Ansible Integration
 router.register(r"ansible/configs", views.AnsibleConfigViewSet, basename="ansible-config")
 router.register(r"ansible/playbooks", views.PlaybookViewSet, basename="playbook")
