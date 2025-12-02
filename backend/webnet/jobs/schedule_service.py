@@ -62,32 +62,12 @@ class ScheduleService:
         return None
 
     def _calculate_cron_next_run(self, cron_expr: str, from_time: datetime) -> Optional[datetime]:
-        """Simple cron parser for common patterns."""
+        """Parse cron expression and calculate next run time."""
         try:
-            parts = cron_expr.split()
-            if len(parts) != 5:
-                return None
+            from croniter import croniter
 
-            minute, hour, day, month, day_of_week = parts
-
-            # For simplicity, handle common patterns
-            # "0 2 * * *" = daily at 2 AM
-            if (
-                minute.isdigit()
-                and hour.isdigit()
-                and day == "*"
-                and month == "*"
-                and day_of_week == "*"
-            ):
-                next_run = from_time.replace(
-                    hour=int(hour), minute=int(minute), second=0, microsecond=0
-                )
-                if next_run <= from_time:
-                    next_run += timedelta(days=1)
-                return next_run
-
-            # Return a default (daily at configured time)
-            return from_time + timedelta(days=1)
+            cron = croniter(cron_expr, from_time)
+            return cron.get_next(datetime)
         except Exception as e:
             logger.error(f"Failed to parse cron expression '{cron_expr}': {e}")
             return None

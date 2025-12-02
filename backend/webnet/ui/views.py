@@ -2761,7 +2761,7 @@ class ScheduleCreateView(TenantScopedView):
             job_type=request.POST.get("job_type"),
             interval_type=request.POST.get("interval_type"),
             cron_expression=request.POST.get("cron_expression", ""),
-            enabled=request.POST.get("enabled") == "true",
+            enabled="enabled" in request.POST or request.POST.get("enabled") == "on",
         )
         schedule.save()
 
@@ -2806,7 +2806,7 @@ class ScheduleEditView(TenantScopedView):
         schedule.job_type = request.POST.get("job_type")
         schedule.interval_type = request.POST.get("interval_type")
         schedule.cron_expression = request.POST.get("cron_expression", "")
-        schedule.enabled = request.POST.get("enabled") == "true"
+        schedule.enabled = "enabled" in request.POST or request.POST.get("enabled") == "on"
         schedule.save()
 
         return redirect("schedule-detail", pk=schedule.id)
@@ -2825,3 +2825,48 @@ class ScheduleDeleteView(TenantScopedView):
 
 class ScheduleCalendarView(TenantScopedView):
     template_name = "schedules/calendar.html"
+
+    def get(self, request):
+        from calendar import monthcalendar, month_name
+
+        # Get year and month from query params
+        try:
+            year = int(request.GET.get("year", timezone.now().year))
+            month = int(request.GET.get("month", timezone.now().month))
+        except (ValueError, TypeError):
+            year = timezone.now().year
+            month = timezone.now().month
+
+        # Get all enabled schedules for the customer
+        schedules = Schedule.objects.filter(enabled=True)
+        schedules = self.filter_by_customer(schedules).select_related("customer", "created_by")
+
+        # Calculate calendar events
+        calendar_weeks = monthcalendar(year, month)
+        month_name_str = month_name[month]
+
+        # Create events for the calendar
+        events = []
+        for schedule in schedules:
+            if schedule.next_run:
+                next_run = timezone.localtime(schedule.next_run)
+                if next_run.year == year and next_run.month == month:
+                    events.append(
+                        {
+                            "id": schedule.id,
+                            "name": schedule.name,
+                            "day": next_run.day,
+                            "time": next_run.strftime("%H:%M"),
+                            "job_type": schedule.get_job_type_display(),
+                        }
+                    )
+
+        context = {
+            "year": year,
+            "month": month,
+            "month_name": month_name_str,
+            "calendar_weeks": calendar_weeks,
+            "events": events,
+            "schedules": schedules,
+        }
+        return render(request, self.template_name, context)

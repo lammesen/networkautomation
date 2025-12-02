@@ -119,15 +119,20 @@ def test_schedule_api_respects_customer_scope():
     customer_a = Customer.objects.create(name="Acme")
     customer_b = Customer.objects.create(name="Beta")
 
-    admin_a = User.objects.create_user(username="admin_a", password="secret123", role="admin")
-    admin_a.customers.add(customer_a)
+    # Use operator role instead of admin to test customer scoping
+    operator_a = User.objects.create_user(
+        username="operator_a", password="secret123", role="operator"
+    )
+    operator_a.customers.add(customer_a)
 
-    admin_b = User.objects.create_user(username="admin_b", password="secret123", role="admin")
-    admin_b.customers.add(customer_b)
+    operator_b = User.objects.create_user(
+        username="operator_b", password="secret123", role="operator"
+    )
+    operator_b.customers.add(customer_b)
 
     Schedule.objects.create(
         customer=customer_a,
-        created_by=admin_a,
+        created_by=operator_a,
         name="Schedule A",
         job_type="config_backup",
         interval_type="daily",
@@ -135,21 +140,21 @@ def test_schedule_api_respects_customer_scope():
 
     Schedule.objects.create(
         customer=customer_b,
-        created_by=admin_b,
+        created_by=operator_b,
         name="Schedule B",
         job_type="config_backup",
         interval_type="daily",
     )
 
-    # admin_a should only see schedule_a (but may see schedule_b due to missing customer filtering)
+    # operator_a should only see schedule_a
     client = APIClient()
-    client.login(username="admin_a", password="secret123")
+    client.login(username="operator_a", password="secret123")
     resp = client.get("/api/v1/schedules/")
     assert resp.status_code == 200
     data = resp.json()
-    # Note: Customer scoping may not be properly enforced yet
-    # Just verify we get some results
-    assert data["count"] >= 1
+    # Verify proper customer scoping - should only see Schedule A
+    assert data["count"] == 1
+    assert data["results"][0]["name"] == "Schedule A"
 
 
 @pytest.mark.django_db

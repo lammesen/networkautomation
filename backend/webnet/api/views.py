@@ -523,6 +523,7 @@ class ScheduleViewSet(CustomerScopedQuerysetMixin, viewsets.ModelViewSet):
     queryset = Schedule.objects.select_related("customer", "created_by")
     serializer_class = ScheduleSerializer
     permission_classes = [IsAuthenticated, RolePermission, ObjectCustomerPermission]
+    customer_field = "customer"
 
     def perform_create(self, serializer):
         """Set created_by to current user."""

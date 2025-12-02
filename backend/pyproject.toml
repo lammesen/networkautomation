@@ -29,6 +29,7 @@ dependencies = [
     "nornir-netmiko>=1.0.0",
     "asyncssh>=2.14.2",
     "django-auth-ldap>=5.0.0",
+    "croniter>=2.0.0",
 ]
 
 [project.optional-dependencies]
