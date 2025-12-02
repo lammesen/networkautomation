@@ -80,7 +80,7 @@
 </div>
 
 <script>
-const codes = {{ backup_codes|safe }};
+const codes = {{ backup_codes|escapejs }};
 
 function printCodes() {
   const printWindow = window.open('', '', 'width=600,height=400');
@@ -90,7 +90,10 @@ function printCodes() {
   printWindow.document.write('<h1>Two-Factor Authentication Backup Codes</h1>');
   printWindow.document.write('<p>Save these codes in a secure location. Each code can only be used once.</p>');
   codes.forEach(code => {
-    printWindow.document.write('<div class="code">' + code + '</div>');
+    const div = printWindow.document.createElement('div');
+    div.className = 'code';
+    div.textContent = code;
+    printWindow.document.body.appendChild(div);
   });
   printWindow.document.write('</body></html>');
   printWindow.document.close();
