@@ -2604,7 +2604,7 @@ class CustomFieldCreateView(TenantScopedView):
             choices = [line.strip() for line in choices_text.split("\n") if line.strip()]
 
         # Create custom field definition
-        field_def = CustomFieldDefinition.objects.create(
+        CustomFieldDefinition.objects.create(
             customer_id=customer_id,
             name=name,
             label=label,
@@ -2667,7 +2667,6 @@ class CustomFieldEditView(TenantScopedView):
 
     def put(self, request, pk):
         from webnet.core.models import CustomFieldDefinition
-        import json as json_module
 
         check = self.ensure_can_write()
         if check:

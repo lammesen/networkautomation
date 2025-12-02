@@ -181,4 +181,14 @@ urlpatterns = [
         "ssh/host-keys/<int:pk>/delete/", SSHHostKeyDeleteView.as_view(), name="ssh-host-key-delete"
     ),
     path("ssh/host-keys/import/", SSHHostKeyImportView.as_view(), name="ssh-host-key-import"),
+    # Custom Fields Management
+    path("custom-fields/", CustomFieldListView.as_view(), name="custom-fields-list"),
+    path("custom-fields/table", CustomFieldListView.as_view(), name="custom-fields-table"),
+    path("custom-fields/create", CustomFieldCreateView.as_view(), name="custom-fields-create"),
+    path("custom-fields/<int:pk>/edit", CustomFieldEditView.as_view(), name="custom-fields-edit"),
+    path(
+        "custom-fields/<int:pk>/delete",
+        CustomFieldDeleteView.as_view(),
+        name="custom-fields-delete",
+    ),
 ]

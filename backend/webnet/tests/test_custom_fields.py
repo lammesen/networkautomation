@@ -1,7 +1,6 @@
 """Tests for custom fields functionality."""
 
 import pytest
-from django.urls import reverse
 from rest_framework.test import APIClient
 
 from webnet.customers.models import Customer

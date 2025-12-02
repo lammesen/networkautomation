@@ -1,3 +1,4 @@
+{% load custom_fields_tags %}
 {% if custom_field_definitions or object.custom_fields %}
 <!-- Custom Fields Card -->
 <div class="rounded-lg border bg-card p-6">
@@ -46,11 +47,15 @@
                   </span>
                 {% endif %}
               {% elif field_def.field_type == 'url' %}
-                <a href="{{ field_value }}" target="_blank" class="text-primary hover:underline">
-                  {{ field_value }}
-                </a>
+                {% if field_value|is_safe_url %}
+                  <a href="{{ field_value }}" target="_blank" rel="noopener noreferrer" class="text-primary hover:underline">
+                    {{ field_value }}
+                  </a>
+                {% else %}
+                  <span class="text-muted-foreground">{{ field_value }}</span>
+                {% endif %}
               {% elif field_def.field_type == 'json' %}
-                <pre class="bg-muted p-2 rounded text-xs font-mono overflow-x-auto">{{ field_value|safe }}</pre>
+                <pre class="bg-muted p-2 rounded text-xs font-mono overflow-x-auto">{{ field_value|json_pretty }}</pre>
               {% elif field_def.field_type == 'multiselect' %}
                 <div class="flex flex-wrap gap-1">
                   {% for item in field_value %}

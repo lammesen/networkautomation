@@ -152,6 +152,40 @@ class DeviceSerializer(serializers.ModelSerializer):
             "custom_fields",
         ]
 
+    def validate_custom_fields(self, value):
+        """Validate custom field values against their definitions."""
+        from webnet.core.models import CustomFieldDefinition
+
+        if not value:
+            return value
+
+        # Get customer from initial data or instance
+        customer_id = None
+        if self.instance:
+            customer_id = self.instance.customer_id
+        elif "customer" in self.initial_data:
+            customer_id = self.initial_data["customer"]
+
+        if not customer_id:
+            return value
+
+        # Get active field definitions for Device model
+        field_defs = CustomFieldDefinition.objects.filter(
+            customer_id=customer_id, model_type="device", is_active=True
+        )
+
+        errors = []
+        for field_def in field_defs:
+            field_value = value.get(field_def.name)
+            is_valid, error = field_def.validate_value(field_value)
+            if not is_valid:
+                errors.append(error)
+
+        if errors:
+            raise serializers.ValidationError(errors)
+
+        return value
+
 
 class DeviceImportSummarySerializer(serializers.Serializer):
     created = serializers.IntegerField()
