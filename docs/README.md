@@ -11,6 +11,7 @@ Welcome to the documentation for the Network Automation platform. This index is 
 ### Feature Guides
 - Bulk Device Onboarding: [Scan, SNMP discovery, credential testing](./features/bulk-device-onboarding.md)
 - Device Tags and Groups: [Organize and target automation](./features/device-groups-tags.md)
+- Visual Workflow Builder: [Design multi-step automations](./features/workflow-builder.md)
 - NetBox Integration: [Sync inventory from NetBox](./integrations/netbox.md)
 - Configuration Templates: [Jinja2 templates with variables](./config-templates.md)
 - Multi-Region Deployment: [Distributed workers for global networks](./multi-region-deployment.md)
@@ -24,6 +25,7 @@ Welcome to the documentation for the Network Automation platform. This index is 
 - UI patterns: [HTMX Patterns](./htmx-patterns.md) · [React Islands](./react-islands.md)
 - Models quick reference: [Models Reference](./models-reference.md)
 - Streaming & WebSockets: [SSH Streaming](./ssh-streaming.md)
+- Workflow engine internals: [Workflow Engine](./workflow-engine.md)
 - Testing strategy: [Testing](./testing.md)
 - Performance tips: [Performance](./performance.md)
 - Useful snippets: [Snippets](./snippets.md)

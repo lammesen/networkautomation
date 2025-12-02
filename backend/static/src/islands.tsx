@@ -60,6 +60,7 @@ import { FilterBar } from "./components/islands/FilterBar";
 import { BulkActionBar } from "./components/islands/BulkActionBar";
 import { ConfirmDialog } from "./components/islands/ConfirmDialog";
 import SSHTerminal from "./components/islands/SSHTerminal";
+import WorkflowBuilder from "./components/islands/WorkflowBuilder";
 
 // Import xterm.js CSS
 import "@xterm/xterm/css/xterm.css";
@@ -85,6 +86,7 @@ const islandComponents: Record<string, React.ComponentType<any>> = {
   BulkActionBar,
   ConfirmDialog,
   SSHTerminal,
+  WorkflowBuilder,
 };
 
 // Store roots to prevent memory leaks on re-hydration

@@ -67,6 +67,7 @@ INSTALLED_APPS = [
     "webnet.customers",
     "webnet.devices",
     "webnet.jobs",
+    "webnet.workflows",
     "webnet.config_mgmt",
     "webnet.compliance",
     "webnet.networkops",
