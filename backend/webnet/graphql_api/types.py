@@ -118,7 +118,12 @@ class DeviceType:
 
     @strawberry_django.field
     def jobs(self, info) -> List["JobType"]:
-        """Jobs targeting this device."""
+        """Jobs targeting this device.
+        
+        Note: This query uses JSONField __contains lookup which may have performance
+        implications when fetching jobs for multiple devices. Consider implementing
+        a DataLoader or adding a proper join table for production use.
+        """
         from webnet.jobs.models import Job
 
         # Get jobs where this device is in the target summary
