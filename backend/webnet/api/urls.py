@@ -40,6 +40,9 @@ router.register(r"config/templates", views.ConfigTemplateViewSet, basename="conf
 router.register(r"config/drift/alerts", views.DriftAlertViewSet, basename="drift-alert")
 # NetBox Integration (Issue #9)
 router.register(r"integrations/netbox", views.NetBoxConfigViewSet, basename="netbox-config")
+# Webhook Integration
+router.register(r"webhooks", views.WebhookViewSet, basename="webhook")
+router.register(r"webhook-deliveries", views.WebhookDeliveryViewSet, basename="webhook-delivery")
 
 urlpatterns = [
     path("auth/login", views.AuthViewSet.as_view({"post": "login"})),

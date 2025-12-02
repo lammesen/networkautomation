@@ -19,6 +19,7 @@ from webnet.compliance.models import (
     RemediationRule,
     RemediationAction,
 )
+from webnet.webhooks.models import Webhook, WebhookDelivery
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -866,3 +867,98 @@ class NetBoxSyncRequestSerializer(serializers.Serializer):
     full_sync = serializers.BooleanField(
         default=False, help_text="If true, sync all devices (not just delta)"
     )
+
+
+# Webhook serializers
+class WebhookSerializer(serializers.ModelSerializer):
+    """Serializer for Webhook model."""
+
+    secret = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_null=True,
+        help_text="Secret token for HMAC signature verification",
+    )
+    has_secret = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Webhook
+        fields = [
+            "id",
+            "customer",
+            "name",
+            "url",
+            "event_types",
+            "secret",
+            "has_secret",
+            "enabled",
+            "verify_ssl",
+            "timeout_seconds",
+            "max_retries",
+            "retry_backoff",
+            "headers",
+            "created_at",
+            "updated_at",
+            "created_by",
+        ]
+        read_only_fields = ["created_at", "updated_at", "created_by", "has_secret"]
+
+    def get_has_secret(self, obj):
+        """Return whether webhook has a secret configured."""
+        return obj.has_secret()
+
+    def create(self, validated_data):
+        """Create webhook with encrypted secret."""
+        secret = validated_data.pop("secret", None)
+        webhook = Webhook(**validated_data)
+        if secret:
+            webhook.secret = secret
+        webhook.save()
+        return webhook
+
+    def update(self, instance, validated_data):
+        """Update webhook and handle secret encryption."""
+        secret = validated_data.pop("secret", None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        if secret:
+            instance.secret = secret
+        instance.save()
+        return instance
+
+
+class WebhookDeliverySerializer(serializers.ModelSerializer):
+    """Serializer for WebhookDelivery model."""
+
+    webhook_name = serializers.CharField(source="webhook.name", read_only=True)
+
+    class Meta:
+        model = WebhookDelivery
+        fields = [
+            "id",
+            "webhook",
+            "webhook_name",
+            "event_type",
+            "event_id",
+            "payload",
+            "status",
+            "attempts",
+            "http_status",
+            "response_body",
+            "error_message",
+            "duration_ms",
+            "next_retry_at",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "status",
+            "attempts",
+            "http_status",
+            "response_body",
+            "error_message",
+            "duration_ms",
+            "next_retry_at",
+            "created_at",
+            "updated_at",
+        ]
