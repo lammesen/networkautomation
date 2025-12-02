@@ -8,7 +8,7 @@ from strawberry.types import Info
 from django.db.models import Q
 
 from webnet.customers.models import Customer
-from webnet.devices.models import Device, Credential, Tag, DeviceGroup, TopologyLink
+from webnet.devices.models import Device, Credential, Tag, TopologyLink
 from webnet.jobs.models import Job
 from webnet.config_mgmt.models import ConfigSnapshot, ConfigTemplate
 from webnet.compliance.models import CompliancePolicy, ComplianceResult
@@ -20,7 +20,6 @@ from .types import (
     DeviceType,
     CredentialType,
     TagType,
-    DeviceGroupType,
     JobType,
     ConfigSnapshotType,
     ConfigTemplateType,
@@ -29,6 +28,14 @@ from .types import (
     TopologyLinkType,
 )
 from .auth import IsAuthenticated
+
+
+def get_user_from_info(info: Info) -> Optional[User]:
+    """Extract user from info context."""
+    request = (
+        info.context.get("request") if isinstance(info.context, dict) else info.context.request
+    )
+    return request.user if request and hasattr(request, "user") else None
 
 
 def get_customer_ids_for_user(user: User) -> List[int]:
@@ -48,7 +55,7 @@ class Query:
     @strawberry.field(permission_classes=[IsAuthenticated])
     def me(self, info: Info) -> Optional[UserType]:
         """Get current authenticated user."""
-        user = info.context.request.user
+        user = get_user_from_info(info)
         if user and user.is_authenticated:
             return user
         return None
@@ -56,14 +63,14 @@ class Query:
     @strawberry.field(permission_classes=[IsAuthenticated])
     def customers(self, info: Info) -> List[CustomerType]:
         """List customers the user has access to."""
-        user = info.context.request.user
+        user = get_user_from_info(info)
         customer_ids = get_customer_ids_for_user(user)
         return list(Customer.objects.filter(id__in=customer_ids))
 
     @strawberry.field(permission_classes=[IsAuthenticated])
     def customer(self, info: Info, id: int) -> Optional[CustomerType]:
         """Get a specific customer by ID."""
-        user = info.context.request.user
+        user = get_user_from_info(info)
         customer_ids = get_customer_ids_for_user(user)
         try:
             return Customer.objects.get(id=id, id__in=customer_ids)
@@ -84,17 +91,17 @@ class Query:
         limit: int = 100,
     ) -> List[DeviceType]:
         """List devices with filtering."""
-        user = info.context.request.user
+        user = get_user_from_info(info)
         customer_ids = get_customer_ids_for_user(user)
-        
+
         queryset = Device.objects.filter(customer_id__in=customer_ids)
-        
+
         if customer_id is not None:
             if customer_id in customer_ids:
                 queryset = queryset.filter(customer_id=customer_id)
             else:
                 return []
-        
+
         if hostname:
             queryset = queryset.filter(hostname__icontains=hostname)
         if vendor:
@@ -107,13 +114,13 @@ class Query:
             queryset = queryset.filter(site__icontains=site)
         if enabled is not None:
             queryset = queryset.filter(enabled=enabled)
-        
+
         return list(queryset.select_related("customer", "credential")[:limit])
 
     @strawberry.field(permission_classes=[IsAuthenticated])
     def device(self, info: Info, id: int) -> Optional[DeviceType]:
         """Get a specific device by ID."""
-        user = info.context.request.user
+        user = get_user_from_info(info)
         customer_ids = get_customer_ids_for_user(user)
         try:
             return Device.objects.select_related("customer", "credential").get(
@@ -127,16 +134,16 @@ class Query:
         self, info: Info, customer_id: Optional[int] = None, limit: int = 100
     ) -> List[CredentialType]:
         """List credentials."""
-        user = info.context.request.user
+        user = get_user_from_info(info)
         customer_ids = get_customer_ids_for_user(user)
-        
+
         queryset = Credential.objects.filter(customer_id__in=customer_ids)
         if customer_id is not None:
             if customer_id in customer_ids:
                 queryset = queryset.filter(customer_id=customer_id)
             else:
                 return []
-        
+
         return list(queryset.select_related("customer")[:limit])
 
     @strawberry.field(permission_classes=[IsAuthenticated])
@@ -144,16 +151,16 @@ class Query:
         self, info: Info, customer_id: Optional[int] = None, limit: int = 100
     ) -> List[TagType]:
         """List tags."""
-        user = info.context.request.user
+        user = get_user_from_info(info)
         customer_ids = get_customer_ids_for_user(user)
-        
+
         queryset = Tag.objects.filter(customer_id__in=customer_ids)
         if customer_id is not None:
             if customer_id in customer_ids:
                 queryset = queryset.filter(customer_id=customer_id)
             else:
                 return []
-        
+
         return list(queryset.select_related("customer")[:limit])
 
     @strawberry.field(permission_classes=[IsAuthenticated])
@@ -166,30 +173,28 @@ class Query:
         limit: int = 100,
     ) -> List[JobType]:
         """List jobs with filtering."""
-        user = info.context.request.user
+        user = get_user_from_info(info)
         customer_ids = get_customer_ids_for_user(user)
-        
+
         queryset = Job.objects.filter(customer_id__in=customer_ids)
-        
+
         if customer_id is not None:
             if customer_id in customer_ids:
                 queryset = queryset.filter(customer_id=customer_id)
             else:
                 return []
-        
+
         if status:
             queryset = queryset.filter(status=status)
         if type:
             queryset = queryset.filter(type=type)
-        
-        return list(
-            queryset.select_related("customer", "user").order_by("-requested_at")[:limit]
-        )
+
+        return list(queryset.select_related("customer", "user").order_by("-requested_at")[:limit])
 
     @strawberry.field(permission_classes=[IsAuthenticated])
     def job(self, info: Info, id: int) -> Optional[JobType]:
         """Get a specific job by ID."""
-        user = info.context.request.user
+        user = get_user_from_info(info)
         customer_ids = get_customer_ids_for_user(user)
         try:
             return Job.objects.select_related("customer", "user").get(
@@ -207,20 +212,20 @@ class Query:
         limit: int = 50,
     ) -> List[ConfigSnapshotType]:
         """List configuration snapshots."""
-        user = info.context.request.user
+        user = get_user_from_info(info)
         customer_ids = get_customer_ids_for_user(user)
-        
+
         queryset = ConfigSnapshot.objects.filter(device__customer_id__in=customer_ids)
-        
+
         if customer_id is not None:
             if customer_id in customer_ids:
                 queryset = queryset.filter(device__customer_id=customer_id)
             else:
                 return []
-        
+
         if device_id is not None:
             queryset = queryset.filter(device_id=device_id)
-        
+
         return list(queryset.select_related("device", "job").order_by("-created_at")[:limit])
 
     @strawberry.field(permission_classes=[IsAuthenticated])
@@ -228,16 +233,16 @@ class Query:
         self, info: Info, customer_id: Optional[int] = None, limit: int = 100
     ) -> List[ConfigTemplateType]:
         """List configuration templates."""
-        user = info.context.request.user
+        user = get_user_from_info(info)
         customer_ids = get_customer_ids_for_user(user)
-        
+
         queryset = ConfigTemplate.objects.filter(customer_id__in=customer_ids)
         if customer_id is not None:
             if customer_id in customer_ids:
                 queryset = queryset.filter(customer_id=customer_id)
             else:
                 return []
-        
+
         return list(queryset.select_related("customer").filter(is_active=True)[:limit])
 
     @strawberry.field(permission_classes=[IsAuthenticated])
@@ -245,16 +250,16 @@ class Query:
         self, info: Info, customer_id: Optional[int] = None, limit: int = 100
     ) -> List[CompliancePolicyType]:
         """List compliance policies."""
-        user = info.context.request.user
+        user = get_user_from_info(info)
         customer_ids = get_customer_ids_for_user(user)
-        
+
         queryset = CompliancePolicy.objects.filter(customer_id__in=customer_ids)
         if customer_id is not None:
             if customer_id in customer_ids:
                 queryset = queryset.filter(customer_id=customer_id)
             else:
                 return []
-        
+
         return list(queryset.select_related("customer", "created_by")[:limit])
 
     @strawberry.field(permission_classes=[IsAuthenticated])
@@ -266,19 +271,17 @@ class Query:
         limit: int = 100,
     ) -> List[ComplianceResultType]:
         """List compliance results."""
-        user = info.context.request.user
+        user = get_user_from_info(info)
         customer_ids = get_customer_ids_for_user(user)
-        
+
         queryset = ComplianceResult.objects.filter(policy__customer_id__in=customer_ids)
-        
+
         if policy_id is not None:
             queryset = queryset.filter(policy_id=policy_id)
         if device_id is not None:
             queryset = queryset.filter(device_id=device_id)
-        
-        return list(
-            queryset.select_related("policy", "device", "job").order_by("-ts")[:limit]
-        )
+
+        return list(queryset.select_related("policy", "device", "job").order_by("-ts")[:limit])
 
     @strawberry.field(permission_classes=[IsAuthenticated])
     def topology_links(
@@ -289,24 +292,18 @@ class Query:
         limit: int = 500,
     ) -> List[TopologyLinkType]:
         """List topology links."""
-        user = info.context.request.user
+        user = get_user_from_info(info)
         customer_ids = get_customer_ids_for_user(user)
-        
-        queryset = TopologyLink.objects.filter(
-            local_device__customer_id__in=customer_ids
-        )
-        
+
+        queryset = TopologyLink.objects.filter(local_device__customer_id__in=customer_ids)
+
         if customer_id is not None:
             if customer_id in customer_ids:
                 queryset = queryset.filter(local_device__customer_id=customer_id)
             else:
                 return []
-        
+
         if device_id is not None:
-            queryset = queryset.filter(
-                Q(local_device_id=device_id) | Q(remote_device_id=device_id)
-            )
-        
-        return list(
-            queryset.select_related("local_device", "remote_device")[:limit]
-        )
+            queryset = queryset.filter(Q(local_device_id=device_id) | Q(remote_device_id=device_id))
+
+        return list(queryset.select_related("local_device", "remote_device")[:limit])

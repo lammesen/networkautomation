@@ -17,7 +17,7 @@ class GraphQLView(BaseAsyncGraphQLView):
         user = get_user_from_request(request)
         if user:
             request.user = user
-        
+
         return {
             "request": request,
             "response": response,

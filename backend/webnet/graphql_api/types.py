@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional, List
-import strawberry
 from strawberry import auto
 import strawberry_django
 from strawberry_django import type as strawberry_django_type
 
-from webnet.customers.models import Customer, CustomerIPRange
+from webnet.customers.models import Customer
 from webnet.users.models import User
 from webnet.devices.models import Device, Credential, Tag, DeviceGroup, TopologyLink
 from webnet.jobs.models import Job, JobLog
@@ -16,7 +15,7 @@ from webnet.config_mgmt.models import ConfigSnapshot, ConfigTemplate
 from webnet.compliance.models import CompliancePolicy, ComplianceResult
 
 if TYPE_CHECKING:
-    from datetime import datetime
+    pass
 
 
 @strawberry_django_type(Customer)
@@ -123,10 +122,10 @@ class DeviceType:
     def jobs(self, info) -> List["JobType"]:
         """Jobs targeting this device."""
         from webnet.jobs.models import Job
+
         # Get jobs where this device is in the target summary
         return Job.objects.filter(
-            customer=self.customer,
-            target_summary_json__contains={"device_ids": [self.id]}
+            customer=self.customer, target_summary_json__contains={"device_ids": [self.id]}
         ).order_by("-requested_at")[:50]
 
     @strawberry_django.field
@@ -170,7 +169,9 @@ class JobLogType:
     extra_json: auto
 
 
-@strawberry_django_type(ConfigSnapshot, fields=["id", "created_at", "source", "config_text", "hash"])
+@strawberry_django_type(
+    ConfigSnapshot, fields=["id", "created_at", "source", "config_text", "hash"]
+)
 class ConfigSnapshotType:
     """Configuration snapshot."""
 
