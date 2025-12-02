@@ -32,6 +32,9 @@ dependencies = [
     "strawberry-graphql-django>=0.49.4",
     "ansible>=2.16.0",
     "requests>=2.32.0",
+    "django-otp>=1.5.0",
+    "qrcode>=7.4.2",
+    "webauthn>=2.1.0",
 ]
 
 [project.optional-dependencies]

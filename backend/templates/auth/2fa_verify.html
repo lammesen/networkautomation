@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{% block title %}Two-Factor Verification - webnet{% endblock %}
+{% block auth_content %}
+<div class="w-full max-w-md">
+  <div class="text-center mb-8">
+    <div class="flex justify-center mb-4">
+      <div class="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+        </svg>
+      </div>
+    </div>
+    <h1 class="text-2xl font-bold tracking-tight">Two-Factor Authentication</h1>
+    <p class="text-muted-foreground mt-2">Enter your verification code</p>
+  </div>
+
+  <div class="rounded-lg border bg-card text-card-foreground shadow-sm">
+    <div class="p-6">
+      {% if error %}
+      <div class="mb-4 flex items-center gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <span>{{ error }}</span>
+      </div>
+      {% endif %}
+
+      <div class="mb-4 p-3 bg-muted rounded-md">
+        <p class="text-sm text-muted-foreground">
+          Logged in as <strong>{{ username }}</strong>
+        </p>
+      </div>
+
+      <form method="post" class="space-y-4" id="2fa-form">
+        {% csrf_token %}
+
+        <div class="space-y-2">
+          <label class="text-sm font-medium leading-none" for="id_token">Verification Code</label>
+          <input 
+            type="text" 
+            name="token" 
+            id="id_token" 
+            class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" 
+            placeholder="Enter 6-digit code" 
+            maxlength="8"
+            autofocus 
+            required 
+          />
+          <p class="text-xs text-muted-foreground">Enter the code from your authenticator app</p>
+        </div>
+
+        <input type="hidden" name="use_backup" id="use_backup" value="false" />
+
+        <button type="submit" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 w-full">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          Verify
+        </button>
+      </form>
+
+      {% if has_backup_codes %}
+      <div class="mt-4 pt-4 border-t">
+        <button 
+          type="button" 
+          class="text-sm text-muted-foreground hover:text-primary transition-colors"
+          onclick="useBackupCode()"
+        >
+          Use backup code instead
+        </button>
+      </div>
+      {% endif %}
+
+      {% if has_webauthn %}
+      <div class="mt-4 pt-4 border-t">
+        <button 
+          type="button" 
+          class="text-sm text-muted-foreground hover:text-primary transition-colors"
+          onclick="useSecurityKey()"
+        >
+          Use security key instead
+        </button>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <p class="text-center text-muted-foreground text-sm mt-6">
+    <a href="{% url 'login' %}" class="hover:text-primary transition-colors">← Back to login</a>
+  </p>
+</div>
+
+<script>
+function useBackupCode() {
+  document.getElementById('use_backup').value = 'true';
+  document.getElementById('id_token').placeholder = 'Enter backup code';
+  document.querySelector('label[for="id_token"]').textContent = 'Backup Code';
+}
+
+async function useSecurityKey() {
+  try {
+    // Get authentication options
+    const startResponse = await fetch('{% url "webauthn-auth-start" %}', {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': '{{ csrf_token }}',
+      },
+    });
+    
+    if (!startResponse.ok) {
+      throw new Error('Failed to start authentication');
+    }
+    
+    const options = await startResponse.json();
+    
+    // Convert base64url to Uint8Array
+    options.challenge = base64urlToUint8Array(options.challenge);
+    if (options.allowCredentials) {
+      options.allowCredentials = options.allowCredentials.map(cred => ({
+        ...cred,
+        id: base64urlToUint8Array(cred.id),
+      }));
+    }
+    
+    // Get credential
+    const credential = await navigator.credentials.get({ publicKey: options });
+    
+    // Prepare credential for server
+    const credentialData = {
+      id: credential.id,
+      rawId: uint8ArrayToBase64url(new Uint8Array(credential.rawId)),
+      response: {
+        clientDataJSON: uint8ArrayToBase64url(new Uint8Array(credential.response.clientDataJSON)),
+        authenticatorData: uint8ArrayToBase64url(new Uint8Array(credential.response.authenticatorData)),
+        signature: uint8ArrayToBase64url(new Uint8Array(credential.response.signature)),
+        userHandle: credential.response.userHandle ? uint8ArrayToBase64url(new Uint8Array(credential.response.userHandle)) : null,
+      },
+      type: credential.type,
+    };
+    
+    // Send to server
+    const completeResponse = await fetch('{% url "webauthn-auth-complete" %}', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': '{{ csrf_token }}',
+      },
+      body: JSON.stringify({
+        credential: credentialData,
+      }),
+    });
+    
+    if (!completeResponse.ok) {
+      throw new Error('Authentication failed');
+    }
+    
+    const result = await completeResponse.json();
+    if (result.success) {
+      window.location.href = result.redirect || '/';
+    } else {
+      alert('Authentication failed');
+    }
+  } catch (error) {
+    console.error('Authentication error:', error);
+    alert('Failed to authenticate with security key: ' + error.message);
+  }
+}
+
+function base64urlToUint8Array(base64url) {
+  const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function uint8ArrayToBase64url(array) {
+  // Process in chunks to avoid stack overflow
+  let binary = '';
+  const chunkSize = 8192;
+  for (let i = 0; i < array.length; i += chunkSize) {
+    const chunk = array.subarray(i, Math.min(i + chunkSize, array.length));
+    binary += String.fromCharCode.apply(null, chunk);
+  }
+  const base64 = btoa(binary);
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+</script>
+{% endblock auth_content %}
