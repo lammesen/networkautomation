@@ -2500,6 +2500,245 @@ class SSHHostKeyDeleteView(TenantScopedView):
         return HttpResponse(status=204)
 
 
+# Custom Fields Management Views
+
+
+class CustomFieldListView(TenantScopedView):
+    """View for listing and managing custom field definitions."""
+
+    template_name = "custom_fields/list.html"
+
+    def get(self, request):
+        from webnet.core.models import CustomFieldDefinition
+
+        # Get query parameters for filtering
+        model_type = request.GET.get("model_type")
+        field_type = request.GET.get("field_type")
+        is_active = request.GET.get("is_active")
+
+        # Base queryset
+        qs = CustomFieldDefinition.objects.select_related("customer").order_by(
+            "model_type", "weight", "name"
+        )
+
+        # Apply customer filtering
+        customer_ids = self.get_accessible_customer_ids()
+        qs = qs.filter(customer_id__in=customer_ids)
+
+        # Apply filters
+        if model_type:
+            qs = qs.filter(model_type=model_type)
+        if field_type:
+            qs = qs.filter(field_type=field_type)
+        if is_active == "true":
+            qs = qs.filter(is_active=True)
+        elif is_active == "false":
+            qs = qs.filter(is_active=False)
+
+        context = {"custom_fields": qs}
+
+        # Return partial for HTMX table updates
+        if request.headers.get("HX-Request"):
+            return render(request, "custom_fields/_table.html", context)
+
+        return render(request, self.template_name, context)
+
+
+class CustomFieldCreateView(TenantScopedView):
+    """View for creating a new custom field definition."""
+
+    def get(self, request):
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        # Get available customers
+        if self.request.user.role == "admin":
+            customers = Customer.objects.all()
+            show_customer_field = True
+            default_customer_id = None
+        else:
+            customers = self.request.user.customers.all()
+            show_customer_field = len(customers) > 1
+            default_customer_id = customers.first().id if customers.count() == 1 else None
+
+        context = {
+            "field": None,
+            "customers": customers,
+            "show_customer_field": show_customer_field,
+            "default_customer_id": default_customer_id,
+        }
+        return render(request, "custom_fields/_form_modal.html", context)
+
+    def post(self, request):
+        from webnet.core.models import CustomFieldDefinition
+
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        # Parse form data
+        customer_id = request.POST.get("customer")
+        name = request.POST.get("name")
+        label = request.POST.get("label")
+        model_type = request.POST.get("model_type")
+        field_type = request.POST.get("field_type")
+        description = request.POST.get("description", "")
+        required = request.POST.get("required") == "on"
+        default_value = request.POST.get("default_value", "")
+        validation_min = request.POST.get("validation_min", "")
+        validation_max = request.POST.get("validation_max", "")
+        validation_regex = request.POST.get("validation_regex", "")
+        choices_text = request.POST.get("choices", "")
+        weight = int(request.POST.get("weight", 100))
+        is_active = request.POST.get("is_active") == "on"
+
+        # Verify customer access
+        check = self.ensure_customer_access(int(customer_id))
+        if check:
+            return check
+
+        # Parse choices if applicable
+        choices = None
+        if field_type in ("select", "multiselect") and choices_text:
+            choices = [line.strip() for line in choices_text.split("\n") if line.strip()]
+
+        # Create custom field definition
+        field_def = CustomFieldDefinition.objects.create(
+            customer_id=customer_id,
+            name=name,
+            label=label,
+            model_type=model_type,
+            field_type=field_type,
+            description=description or None,
+            required=required,
+            default_value=default_value or None,
+            choices=choices,
+            validation_regex=validation_regex or None,
+            validation_min=validation_min or None,
+            validation_max=validation_max or None,
+            weight=weight,
+            is_active=is_active,
+        )
+
+        # Return updated table
+        return self._render_table(request)
+
+    def _render_table(self, request):
+        from webnet.core.models import CustomFieldDefinition
+
+        customer_ids = self.get_accessible_customer_ids()
+        qs = CustomFieldDefinition.objects.filter(customer_id__in=customer_ids).order_by(
+            "model_type", "weight", "name"
+        )
+        context = {"custom_fields": qs}
+        return render(request, "custom_fields/_table.html", context)
+
+
+class CustomFieldEditView(TenantScopedView):
+    """View for editing a custom field definition."""
+
+    def get(self, request, pk):
+        from webnet.core.models import CustomFieldDefinition
+
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        field = get_object_or_404(CustomFieldDefinition, pk=pk)
+        check = self.ensure_customer_access(field.customer_id)
+        if check:
+            return check
+
+        # Get available customers
+        if self.request.user.role == "admin":
+            customers = Customer.objects.all()
+            show_customer_field = True
+        else:
+            customers = self.request.user.customers.all()
+            show_customer_field = len(customers) > 1
+
+        context = {
+            "field": field,
+            "customers": customers,
+            "show_customer_field": show_customer_field,
+        }
+        return render(request, "custom_fields/_form_modal.html", context)
+
+    def put(self, request, pk):
+        from webnet.core.models import CustomFieldDefinition
+        import json as json_module
+
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        field = get_object_or_404(CustomFieldDefinition, pk=pk)
+        check = self.ensure_customer_access(field.customer_id)
+        if check:
+            return check
+
+        # Parse PUT data (Django doesn't parse PUT automatically)
+        from django.http import QueryDict
+
+        put_data = QueryDict(request.body)
+
+        # Update fields (except name and model_type which are immutable)
+        field.label = put_data.get("label", field.label)
+        field.field_type = put_data.get("field_type", field.field_type)
+        field.description = put_data.get("description", "") or None
+        field.required = put_data.get("required") == "on"
+        field.default_value = put_data.get("default_value", "") or None
+        field.validation_min = put_data.get("validation_min", "") or None
+        field.validation_max = put_data.get("validation_max", "") or None
+        field.validation_regex = put_data.get("validation_regex", "") or None
+
+        # Parse choices
+        choices_text = put_data.get("choices", "")
+        if field.field_type in ("select", "multiselect") and choices_text:
+            field.choices = [line.strip() for line in choices_text.split("\n") if line.strip()]
+        else:
+            field.choices = None
+
+        field.weight = int(put_data.get("weight", field.weight))
+        field.is_active = put_data.get("is_active") == "on"
+        field.save()
+
+        # Return updated table
+        customer_ids = self.get_accessible_customer_ids()
+        qs = CustomFieldDefinition.objects.filter(customer_id__in=customer_ids).order_by(
+            "model_type", "weight", "name"
+        )
+        context = {"custom_fields": qs}
+        return render(request, "custom_fields/_table.html", context)
+
+
+class CustomFieldDeleteView(TenantScopedView):
+    """View for deleting a custom field definition."""
+
+    def delete(self, request, pk):
+        from webnet.core.models import CustomFieldDefinition
+
+        check = self.ensure_can_write()
+        if check:
+            return check
+
+        field = get_object_or_404(CustomFieldDefinition, pk=pk)
+        check = self.ensure_customer_access(field.customer_id)
+        if check:
+            return check
+
+        field.delete()
+
+        # Return updated table
+        customer_ids = self.get_accessible_customer_ids()
+        qs = CustomFieldDefinition.objects.filter(customer_id__in=customer_ids).order_by(
+            "model_type", "weight", "name"
+        )
+        context = {"custom_fields": qs}
+        return render(request, "custom_fields/_table.html", context)
+
+
 class SSHHostKeyImportView(TenantScopedView):
     """View for importing SSH host keys from known_hosts format."""
 

@@ -71,6 +71,11 @@ from .views import (
     SSHHostKeyVerifyView,
     SSHHostKeyDeleteView,
     SSHHostKeyImportView,
+    # Custom Fields Management
+    CustomFieldListView,
+    CustomFieldCreateView,
+    CustomFieldEditView,
+    CustomFieldDeleteView,
 )
 
 urlpatterns = [

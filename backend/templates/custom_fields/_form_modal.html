@@ -1,0 +1,226 @@
+<div class="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm" 
+     id="modal-backdrop"
+     _="on click if target == me then remove #modal-backdrop">
+  <div class="fixed left-[50%] top-[50%] z-50 grid w-full max-w-2xl translate-x-[-50%] translate-y-[-50%] gap-4 border bg-card p-6 shadow-lg sm:rounded-lg">
+    <div class="flex items-center justify-between">
+      <h2 class="text-lg font-semibold">{% if field %}Edit{% else %}Add{% endif %} Custom Field</h2>
+      <button class="rounded-sm opacity-70 hover:opacity-100 transition-opacity" 
+              onclick="document.getElementById('modal-backdrop').remove()">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+
+    <form {% if field %}hx-put="/custom-fields/{{ field.id }}/edit"{% else %}hx-post="/custom-fields/create"{% endif %}
+          hx-target="#custom-fields-table"
+          hx-swap="innerHTML"
+          _="on htmx:afterRequest if detail.successful remove #modal-backdrop">
+      
+      {% csrf_token %}
+
+      <div class="grid gap-4 py-4">
+        <!-- Customer (hidden for operators, shown for admins) -->
+        {% if show_customer_field %}
+        <div class="grid gap-2">
+          <label class="text-sm font-medium">Customer</label>
+          <select name="customer" required class="rounded-md border border-input bg-background px-3 py-2 text-sm">
+            {% for customer in customers %}
+              <option value="{{ customer.id }}" {% if field and field.customer_id == customer.id %}selected{% endif %}>
+                {{ customer.name }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        {% else %}
+        <input type="hidden" name="customer" value="{{ default_customer_id }}">
+        {% endif %}
+
+        <!-- Name -->
+        <div class="grid gap-2">
+          <label class="text-sm font-medium">Name <span class="text-destructive">*</span></label>
+          <input type="text" name="name" required 
+                 value="{{ field.name|default:'' }}"
+                 placeholder="asset_tag"
+                 pattern="[a-z_][a-z0-9_]*"
+                 class="rounded-md border border-input bg-background px-3 py-2 text-sm"
+                 {% if field %}readonly{% endif %}>
+          <p class="text-xs text-muted-foreground">Snake_case identifier (cannot be changed after creation)</p>
+        </div>
+
+        <!-- Label -->
+        <div class="grid gap-2">
+          <label class="text-sm font-medium">Label <span class="text-destructive">*</span></label>
+          <input type="text" name="label" required 
+                 value="{{ field.label|default:'' }}"
+                 placeholder="Asset Tag"
+                 class="rounded-md border border-input bg-background px-3 py-2 text-sm">
+          <p class="text-xs text-muted-foreground">Human-readable display name</p>
+        </div>
+
+        <!-- Model Type -->
+        <div class="grid gap-2">
+          <label class="text-sm font-medium">Model Type <span class="text-destructive">*</span></label>
+          <select name="model_type" required class="rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  {% if field %}disabled{% endif %}>
+            <option value="">Select a model...</option>
+            <option value="device" {% if field.model_type == 'device' %}selected{% endif %}>Device</option>
+            <option value="job" {% if field.model_type == 'job' %}selected{% endif %}>Job</option>
+            <option value="compliancepolicy" {% if field.model_type == 'compliancepolicy' %}selected{% endif %}>Compliance Policy</option>
+            <option value="configsnapshot" {% if field.model_type == 'configsnapshot' %}selected{% endif %}>Config Snapshot</option>
+            <option value="configtemplate" {% if field.model_type == 'configtemplate' %}selected{% endif %}>Config Template</option>
+            <option value="credential" {% if field.model_type == 'credential' %}selected{% endif %}>Credential</option>
+            <option value="tag" {% if field.model_type == 'tag' %}selected{% endif %}>Tag</option>
+            <option value="devicegroup" {% if field.model_type == 'devicegroup' %}selected{% endif %}>Device Group</option>
+          </select>
+          {% if field %}<input type="hidden" name="model_type" value="{{ field.model_type }}">{% endif %}
+        </div>
+
+        <!-- Field Type -->
+        <div class="grid gap-2">
+          <label class="text-sm font-medium">Field Type <span class="text-destructive">*</span></label>
+          <select name="field_type" required class="rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  id="field-type-select">
+            <option value="">Select a type...</option>
+            <option value="text" {% if field.field_type == 'text' %}selected{% endif %}>Text (Single Line)</option>
+            <option value="textarea" {% if field.field_type == 'textarea' %}selected{% endif %}>Text Area (Multi-line)</option>
+            <option value="integer" {% if field.field_type == 'integer' %}selected{% endif %}>Integer</option>
+            <option value="decimal" {% if field.field_type == 'decimal' %}selected{% endif %}>Decimal</option>
+            <option value="boolean" {% if field.field_type == 'boolean' %}selected{% endif %}>Boolean</option>
+            <option value="date" {% if field.field_type == 'date' %}selected{% endif %}>Date</option>
+            <option value="datetime" {% if field.field_type == 'datetime' %}selected{% endif %}>Date & Time</option>
+            <option value="url" {% if field.field_type == 'url' %}selected{% endif %}>URL</option>
+            <option value="json" {% if field.field_type == 'json' %}selected{% endif %}>JSON</option>
+            <option value="select" {% if field.field_type == 'select' %}selected{% endif %}>Select (Dropdown)</option>
+            <option value="multiselect" {% if field.field_type == 'multiselect' %}selected{% endif %}>Multi-select</option>
+          </select>
+        </div>
+
+        <!-- Description -->
+        <div class="grid gap-2">
+          <label class="text-sm font-medium">Description</label>
+          <textarea name="description" rows="2" 
+                    class="rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    placeholder="Optional description or help text">{{ field.description|default:'' }}</textarea>
+        </div>
+
+        <!-- Required -->
+        <div class="flex items-center gap-2">
+          <input type="checkbox" name="required" id="required-check"
+                 {% if field.required %}checked{% endif %}
+                 class="h-4 w-4 rounded border-input">
+          <label for="required-check" class="text-sm font-medium">Required field</label>
+        </div>
+
+        <!-- Default Value -->
+        <div class="grid gap-2">
+          <label class="text-sm font-medium">Default Value</label>
+          <input type="text" name="default_value" 
+                 value="{{ field.default_value|default:'' }}"
+                 placeholder="Optional default value"
+                 class="rounded-md border border-input bg-background px-3 py-2 text-sm">
+        </div>
+
+        <!-- Validation Min (for integer/decimal) -->
+        <div class="grid gap-2" id="validation-min-field" style="display: none;">
+          <label class="text-sm font-medium">Minimum Value</label>
+          <input type="number" name="validation_min" step="any"
+                 value="{{ field.validation_min|default:'' }}"
+                 placeholder="Minimum value"
+                 class="rounded-md border border-input bg-background px-3 py-2 text-sm">
+        </div>
+
+        <!-- Validation Max (for integer/decimal) -->
+        <div class="grid gap-2" id="validation-max-field" style="display: none;">
+          <label class="text-sm font-medium">Maximum Value</label>
+          <input type="number" name="validation_max" step="any"
+                 value="{{ field.validation_max|default:'' }}"
+                 placeholder="Maximum value"
+                 class="rounded-md border border-input bg-background px-3 py-2 text-sm">
+        </div>
+
+        <!-- Validation Regex (for text) -->
+        <div class="grid gap-2" id="validation-regex-field" style="display: none;">
+          <label class="text-sm font-medium">Validation Pattern (Regex)</label>
+          <input type="text" name="validation_regex"
+                 value="{{ field.validation_regex|default:'' }}"
+                 placeholder="^[A-Z0-9]+$"
+                 class="rounded-md border border-input bg-background px-3 py-2 text-sm font-mono">
+          <p class="text-xs text-muted-foreground">Regular expression for validating input</p>
+        </div>
+
+        <!-- Choices (for select/multiselect) -->
+        <div class="grid gap-2" id="choices-field" style="display: none;">
+          <label class="text-sm font-medium">Choices (one per line)</label>
+          <textarea name="choices" rows="4"
+                    class="rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
+                    placeholder="production&#10;staging&#10;development">{% if field.choices %}{% for choice in field.choices %}{{ choice }}&#10;{% endfor %}{% endif %}</textarea>
+          <p class="text-xs text-muted-foreground">Enter each choice on a new line</p>
+        </div>
+
+        <!-- Weight -->
+        <div class="grid gap-2">
+          <label class="text-sm font-medium">Display Order</label>
+          <input type="number" name="weight" 
+                 value="{{ field.weight|default:'100' }}"
+                 min="0" max="999"
+                 class="rounded-md border border-input bg-background px-3 py-2 text-sm">
+          <p class="text-xs text-muted-foreground">Lower numbers appear first (default: 100)</p>
+        </div>
+
+        <!-- Is Active -->
+        <div class="flex items-center gap-2">
+          <input type="checkbox" name="is_active" id="is-active-check"
+                 {% if not field or field.is_active %}checked{% endif %}
+                 class="h-4 w-4 rounded border-input">
+          <label for="is-active-check" class="text-sm font-medium">Active</label>
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2 pt-4 border-t">
+        <button type="button" 
+                class="inline-flex items-center justify-center rounded-md border px-4 py-2 text-sm font-medium hover:bg-muted transition-colors"
+                onclick="document.getElementById('modal-backdrop').remove()">
+          Cancel
+        </button>
+        <button type="submit" 
+                class="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
+          {% if field %}Update{% else %}Create{% endif %} Field
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+(function() {
+  const fieldTypeSelect = document.getElementById('field-type-select');
+  const validationMinField = document.getElementById('validation-min-field');
+  const validationMaxField = document.getElementById('validation-max-field');
+  const validationRegexField = document.getElementById('validation-regex-field');
+  const choicesField = document.getElementById('choices-field');
+
+  function updateVisibility() {
+    const fieldType = fieldTypeSelect.value;
+    
+    // Hide all conditional fields first
+    validationMinField.style.display = 'none';
+    validationMaxField.style.display = 'none';
+    validationRegexField.style.display = 'none';
+    choicesField.style.display = 'none';
+
+    // Show relevant fields based on type
+    if (fieldType === 'integer' || fieldType === 'decimal') {
+      validationMinField.style.display = 'grid';
+      validationMaxField.style.display = 'grid';
+    } else if (fieldType === 'text' || fieldType === 'textarea') {
+      validationRegexField.style.display = 'grid';
+    } else if (fieldType === 'select' || fieldType === 'multiselect') {
+      choicesField.style.display = 'grid';
+    }
+  }
+
+  fieldTypeSelect.addEventListener('change', updateVisibility);
+  updateVisibility(); // Initial call
+})();
+</script>

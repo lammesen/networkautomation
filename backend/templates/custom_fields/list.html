@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Custom Fields - webnet{% endblock %}
+
+{% block content %}
+<div id="custom-fields-page">
+  <!-- Breadcrumb -->
+  <nav class="flex mb-4" aria-label="Breadcrumb">
+    <ol class="inline-flex items-center space-x-1 md:space-x-2 text-sm">
+      <li class="inline-flex items-center">
+        <a href="/" class="text-muted-foreground hover:text-foreground">Dashboard</a>
+      </li>
+      <li class="flex items-center">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mx-1 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+        </svg>
+        <span class="font-medium">Custom Fields</span>
+      </li>
+    </ol>
+  </nav>
+
+  <!-- Page Header -->
+  <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight">Custom Fields</h1>
+      <p class="text-muted-foreground mt-1">Define custom fields for devices, jobs, and other models</p>
+    </div>
+    <button 
+      class="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90"
+      hx-get="/custom-fields/create"
+      hx-target="#modal-container"
+      hx-swap="innerHTML">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+      </svg>
+      Add Custom Field
+    </button>
+  </div>
+
+  <!-- Filters -->
+  <div class="mb-6 flex flex-wrap gap-3">
+    <select 
+      name="model_type" 
+      class="rounded-md border border-input bg-background px-3 py-2 text-sm"
+      hx-get="/custom-fields/"
+      hx-target="#custom-fields-table"
+      hx-trigger="change"
+      hx-include="[name='field_type'], [name='is_active']">
+      <option value="">All Models</option>
+      <option value="device">Device</option>
+      <option value="job">Job</option>
+      <option value="compliancepolicy">Compliance Policy</option>
+      <option value="configsnapshot">Config Snapshot</option>
+      <option value="configtemplate">Config Template</option>
+      <option value="credential">Credential</option>
+      <option value="tag">Tag</option>
+      <option value="devicegroup">Device Group</option>
+    </select>
+
+    <select 
+      name="field_type" 
+      class="rounded-md border border-input bg-background px-3 py-2 text-sm"
+      hx-get="/custom-fields/"
+      hx-target="#custom-fields-table"
+      hx-trigger="change"
+      hx-include="[name='model_type'], [name='is_active']">
+      <option value="">All Types</option>
+      <option value="text">Text</option>
+      <option value="textarea">Text Area</option>
+      <option value="integer">Integer</option>
+      <option value="decimal">Decimal</option>
+      <option value="boolean">Boolean</option>
+      <option value="date">Date</option>
+      <option value="datetime">Date & Time</option>
+      <option value="url">URL</option>
+      <option value="json">JSON</option>
+      <option value="select">Select</option>
+      <option value="multiselect">Multi-select</option>
+    </select>
+
+    <select 
+      name="is_active" 
+      class="rounded-md border border-input bg-background px-3 py-2 text-sm"
+      hx-get="/custom-fields/"
+      hx-target="#custom-fields-table"
+      hx-trigger="change"
+      hx-include="[name='model_type'], [name='field_type']">
+      <option value="">All Status</option>
+      <option value="true" selected>Active Only</option>
+      <option value="false">Inactive Only</option>
+    </select>
+  </div>
+
+  <!-- Custom Fields Table -->
+  <div class="rounded-lg border bg-card">
+    <div id="custom-fields-table" 
+         hx-get="/custom-fields/table" 
+         hx-trigger="load"
+         hx-include="[name='model_type'], [name='field_type'], [name='is_active']">
+      <div class="flex justify-center py-12">
+        <svg class="h-8 w-8 animate-spin text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Container -->
+<div id="modal-container"></div>
+{% endblock %}
